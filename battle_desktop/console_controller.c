@@ -73,29 +73,43 @@ static const char sGfCharTable[256] = {
     /* 0xFE=\n, 0xFF=\0 */
 };
 
-/* Decode a GF-encoded string into a C string (null-terminated ASCII) */
+/* Decode a GF-encoded string into a C string (null-terminated ASCII).
+ *
+ * Handles two string formats that coexist in the desktop build:
+ *   Modern (MODERN=1): _() macro stores strings as plain ASCII + 0xFF.
+ *     Printable ASCII bytes (0x20-0x7E) are passed through directly.
+ *   GF encoding: bytes 0x80+ are looked up in sGfCharTable.
+ *     Used for player name, pokemon nicknames set via SetMonData, etc.
+ */
 static void DecodeGFString(const u8 *src, char *dst, size_t dstSize)
 {
     size_t i = 0;
     while (i < dstSize - 1) {
         u8 c = *src++;
-        if (c == EOS) break;          /* 0xFF = end of string */
-        if (c == 0xFE) {              /* newline / paragraph separator */
+        if (c == EOS) break;           /* 0xFF = end of string */
+        if (c == 0xFE) {               /* \n  = new line (GBA line wrap -> space) */
+            dst[i++] = ' ';
+            continue;
+        }
+        if (c == 0xFB) {               /* \p  = new paragraph */
             dst[i++] = '\n';
             continue;
         }
-        if (c == PLACEHOLDER_BEGIN) { /* 0xFD = placeholder follows */
-            /* Skip the placeholder byte(s); they were already expanded by
-               BattleStringExpandPlaceholders into gDisplayedStringBattle */
+        if (c == 0xFA) {               /* \l  = scroll/line */
+            dst[i++] = ' ';
+            continue;
+        }
+        if (c == PLACEHOLDER_BEGIN) {  /* 0xFD = expanded placeholder */
             u8 kind = *src++;
             (void)kind;
             continue;
         }
-        char ascii = sGfCharTable[c];
-        if (ascii != '?' || c == 0xAC /* '?' */) {
-            dst[i++] = ascii;
+        if (c >= 0x20 && c <= 0x7E) {  /* printable ASCII — modern _() strings */
+            dst[i++] = (char)c;
         } else {
-            dst[i++] = ascii; /* keep '?' for unknown chars */
+            char ch = sGfCharTable[c];
+            if (ch != '\0')
+                dst[i++] = ch;
         }
     }
     dst[i] = '\0';

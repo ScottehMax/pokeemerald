@@ -62,36 +62,28 @@ static void SetupPlayerTeam(void)
 {
     /* Slot 0: Blaziken level 50 — single-mon team for now so one faint ends the battle */
     CreateMon(&gPlayerParty[0], SPECIES_BLAZIKEN, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
-    {
-        u16 move;
-        move = MOVE_BLAZE_KICK;     SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move);
-        move = MOVE_BRICK_BREAK;    SetMonData(&gPlayerParty[0], MON_DATA_MOVE2, &move);
-        move = MOVE_SLASH;          SetMonData(&gPlayerParty[0], MON_DATA_MOVE3, &move);
-        move = MOVE_BULK_UP;        SetMonData(&gPlayerParty[0], MON_DATA_MOVE4, &move);
-        u8 pp;
-        pp = 8;  SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
-        pp = 15; SetMonData(&gPlayerParty[0], MON_DATA_PP2, &pp);
-        pp = 20; SetMonData(&gPlayerParty[0], MON_DATA_PP3, &pp);
-        pp = 20; SetMonData(&gPlayerParty[0], MON_DATA_PP4, &pp);
-    }
+    // {
+    //     u16 move;
+    //     u8 pp;
+    //     move = MOVE_BLAZE_KICK;  SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
+    //     move = MOVE_BRICK_BREAK; SetMonData(&gPlayerParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP2, &pp);
+    //     move = MOVE_SLASH;       SetMonData(&gPlayerParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP3, &pp);
+    //     move = MOVE_BULK_UP;     SetMonData(&gPlayerParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP4, &pp);
+    // }
 }
 
 static void SetupOpponentTeam(void)
 {
     /* Slot 0: Metagross level 50 — single-mon team so one faint ends the battle */
     CreateMon(&gEnemyParty[0], SPECIES_METAGROSS, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
-    {
-        u16 move;
-        move = MOVE_METEOR_MASH;    SetMonData(&gEnemyParty[0], MON_DATA_MOVE1, &move);
-        move = MOVE_PSYCHIC;        SetMonData(&gEnemyParty[0], MON_DATA_MOVE2, &move);
-        move = MOVE_EARTHQUAKE;     SetMonData(&gEnemyParty[0], MON_DATA_MOVE3, &move);
-        move = MOVE_SHADOW_BALL;    SetMonData(&gEnemyParty[0], MON_DATA_MOVE4, &move);
-        u8 pp;
-        pp = 10; SetMonData(&gEnemyParty[0], MON_DATA_PP1, &pp);
-        pp = 10; SetMonData(&gEnemyParty[0], MON_DATA_PP2, &pp);
-        pp = 10; SetMonData(&gEnemyParty[0], MON_DATA_PP3, &pp);
-        pp = 15; SetMonData(&gEnemyParty[0], MON_DATA_PP4, &pp);
-    }
+    // {
+    //     u16 move;
+    //     u8 pp;
+    //     move = MOVE_METEOR_MASH; SetMonData(&gEnemyParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP1, &pp);
+    //     move = MOVE_PSYCHIC;     SetMonData(&gEnemyParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP2, &pp);
+    //     move = MOVE_EARTHQUAKE;  SetMonData(&gEnemyParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP3, &pp);
+    //     move = MOVE_SHADOW_BALL; SetMonData(&gEnemyParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP4, &pp);
+    // }
 }
 
 /* ===========================================================================

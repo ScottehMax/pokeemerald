@@ -480,9 +480,4 @@ u8 ItemIdToBerryType(u16 item) { return 0; }
 void RecordedBattle_SetTrainerInfo(void) {}
 void RecordedBattle_SetFrontierPassFlagFromHword(u16 flags) {}
 
-/* Move names (defined in src/data/, not compiled standalone) */
-#include "constants/global.h"
-#include "constants/moves.h"
-const u8 gMoveNames[MOVES_COUNT][MOVE_NAME_LENGTH + 1] = {
-    [0 ... (MOVES_COUNT - 1)] = {0xFF}
-};
+/* gMoveNames is defined in battle_desktop/stubs/text_data.c */

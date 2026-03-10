@@ -123,16 +123,15 @@ const struct CompressedSpriteSheet gTrainerBackPicTable[1] = {{{NULL}, 0, 0}};
 /* EOS = 0xFF in GF string encoding */
 #define GF_EOS 0xFF
 
-const u8 gSpeciesNames[NUM_SPECIES + 1][POKEMON_NAME_LENGTH + 1] = {
-    [0 ... NUM_SPECIES] = {GF_EOS}
-};
+/* gSpeciesNames is in battle_desktop/stubs/text_data.c */
 const u8 gTrainerClassNames[256][13] = {
-    [0 ... 255] = {GF_EOS}
+    [0 ... 255] = {GF_EOS},
+    [1] = {'C','H','A','M','P','I','O','N', GF_EOS},
 };
 /* gTrainers: trainerName must be GF-EOS (0xFF) terminated */
 const struct Trainer gTrainers[2] = {
     [0] = { .trainerName = {GF_EOS} },
-    [1] = { .trainerName = {GF_EOS} },
+    [1] = { .trainerClass = 1, .trainerName = {'S','T','E','V','E','N', GF_EOS} },
 };
 const struct PokedexEntry gPokedexEntries[NUM_SPECIES + 1] = {{0}};
 

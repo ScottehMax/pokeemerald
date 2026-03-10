@@ -34,6 +34,7 @@ DESKTOP_SRCS := \
     battle_desktop/data_transfer.c \
     battle_desktop/stubs/stubs.c \
     battle_desktop/stubs/data_stubs.c \
+    battle_desktop/stubs/text_data.c \
     battle_desktop/generated/battle_scripts.c
 
 # -----------------------------------------------------------------------
@@ -78,6 +79,24 @@ $(TARGET): $(OBJS)
 	@echo "Linking $@..."
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
 	@echo "Build complete: $@"
+
+# Files that contain _("...{B_...}...") placeholders must go through preproc
+# to convert GF charmap + placeholder tokens into the 0xFD byte sequences that
+# BattleStringExpandPlaceholders expects at runtime.
+PREPROC := tools/preproc/preproc_native.exe
+CHARMAP  := charmap.txt
+
+PREPROC_SRCS := src/battle_message.c src/strings.c
+
+$(OBJDIR)/src/battle_message.o: src/battle_message.c
+	@mkdir -p $(dir $@)
+	@echo "Preproc+compiling $<..."
+	$(PREPROC) $< $(CHARMAP) | $(CC) $(CFLAGS) -x c - -c -o $@
+
+$(OBJDIR)/src/strings.o: src/strings.c
+	@mkdir -p $(dir $@)
+	@echo "Preproc+compiling $<..."
+	$(PREPROC) $< $(CHARMAP) | $(CC) $(CFLAGS) -x c - -c -o $@
 
 # Compile each .c file into the build directory
 $(OBJDIR)/%.o: %.c
