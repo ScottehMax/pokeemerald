@@ -28,6 +28,8 @@
 #include "string_util.h"
 #include "util.h"
 #include "data.h"
+#include "party_menu.h"
+#include "constants/party_menu.h"
 #include "constants/moves.h"
 #include "constants/species.h"
 #include "constants/characters.h"
@@ -340,6 +342,10 @@ static void ConsoleHandleChooseMove(void)
  */
 static void ConsoleHandleChoosePokemon(void)
 {
+    s32 i;
+    for (i = 0; i < (int)ARRAY_COUNT(gBattlePartyCurrentOrder); i++)
+        gBattlePartyCurrentOrder[i] = gBattleBufferA[gActiveBattler][4 + i];
+
     if (!IsPlayerSide()) {
         s32 chosenMonId;
         if (*(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler) == PARTY_SIZE) {
@@ -359,48 +365,95 @@ static void ConsoleHandleChoosePokemon(void)
         } else {
             chosenMonId = *(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler);
         }
-        BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, chosenMonId, NULL);
+        BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, chosenMonId, gBattlePartyCurrentOrder);
+        ConsoleBufferExecCompleted();
+        return;
+    }
+
+    /* Determine if this is a forced switch (fainted mon must be replaced) */
+    u8 caseId = gBattleBufferA[gActiveBattler][1] & 0xF;
+    bool8 forced = (caseId == PARTY_ACTION_SEND_OUT);
+
+    struct Pokemon *party = gPlayerParty;
+
+    /* Count valid (switchable) mons */
+    int validCount = 0;
+    for (int j = 0; j < PARTY_SIZE; j++) {
+        u16 sp = GetMonData(&party[j], MON_DATA_SPECIES, NULL);
+        u16 hp = GetMonData(&party[j], MON_DATA_HP, NULL);
+        if (sp != SPECIES_NONE && hp > 0 && j != gBattlerPartyIndexes[gActiveBattler])
+            validCount++;
+    }
+
+    /* Voluntary switch with no valid targets — cancel immediately */
+    if (!forced && validCount == 0) {
+        BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, PARTY_SIZE, gBattlePartyCurrentOrder);
         ConsoleBufferExecCompleted();
         return;
     }
 
     /* Player: show party */
     printf("\n--- Choose Pokemon ---\n");
-    struct Pokemon *party = gPlayerParty;
-    for (int i = 0; i < PARTY_SIZE; i++) {
-        u16 species = GetMonData(&party[i], MON_DATA_SPECIES, NULL);
+    for (int j = 0; j < PARTY_SIZE; j++) {
+        u16 species = GetMonData(&party[j], MON_DATA_SPECIES, NULL);
         if (species == SPECIES_NONE) continue;
-        u16 hp  = GetMonData(&party[i], MON_DATA_HP, NULL);
-        u16 mhp = GetMonData(&party[i], MON_DATA_MAX_HP, NULL);
-        u8 lvl  = GetMonData(&party[i], MON_DATA_LEVEL, NULL);
+        u16 hp  = GetMonData(&party[j], MON_DATA_HP, NULL);
+        u16 mhp = GetMonData(&party[j], MON_DATA_MAX_HP, NULL);
+        u8 lvl  = GetMonData(&party[j], MON_DATA_LEVEL, NULL);
         char nick[12];
         u8 gfNick[12];
-        GetMonData(&party[i], MON_DATA_NICKNAME, gfNick);
+        GetMonData(&party[j], MON_DATA_NICKNAME, gfNick);
         DecodeGFString(gfNick, nick, sizeof(nick));
         printf("  %d. %-10s Lv%-3d HP: %d/%d%s\n",
-            i + 1, nick, lvl, hp, mhp,
-            (i == gBattlerPartyIndexes[gActiveBattler]) ? " [active]" :
+            j + 1, nick, lvl, hp, mhp,
+            (j == gBattlerPartyIndexes[gActiveBattler]) ? " [active]" :
             (hp == 0) ? " [fainted]" : "");
     }
+    if (!forced)
+        printf("  0. Back\n");
     printf("Choice: ");
     fflush(stdout);
 
-    int choice = 0;
+    int choice = -1;
     char line[64];
     while (1) {
-        if (fgets(line, sizeof(line), stdin) == NULL) { choice = 1; break; }
+        if (fgets(line, sizeof(line), stdin) == NULL) {
+            /* EOF: cancel if voluntary, else pick first valid mon */
+            if (!forced) {
+                BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, PARTY_SIZE, gBattlePartyCurrentOrder);
+                ConsoleBufferExecCompleted();
+                return;
+            }
+            for (int j = 0; j < PARTY_SIZE; j++) {
+                u16 sp = GetMonData(&party[j], MON_DATA_SPECIES, NULL);
+                u16 hp = GetMonData(&party[j], MON_DATA_HP, NULL);
+                if (sp != SPECIES_NONE && hp > 0 && j != gBattlerPartyIndexes[gActiveBattler]) {
+                    choice = j + 1;
+                    break;
+                }
+            }
+            break;
+        }
         choice = atoi(line);
+        /* Cancel / back (voluntary only) */
+        if (!forced && choice == 0) {
+            BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, PARTY_SIZE, gBattlePartyCurrentOrder);
+            ConsoleBufferExecCompleted();
+            return;
+        }
         if (choice >= 1 && choice <= PARTY_SIZE) {
             u16 sp = GetMonData(&party[choice - 1], MON_DATA_SPECIES, NULL);
             u16 hp = GetMonData(&party[choice - 1], MON_DATA_HP, NULL);
             if (sp != SPECIES_NONE && hp > 0 && (choice - 1) != gBattlerPartyIndexes[gActiveBattler])
                 break;
         }
-        printf("Invalid choice: ");
+        printf("Invalid choice (pick a healthy, non-active mon%s): ",
+               forced ? "" : ", or 0 to go back");
         fflush(stdout);
+        choice = -1;
     }
 
-    BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, (u8)(choice - 1), NULL);
+    BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, (u8)(choice - 1), gBattlePartyCurrentOrder);
     ConsoleBufferExecCompleted();
 }
 

@@ -237,7 +237,25 @@ void BeginFastPaletteFade(u8 submode) {}
 bool8 IsMultiBattle(void) { return FALSE; }
 void BufferBattlePartyCurrentOrderBySide(u8 battler, u8 flankId) {}
 void SwitchPartyOrderLinkMulti(u8 battler, u8 slot, u8 slot2) {}
-void SwitchPartyMonSlots(u8 slot, u8 slot2) {}
+void SwitchPartyMonSlots(u8 slot, u8 slot2)
+{
+    /* gBattlePartyCurrentOrder packs two 4-bit party IDs per byte.
+     * Slot n: high nibble if (n & 1) == 0, low nibble if (n & 1) == 1. */
+    u8 id1 = (slot  & 1) ? (gBattlePartyCurrentOrder[slot  / 2] & 0x0F)
+                         : (gBattlePartyCurrentOrder[slot  / 2] >> 4);
+    u8 id2 = (slot2 & 1) ? (gBattlePartyCurrentOrder[slot2 / 2] & 0x0F)
+                         : (gBattlePartyCurrentOrder[slot2 / 2] >> 4);
+    /* Write id2 into slot's position */
+    if (slot & 1)
+        gBattlePartyCurrentOrder[slot  / 2] = (gBattlePartyCurrentOrder[slot  / 2] & 0xF0) | id2;
+    else
+        gBattlePartyCurrentOrder[slot  / 2] = (gBattlePartyCurrentOrder[slot  / 2] & 0x0F) | (id2 << 4);
+    /* Write id1 into slot2's position */
+    if (slot2 & 1)
+        gBattlePartyCurrentOrder[slot2 / 2] = (gBattlePartyCurrentOrder[slot2 / 2] & 0xF0) | id1;
+    else
+        gBattlePartyCurrentOrder[slot2 / 2] = (gBattlePartyCurrentOrder[slot2 / 2] & 0x0F) | (id1 << 4);
+}
 u8 GetPartyIdFromBattlePartyId(u8 battlePartyId) { return battlePartyId; }
 void ShowPartyMenuToShowcaseMultiBattleParty(void) {}
 u8 *GetMonNickname(struct Pokemon *mon, u8 *dest) { if (dest) dest[0] = 0xFF; return dest; }
