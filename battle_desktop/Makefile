@@ -33,7 +33,8 @@ DESKTOP_SRCS := \
     battle_desktop/console_controller.c \
     battle_desktop/data_transfer.c \
     battle_desktop/stubs/stubs.c \
-    battle_desktop/stubs/data_stubs.c
+    battle_desktop/stubs/data_stubs.c \
+    battle_desktop/generated/battle_scripts.c
 
 # -----------------------------------------------------------------------
 # Core battle engine source files from src/

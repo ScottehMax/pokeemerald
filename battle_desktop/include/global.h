@@ -35,4 +35,39 @@
 /* Include the real global.h from include/ (next in the include search path) */
 #include_next "global.h"
 
+/* ---------------------------------------------------------------------------
+ * Option A: delta-offset pointer decoding for battle scripts.
+ *
+ * GBA battle scripts embed 4-byte values that are either:
+ *   - A 32-bit offset from gBattleScriptData[0]  (script->script jumps)
+ *   - 0x80000000 | (varIndex << 16) | addend      (script->C variable refs)
+ *
+ * We override T1_READ_PTR / T2_READ_PTR (defined in include/global.h as
+ * simple 4-byte reads) with a decoder that handles both cases.
+ * --------------------------------------------------------------------------- */
+#include <stdint.h>
+
+extern const u8 * const gBattleScriptBase;
+extern void *gBattleVarAddresses[];
+extern const uint32_t gBattleScriptDataSize;
+
+static inline void *DecodeScriptPtr_fn(const u8 *p)
+{
+    uint32_t v = (uint32_t)p[0]
+               | ((uint32_t)p[1] << 8)
+               | ((uint32_t)p[2] << 16)
+               | ((uint32_t)p[3] << 24);
+    if (v & 0x80000000u) {
+        uint32_t idx    = (v >> 16) & 0x7FFFu;
+        uint32_t addend = v & 0xFFFFu;
+        return (u8 *)gBattleVarAddresses[idx] + addend;
+    }
+    return (u8 *)gBattleScriptBase + v;
+}
+
+#undef  T1_READ_PTR
+#undef  T2_READ_PTR
+#define T1_READ_PTR(ptr) ((u8 *)DecodeScriptPtr_fn(ptr))
+#define T2_READ_PTR(ptr) (DecodeScriptPtr_fn(ptr))
+
 #endif /* DESKTOP_GLOBAL_PRELUDE_H */

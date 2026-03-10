@@ -25,6 +25,7 @@
 #include "battle_main.h"
 #include "battle_controllers.h"
 #include "battle_setup.h"
+#include "battle_desktop/generated/battle_scripts.h"
 #include "pokemon.h"
 #include "random.h"
 #include "task.h"
@@ -229,6 +230,9 @@ int main(int argc, char **argv)
     /* Seed the RNG */
     srand((unsigned)time(NULL));
     SeedRng((u16)(rand() & 0xFFFF));
+
+    /* Initialize battle script variable address table (Option A) */
+    InitBattleScriptVarTable();
 
     /* Initialize save block (battle engine reads options from it) */
     InitSaveBlock();
