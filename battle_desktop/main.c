@@ -34,10 +34,15 @@
 #include "constants/moves.h"
 #include "constants/abilities.h"
 #include "constants/items.h"
+#include "constants/battle_script_commands.h"
+#include "gba/io_reg.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 /* ===========================================================================
  * Forward declarations
@@ -62,28 +67,31 @@ static void SetupPlayerTeam(void)
 {
     /* Slot 0: Blaziken level 50 — single-mon team for now so one faint ends the battle */
     CreateMon(&gPlayerParty[0], SPECIES_BLAZIKEN, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
-    // {
-    //     u16 move;
-    //     u8 pp;
-    //     move = MOVE_BLAZE_KICK;  SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
-    //     move = MOVE_BRICK_BREAK; SetMonData(&gPlayerParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP2, &pp);
-    //     move = MOVE_SLASH;       SetMonData(&gPlayerParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP3, &pp);
-    //     move = MOVE_BULK_UP;     SetMonData(&gPlayerParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP4, &pp);
-    // }
+    CreateMon(&gPlayerParty[1], SPECIES_SKARMORY, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    {
+        u16 move;
+        u8 pp;
+        move = MOVE_BEAT_UP;  SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
+        // move = MOVE_BRICK_BREAK; SetMonData(&gPlayerParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP2, &pp);
+        // move = MOVE_SLASH;       SetMonData(&gPlayerParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP3, &pp);
+        // move = MOVE_BULK_UP;     SetMonData(&gPlayerParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP4, &pp);
+    }
 }
 
 static void SetupOpponentTeam(void)
 {
     /* Slot 0: Metagross level 50 — single-mon team so one faint ends the battle */
     CreateMon(&gEnemyParty[0], SPECIES_METAGROSS, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
-    // {
-    //     u16 move;
-    //     u8 pp;
-    //     move = MOVE_METEOR_MASH; SetMonData(&gEnemyParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP1, &pp);
-    //     move = MOVE_PSYCHIC;     SetMonData(&gEnemyParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP2, &pp);
-    //     move = MOVE_EARTHQUAKE;  SetMonData(&gEnemyParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP3, &pp);
-    //     move = MOVE_SHADOW_BALL; SetMonData(&gEnemyParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP4, &pp);
-    // }
+    {
+        u16 move;
+        u8 pp;
+        move = MOVE_FIRE_BLAST; SetMonData(&gEnemyParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP1, &pp);
+        move = MOVE_TOXIC;     SetMonData(&gEnemyParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP2, &pp);
+        move = MOVE_TOXIC;  SetMonData(&gEnemyParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP3, &pp);
+        move = MOVE_TOXIC; SetMonData(&gEnemyParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP4, &pp);
+    }
+    CreateMon(&gEnemyParty[1], SPECIES_AGGRON, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
+
 }
 
 /* ===========================================================================
@@ -161,6 +169,45 @@ static void InitBattle(void)
  * Battle loop
  * =========================================================================== */
 
+/* Detect the battle-script yesnobox command (opcode 0x67) when it is waiting
+ * for a button press (case 1), ask the player via stdin, and prime gMain.newKeys
+ * with A_BUTTON (Yes) or B_BUTTON (No).
+ *
+ * Cmd_yesnobox in battle_script_commands.c polls GBA buttons directly instead
+ * of going through the controller command path.  Since both the caller and
+ * the function it calls (BattleCreateYesNoCursorAt) live in the same .c file,
+ * linker --wrap cannot intercept them.  Detecting the state in the loop is the
+ * only portable hook point.
+ *
+ * gBattleCommunication[0] == 1  means the yesnobox is in "wait for input" state.
+ * *gBattlescriptCurrInstr == B_SCR_OP_YESNOBOX (0x67) confirms the opcode.
+ */
+static void HandleYesNoBoxIfPending(bool8 *askedOut)
+{
+    if (!(*askedOut)
+        && gBattlescriptCurrInstr != NULL
+        && *gBattlescriptCurrInstr == B_SCR_OP_YESNOBOX
+        && gBattleCommunication[0] == 1)
+    {
+        *askedOut = TRUE;
+        printf("(1=Yes / 2=No): ");
+        fflush(stdout);
+
+        char line[64];
+        int choice = 1; /* default Yes on EOF */
+        if (fgets(line, sizeof(line), stdin))
+            choice = atoi(line);
+
+        gMain.newKeys = (choice == 2) ? B_BUTTON : A_BUTTON;
+    }
+    else if (*askedOut && (gBattlescriptCurrInstr == NULL || *gBattlescriptCurrInstr != B_SCR_OP_YESNOBOX))
+    {
+        /* Script has advanced past the yesnobox; clear state for the next one */
+        *askedOut = FALSE;
+        gMain.newKeys = 0;
+    }
+}
+
 static void RunBattleLoop(void)
 {
     /* Run the battle engine state machine.
@@ -174,11 +221,15 @@ static void RunBattleLoop(void)
      */
     u32 frameCount = 0;
     const u32 MAX_FRAMES = 1000000; /* safety limit against infinite loops */
+    bool8 yesNoAsked = FALSE;
 
     while (gBattleOutcome == 0 && frameCount < MAX_FRAMES)
     {
         /* Run the battle state machine */
         gBattleMainFunc();
+
+        /* Inject yes/no input for the battle-script yesnobox command */
+        HandleYesNoBoxIfPending(&yesNoAsked);
 
         /* Run each battler's controller */
         for (gActiveBattler = 0; gActiveBattler < gBattlersCount; gActiveBattler++)
@@ -219,6 +270,11 @@ static void PrintBattleResult(void)
 
 int main(int argc, char **argv)
 {
+    /* Set console to UTF-8 so accented characters (é, etc.) display correctly */
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
     /* Seed the RNG */
     srand((unsigned)time(NULL));
     SeedRng((u16)(rand() & 0xFFFF));

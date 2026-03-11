@@ -106,6 +106,13 @@ static void DecodeGFString(const u8 *src, char *dst, size_t dstSize)
             (void)kind;
             continue;
         }
+        /* GF chars that map to multi-byte UTF-8 sequences */
+        if (c == 0x06 && i + 2 < (int)dstSize - 1) { /* É */
+            dst[i++] = (char)0xC3; dst[i++] = (char)0x89; continue;
+        }
+        if (c == 0x1B && i + 2 < (int)dstSize - 1) { /* é */
+            dst[i++] = (char)0xC3; dst[i++] = (char)0xA9; continue;
+        }
         if (c >= 0x20 && c <= 0x7E) {  /* printable ASCII — modern _() strings */
             dst[i++] = (char)c;
         } else {
