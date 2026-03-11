@@ -6,14 +6,17 @@ extern "C" {
 
 #include "global.h"
 
-/* Raw script data blob */
+/* Raw unified script+AI data blob */
 extern const u8 gBattleScriptData[];
 extern const u8 * const gBattleScriptBase;
 
-/* C variable address table */
+/* C variable address table (shared by battle scripts and AI scripts) */
 #define BATTLE_SCRIPT_NUM_VARS 71
 extern void *gBattleVarAddresses[BATTLE_SCRIPT_NUM_VARS];
 void InitBattleScriptVarTable(void);
+
+/* AI scripts table */
+extern const u8 *const gBattleAI_ScriptsTable[32];
 
 /* Variable index constants */
 #define BSVAR_GABSORBDRAINSTRINGIDS 0
@@ -88,7 +91,7 @@ void InitBattleScriptVarTable(void);
 #define BSVAR_GWOKEUPSTRINGIDS 69
 #define BSVAR_GWRAPPEDSTRINGIDS 70
 
-/* Script label macros — expand to &gBattleScriptData[offset] */
+/* Battle script label macros — expand to &gBattleScriptData[offset] */
 #define BattleScriptFirstChargingTurn (&gBattleScriptData[2503])
 #define BattleScript_AbilityCuredStatus (&gBattleScriptData[12260])
 #define BattleScript_AbilityNoSpecificStatLoss (&gBattleScriptData[12167])
@@ -729,6 +732,7 @@ void InitBattleScriptVarTable(void);
 #define BattleScript_WrapFree (&gBattleScriptData[10525])
 #define BattleScript_WrapTurnDmg (&gBattleScriptData[11366])
 #define BattleScript_YawnMakesAsleep (&gBattleScriptData[11472])
+#define sMovesTable_ProtectMoves (&gBattleScriptData[21909])
 
 #ifdef __cplusplus
 }

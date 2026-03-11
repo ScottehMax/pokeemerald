@@ -66,7 +66,7 @@ extern bool8 gDebugMode; /* Set by --debug flag; defined in console_controller.c
 
 static void SetupPlayerTeam(void)
 {
-    CreateMon(&gPlayerParty[0], SPECIES_BLAZIKEN, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    CreateMon(&gPlayerParty[0], SPECIES_KYOGRE, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
     CreateMon(&gPlayerParty[1], SPECIES_SKARMORY, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
     CreateMon(&gPlayerParty[2], SPECIES_BRELOOM, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
     {
@@ -81,7 +81,7 @@ static void SetupPlayerTeam(void)
 
 static void SetupOpponentTeam(void)
 {
-    CreateMon(&gEnemyParty[0], SPECIES_SNORLAX, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
+    CreateMon(&gEnemyParty[0], SPECIES_GROUDON, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
     {
         u16 move;
         u8 pp;
