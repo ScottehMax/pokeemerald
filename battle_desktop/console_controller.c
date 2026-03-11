@@ -162,13 +162,23 @@ static void ConsoleBufferExecCompleted(void)
 }
 
 /* =========================================================================
- * Helper: is this battler controlled by the player?
+ * Helper: is this battler on the player's side?
  * =========================================================================
  */
 
 static bool8 IsPlayerSide(void)
 {
     return (GET_BATTLER_SIDE(gActiveBattler) == B_SIDE_PLAYER);
+}
+
+/* Returns TRUE for any battler on the player's side.
+ * In singles: only battler 0 (B_POSITION_PLAYER_LEFT).
+ * In doubles: battlers 0 and 2 (both player positions) — the human controls both.
+ * Opponents (battlers 1 and 3) and non-player-side battlers use AI. */
+static bool8 IsHumanControlled(void)
+{
+    u8 position = GetBattlerPosition(gActiveBattler);
+    return (position == B_POSITION_PLAYER_LEFT || position == B_POSITION_PLAYER_RIGHT);
 }
 
 /* =========================================================================
@@ -211,15 +221,21 @@ static void ConsoleHandlePrintSelectionString(void)
  */
 static void ConsoleHandleChooseAction(void)
 {
-    if (!IsPlayerSide()) {
-        /* Opponent: use AI to decide */
+    if (!IsHumanControlled()) {
+        /* Opponent or partner: use AI to decide */
         AI_TrySwitchOrUseItem();
         ConsoleBufferExecCompleted();
         return;
     }
 
     /* Player: show a text menu */
-    printf("\n--- Choose Action ---\n");
+    if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) {
+        const char *side = (GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_LEFT)
+                           ? "Left" : "Right";
+        printf("\n--- Choose Action (Your %s Pokemon) ---\n", side);
+    } else {
+        printf("\n--- Choose Action ---\n");
+    }
     printf("  1. FIGHT\n");
     printf("  2. BAG\n");
     printf("  3. POKEMON\n");
@@ -257,8 +273,8 @@ static void ConsoleHandleChooseMove(void)
 {
     struct ChooseMoveStruct *moveInfo = (struct ChooseMoveStruct *)(&gBattleBufferA[gActiveBattler][4]);
 
-    if (!IsPlayerSide()) {
-        /* Opponent: run AI */
+    if (!IsHumanControlled()) {
+        /* Opponent or partner: run AI */
         u8 chosenMoveId;
         if (gBattleTypeFlags & (BATTLE_TYPE_TRAINER | BATTLE_TYPE_FIRST_BATTLE)) {
             BattleAI_SetupAIData(ALL_MOVES_MASK);
@@ -277,13 +293,19 @@ static void ConsoleHandleChooseMove(void)
             case AI_CHOICE_FLEE:
                 BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_RUN, 0);
                 break;
+            case 6: /* AI_CHOICE_SWITCH */
+                BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 15, gBattlerTarget);
+                break;
             default: {
                 u8 target = gBattlerTarget;
                 u16 moveTgt = gBattleMoves[moveInfo->moves[chosenMoveId]].target;
                 if (moveTgt & (MOVE_TARGET_USER_OR_SELECTED | MOVE_TARGET_USER))
                     target = gActiveBattler;
-                else if (moveTgt & MOVE_TARGET_BOTH)
+                else if (moveTgt & MOVE_TARGET_BOTH) {
                     target = GetBattlerAtPosition(B_POSITION_PLAYER_LEFT);
+                    if (gAbsentBattlerFlags & gBitTable[target])
+                        target = GetBattlerAtPosition(B_POSITION_PLAYER_RIGHT);
+                }
                 BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10,
                     (chosenMoveId) | (target << 8));
                 break;
@@ -294,7 +316,13 @@ static void ConsoleHandleChooseMove(void)
     }
 
     /* Player: display available moves */
-    printf("\n--- Choose Move ---\n");
+    if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) {
+        const char *side = (GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_LEFT)
+                           ? "Left" : "Right";
+        printf("\n--- Choose Move (Your %s Pokemon) ---\n", side);
+    } else {
+        printf("\n--- Choose Move ---\n");
+    }
     u8 validMoves = 0;
     for (int i = 0; i < MAX_MON_MOVES; i++) {
         if (moveInfo->moves[i] != MOVE_NONE) {
@@ -333,10 +361,70 @@ static void ConsoleHandleChooseMove(void)
     u8 moveSlot = (u8)(choice - 1);
     u8 target;
     u16 moveTgt = gBattleMoves[moveInfo->moves[moveSlot]].target;
-    if (moveTgt & (MOVE_TARGET_USER_OR_SELECTED | MOVE_TARGET_USER))
+
+    if (moveTgt & MOVE_TARGET_USER) {
         target = gActiveBattler;
-    else
+    } else if ((gBattleTypeFlags & BATTLE_TYPE_DOUBLE)
+               && !(moveTgt & (MOVE_TARGET_RANDOM | MOVE_TARGET_BOTH | MOVE_TARGET_DEPENDS
+                               | MOVE_TARGET_FOES_AND_ALLY | MOVE_TARGET_OPPONENTS_FIELD))) {
+        /* Doubles: build a list of valid targets and ask the player. */
+        u8 tgtBattlers[4];
+        const char *tgtNames[4];
+        int tgtCount = 0;
+
+        u8 oppL = GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT);
+        u8 oppR = GetBattlerAtPosition(B_POSITION_OPPONENT_RIGHT);
+        if (!(gAbsentBattlerFlags & gBitTable[oppL])) {
+            tgtBattlers[tgtCount] = oppL;
+            tgtNames[tgtCount]    = "Opponent-Left";
+            tgtCount++;
+        }
+        if (!(gAbsentBattlerFlags & gBitTable[oppR])) {
+            tgtBattlers[tgtCount] = oppR;
+            tgtNames[tgtCount]    = "Opponent-Right";
+            tgtCount++;
+        }
+        if (moveTgt & MOVE_TARGET_USER_OR_SELECTED) {
+            tgtBattlers[tgtCount] = gActiveBattler;
+            tgtNames[tgtCount]    = "Self";
+            tgtCount++;
+        }
+        /* Ally target: partner across flank on the same side.
+         * Valid for MOVE_TARGET_SELECTED and MOVE_TARGET_USER_OR_SELECTED. */
+        u8 allyPos = BATTLE_PARTNER(GetBattlerPosition(gActiveBattler));
+        u8 ally = GetBattlerAtPosition(allyPos);
+        if (ally != gActiveBattler && !(gAbsentBattlerFlags & gBitTable[ally])) {
+            tgtBattlers[tgtCount] = ally;
+            tgtNames[tgtCount]    = "Ally";
+            tgtCount++;
+        }
+
+        if (tgtCount == 0 || tgtCount == 1) {
+            target = (tgtCount == 0)
+                     ? GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT)
+                     : tgtBattlers[0];
+        } else {
+            printf("\n--- Choose Target ---\n");
+            for (int k = 0; k < tgtCount; k++)
+                printf("  %d. %s\n", k + 1, tgtNames[k]);
+            printf("Target (1-%d): ", tgtCount);
+            fflush(stdout);
+            char tline[32];
+            int tgt = 1;
+            while (1) {
+                if (fgets(tline, sizeof(tline), stdin) == NULL) break;
+                tgt = atoi(tline);
+                if (tgt >= 1 && tgt <= tgtCount) break;
+                printf("Invalid. Enter 1-%d: ", tgtCount);
+                fflush(stdout);
+            }
+            target = tgtBattlers[tgt - 1];
+        }
+    } else if (moveTgt & MOVE_TARGET_USER_OR_SELECTED) {
+        target = gActiveBattler;
+    } else {
         target = GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT);
+    }
 
     BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10,
         (moveSlot) | (target << 8));
@@ -353,7 +441,7 @@ static void ConsoleHandleChoosePokemon(void)
     for (i = 0; i < (int)ARRAY_COUNT(gBattlePartyCurrentOrder); i++)
         gBattlePartyCurrentOrder[i] = gBattleBufferA[gActiveBattler][4 + i];
 
-    if (!IsPlayerSide()) {
+    if (!IsHumanControlled()) {
         s32 chosenMonId;
         if (*(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler) == PARTY_SIZE) {
             chosenMonId = GetMostSuitableMonToSwitchInto();
@@ -677,10 +765,33 @@ static void (*const sConsoleBufferCommands[CONTROLLER_CMDS_COUNT])(void) =
     [CONTROLLER_TERMINATOR_NOP]           = ConsoleBufferExecCompleted,
 };
 
+/* Set to TRUE by main() when --debug flag is passed */
+bool8 gDebugMode = FALSE;
+
+static const char *sCmdNames[] = {
+    "GETMONDATA","GETRAWMONDATA","SETMONDATA","SETRAWMONDATA","LOADMONSPRITE",
+    "SWITCHINANIM","RETURNMONTOBALL","DRAWTRAINERPIC","TRAINERSLIDE","TRAINERSLIDEBACK",
+    "FAINTANIMATION","PALETTEFADE","SUCCESSBALLTHROWANIM","BALLTHROWANIM","PAUSE",
+    "MOVEANIMATION","PRINTSTRING","PRINTSTRINGPLAYERONLY","CHOOSEACTION","YESNOBOX",
+    "CHOOSEMOVE","OPENBAG","CHOOSEPOKEMON","CMD23","HEALTHBARUPDATE","EXPUPDATE",
+    "STATUSICONUPDATE","STATUSANIMATION","STATUSXOR","DATATRANSFER","DMA3TRANSFER",
+    "PLAYBGM","CMD32","TWORETURNVALUES","CHOSENMONRETURNVALUE","ONERETURNVALUE",
+    "ONERETURNVALUE_DUP","CLEARUNKVAR","SETUNKVAR","CLEARUNKFLAG","TOGGLEUNKFLAG",
+    "HITANIMATION","CANTSWITCH","PLAYSE","PLAYFANFAREORBGM","FAINTINGCRY",
+    "INTROSLIDE","INTROTRAINERBALLTHROW","DRAWPARTYSTATUSSUMMARY","HIDEPARTYSTATUSSUMMARY",
+    "ENDBOUNCE","SPRITEINVISIBILITY","BATTLEANIMATION","LINKSTANDBYMSG",
+    "RESETACTIONMOVESELECTION","ENDLINKBATTLE","TERMINATOR_NOP",
+};
+
 static void ConsoleBufferRunCommand(void)
 {
     if (gBattleControllerExecFlags & gBitTable[gActiveBattler]) {
         u8 cmd = gBattleBufferA[gActiveBattler][0];
+        if (gDebugMode) {
+            const char *name = (cmd < ARRAY_COUNT(sCmdNames)) ? sCmdNames[cmd] : "UNKNOWN";
+            fprintf(stderr, "[DBG] battler=%d cmd=%d(%s)\n", gActiveBattler, cmd, name);
+            fflush(stderr);
+        }
         if (cmd < ARRAY_COUNT(sConsoleBufferCommands))
             sConsoleBufferCommands[cmd]();
         else

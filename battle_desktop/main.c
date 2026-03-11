@@ -55,6 +55,7 @@ static void RunBattleLoop(void);
 static void PrintBattleResult(void);
 static void InitSaveBlock(void);
 extern void SetControllerToConsole(void);
+extern bool8 gDebugMode; /* Set by --debug flag; defined in console_controller.c */
 
 /* ===========================================================================
  * Default team setup
@@ -67,10 +68,11 @@ static void SetupPlayerTeam(void)
 {
     CreateMon(&gPlayerParty[0], SPECIES_BLAZIKEN, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
     CreateMon(&gPlayerParty[1], SPECIES_SKARMORY, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
+    CreateMon(&gPlayerParty[2], SPECIES_BRELOOM, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
     {
         u16 move;
         u8 pp;
-        move = MOVE_SECRET_POWER;  SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
+        move = MOVE_FOCUS_PUNCH;  SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
         // move = MOVE_BRICK_BREAK; SetMonData(&gPlayerParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP2, &pp);
         // move = MOVE_SLASH;       SetMonData(&gPlayerParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP3, &pp);
         // move = MOVE_BULK_UP;     SetMonData(&gPlayerParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP4, &pp);
@@ -84,12 +86,17 @@ static void SetupOpponentTeam(void)
         u16 move;
         u8 pp;
         move = MOVE_FIRE_BLAST; SetMonData(&gEnemyParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP1, &pp);
-        move = MOVE_TOXIC;     SetMonData(&gEnemyParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP2, &pp);
-        move = MOVE_TOXIC;  SetMonData(&gEnemyParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP3, &pp);
-        move = MOVE_TOXIC; SetMonData(&gEnemyParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP4, &pp);
+        move = MOVE_TOXIC;      SetMonData(&gEnemyParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP2, &pp);
+        move = MOVE_TOXIC;      SetMonData(&gEnemyParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP3, &pp);
+        move = MOVE_TOXIC;      SetMonData(&gEnemyParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP4, &pp);
     }
     CreateMon(&gEnemyParty[1], SPECIES_AGGRON, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
-
+    {
+        u16 move;
+        u8 pp;
+        move = MOVE_IRON_TAIL;   SetMonData(&gEnemyParty[1], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[1], MON_DATA_PP1, &pp);
+        move = MOVE_ROCK_SLIDE;  SetMonData(&gEnemyParty[1], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[1], MON_DATA_PP2, &pp);
+    }
 }
 
 /* ===========================================================================
@@ -138,16 +145,25 @@ static void InitBattle(void)
     /* Setup controllers and initial state */
     SetUpBattleVarsAndBirchZigzagoon();
 
-    /* Initialize battlers */
-    gBattlersCount = 2; /* 1v1 single battle */
+    /* InitBattleControllers (below) calls InitSinglePlayerBtlControllers which
+     * sets gBattlersCount=4, gBattlerPositions[0..3], gBattlerControllerFuncs
+     * (to setup-funcs), and gBattlerPartyIndexes via SetBattlePartyIds.
+     * The values set here are placeholders that get overwritten. */
+    gBattlersCount = 4;
     gBattlerPositions[0] = B_POSITION_PLAYER_LEFT;
     gBattlerPositions[1] = B_POSITION_OPPONENT_LEFT;
+    gBattlerPositions[2] = B_POSITION_PLAYER_RIGHT;
+    gBattlerPositions[3] = B_POSITION_OPPONENT_RIGHT;
     gBattlerPartyIndexes[0] = 0;
     gBattlerPartyIndexes[1] = 0;
+    gBattlerPartyIndexes[2] = 1;
+    gBattlerPartyIndexes[3] = 1;
 
-    /* Set controllers to our console controller */
+    /* Set console controllers for all 4 battlers (also overwritten by InitBattleControllers) */
     gActiveBattler = 0; SetControllerToConsole();
     gActiveBattler = 1; SetControllerToConsole();
+    gActiveBattler = 2; SetControllerToConsole();
+    gActiveBattler = 3; SetControllerToConsole();
 
     /* Initialize battle controllers and set party IDs */
     InitBattleControllers();
@@ -224,6 +240,13 @@ static void RunBattleLoop(void)
     while (gBattleOutcome == 0 && frameCount < MAX_FRAMES)
     {
         /* Run the battle state machine */
+        if (gDebugMode && frameCount < 2000)
+            fprintf(stderr, "[FRAME %u] func=%p execFlags=%08X comm=%d,%d,%d,%d,%d\n",
+                    frameCount, (void*)gBattleMainFunc,
+                    gBattleControllerExecFlags,
+                    gBattleCommunication[0], gBattleCommunication[1],
+                    gBattleCommunication[2], gBattleCommunication[3],
+                    gBattleCommunication[4]);
         gBattleMainFunc();
 
         /* Inject yes/no input for the battle-script yesnobox command */
@@ -268,6 +291,12 @@ static void PrintBattleResult(void)
 
 int main(int argc, char **argv)
 {
+    /* Parse flags */
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--debug") == 0 || strcmp(argv[i], "-d") == 0)
+            gDebugMode = TRUE;
+    }
+
     /* Set console to UTF-8 so accented characters (é, etc.) display correctly */
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
