@@ -65,13 +65,12 @@ extern void SetControllerToConsole(void);
 
 static void SetupPlayerTeam(void)
 {
-    /* Slot 0: Blaziken level 50 — single-mon team for now so one faint ends the battle */
     CreateMon(&gPlayerParty[0], SPECIES_BLAZIKEN, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
     CreateMon(&gPlayerParty[1], SPECIES_SKARMORY, 50, 15, FALSE, 0, OT_ID_PLAYER_ID, 0);
     {
         u16 move;
         u8 pp;
-        move = MOVE_BEAT_UP;  SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
+        move = MOVE_SECRET_POWER;  SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
         // move = MOVE_BRICK_BREAK; SetMonData(&gPlayerParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP2, &pp);
         // move = MOVE_SLASH;       SetMonData(&gPlayerParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP3, &pp);
         // move = MOVE_BULK_UP;     SetMonData(&gPlayerParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP4, &pp);
@@ -80,8 +79,7 @@ static void SetupPlayerTeam(void)
 
 static void SetupOpponentTeam(void)
 {
-    /* Slot 0: Metagross level 50 — single-mon team so one faint ends the battle */
-    CreateMon(&gEnemyParty[0], SPECIES_METAGROSS, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
+    CreateMon(&gEnemyParty[0], SPECIES_SNORLAX, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
     {
         u16 move;
         u8 pp;
@@ -127,7 +125,7 @@ static void InitSaveBlock(void)
 static void InitBattle(void)
 {
     /* Set battle type: single trainer battle */
-    gBattleTypeFlags = BATTLE_TYPE_TRAINER;
+    gBattleTypeFlags = BATTLE_TYPE_TRAINER | BATTLE_TYPE_DOUBLE;
 
     /* Trainer ID for the opponent */
     gTrainerBattleOpponent_A = 1; /* arbitrary non-zero trainer ID */
@@ -160,8 +158,8 @@ static void InitBattle(void)
     printf("==============================================\n");
     printf("   POKEMON BATTLE - DESKTOP ENGINE\n");
     printf("==============================================\n");
-    printf("Player's team: %d Pokemon\n", 1);
-    printf("Opponent's team: %d Pokemon\n", 1);
+    printf("Player's team: %d Pokemon\n", 2);
+    printf("Opponent's team: %d Pokemon\n", 2);
     printf("----------------------------------------------\n\n");
 }
 
