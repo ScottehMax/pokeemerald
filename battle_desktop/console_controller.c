@@ -228,6 +228,13 @@ static void ConsoleHandleChooseAction(void)
         return;
     }
 
+    /* In doubles, the right-flank player can cancel back to redo the left-flank
+     * player's action, matching the B_BUTTON behaviour from HandleInputChooseAction. */
+    bool8 canCancelPartner = (gBattleTypeFlags & BATTLE_TYPE_DOUBLE)
+        && GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_RIGHT
+        && !(gBattleTypeFlags & BATTLE_TYPE_MULTI)
+        && !(gAbsentBattlerFlags & gBitTable[GetBattlerAtPosition(B_POSITION_PLAYER_LEFT)]);
+
     /* Player: show a text menu */
     if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) {
         const char *side = (GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_LEFT)
@@ -240,7 +247,9 @@ static void ConsoleHandleChooseAction(void)
     printf("  2. BAG\n");
     printf("  3. POKEMON\n");
     printf("  4. RUN\n");
-    printf("Choice (1-4): ");
+    if (canCancelPartner)
+        printf("  0. Back (redo Left Pokemon's action)\n");
+    printf("Choice (%s1-4): ", canCancelPartner ? "0/" : "");
     fflush(stdout);
 
     int choice = 0;
@@ -249,8 +258,16 @@ static void ConsoleHandleChooseAction(void)
         if (fgets(line, sizeof(line), stdin) == NULL) { choice = 1; break; }
         choice = atoi(line);
         if (choice >= 1 && choice <= 4) break;
-        printf("Invalid choice. Enter 1-4: ");
+        if (canCancelPartner && choice == 0) break;
+        printf("Invalid choice. Enter %s1-4: ", canCancelPartner ? "0/" : "");
         fflush(stdout);
+    }
+
+    if (canCancelPartner && choice == 0) {
+        /* Cancel partner — engine resets battler 0 to STATE_BEFORE_ACTION_CHOSEN */
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, B_ACTION_CANCEL_PARTNER, 0);
+        ConsoleBufferExecCompleted();
+        return;
     }
 
     u8 action;
@@ -344,7 +361,8 @@ static void ConsoleHandleChooseMove(void)
         return;
     }
 
-    printf("Choice (1-%d): ", MAX_MON_MOVES);
+    printf("  0. Back\n");
+    printf("Choice (0/%d): ", MAX_MON_MOVES);
     fflush(stdout);
 
     int choice = 0;
@@ -352,10 +370,18 @@ static void ConsoleHandleChooseMove(void)
     while (1) {
         if (fgets(line, sizeof(line), stdin) == NULL) { choice = 1; break; }
         choice = atoi(line);
+        if (choice == 0) break; /* Back */
         if (choice >= 1 && choice <= MAX_MON_MOVES
                 && moveInfo->moves[choice - 1] != MOVE_NONE) break;
-        printf("Invalid move. Enter 1-%d: ", MAX_MON_MOVES);
+        printf("Invalid. Enter 0 to go back, or 1-%d: ", MAX_MON_MOVES);
         fflush(stdout);
+    }
+
+    if (choice == 0) {
+        /* Go back to action selection for this battler (engine resets to STATE_BEFORE_ACTION_CHOSEN) */
+        BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10, 0xFFFF);
+        ConsoleBufferExecCompleted();
+        return;
     }
 
     u8 moveSlot = (u8)(choice - 1);
