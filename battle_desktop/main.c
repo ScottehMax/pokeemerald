@@ -5,17 +5,18 @@
  * Generation III battle engine extracted from the pokeemerald decomp.
  *
  * Usage:
- *   battle_desktop [player_team] [opponent_team]
- *   (no arguments uses the default teams defined below)
+ *   battle_desktop [flags]
+ *
+ * Flags:
+ *   --pvp   / -p   Player-vs-player: both sides controlled via stdin (no AI).
+ *                  Uses BATTLE_TYPE_LINK internally (link-battle rules apply).
+ *   --double / -2  Doubles battle. Default is singles.
+ *   --debug / -d   Verbose debug output to stderr.
  *
  * How to configure teams:
  *   1. Call CreateMon() to create a Pokémon in the party array
  *   2. Use SetMonData() to set species, moves, EVs, IVs, etc.
  *   3. Call CalcLevel() and CalculateMonStats() to compute stats
- *
- * Battle types supported:
- *   BATTLE_TYPE_TRAINER - single trainer battle (AI opponent, player input)
- *   BATTLE_TYPE_WILD    - wild Pokémon encounter
  *
  * The battle runs fully in text mode; all graphical events are no-ops.
  */
@@ -36,6 +37,8 @@
 #include "constants/items.h"
 #include "constants/battle_script_commands.h"
 #include "gba/io_reg.h"
+#include "link.h"
+#include "constants/characters.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,6 +59,10 @@ static void PrintBattleResult(void);
 static void InitSaveBlock(void);
 extern void SetControllerToConsole(void);
 extern bool8 gDebugMode; /* Set by --debug flag; defined in console_controller.c */
+extern bool8 gPvpMode;   /* Set by --pvp flag;   defined in console_controller.c */
+extern void Desktop_ResetLinkSendBuffer(void); /* Flush link send buffer each frame */
+
+static bool8 sDoubleBattle = FALSE; /* Set by --double flag */
 
 /* ===========================================================================
  * Default team setup
@@ -131,11 +138,45 @@ static void InitSaveBlock(void)
 
 static void InitBattle(void)
 {
-    /* Set battle type: single trainer battle */
-    gBattleTypeFlags = BATTLE_TYPE_TRAINER | BATTLE_TYPE_DOUBLE;
+    /* Battle type flags:
+     *   Normal:  BATTLE_TYPE_TRAINER — AI opponent, standard trainer rules
+     *   PvP:     BATTLE_TYPE_LINK | BATTLE_TYPE_IS_MASTER — both sides human,
+     *            no AI, link-battle rules (no shift prompt, no EXP, can't run)
+     * Either can be combined with BATTLE_TYPE_DOUBLE for doubles. */
+    if (gPvpMode)
+    {
+        gBattleTypeFlags = BATTLE_TYPE_LINK | BATTLE_TYPE_TRAINER | BATTLE_TYPE_IS_MASTER;
 
-    /* Trainer ID for the opponent */
-    gTrainerBattleOpponent_A = 1; /* arbitrary non-zero trainer ID */
+        /* Initialize gLinkPlayers so GetBattlerMultiplayerId returns valid
+         * indices and link-battle string placeholders expand correctly.
+         * Without this, OOB reads from gLinkPlayers overflow gDisplayedStringBattle
+         * into gEnemyParty, corrupting opponent Pokémon data. */
+        memset(gLinkPlayers, 0, MAX_RFU_PLAYERS * sizeof(struct LinkPlayer));
+        gLinkPlayers[0].id = 0; /* Player (master) = battler 0 */
+        memcpy(gLinkPlayers[0].name, gSaveBlock2Ptr->playerName, PLAYER_NAME_LENGTH + 1);
+        gLinkPlayers[0].gender = gSaveBlock2Ptr->playerGender;
+        gLinkPlayers[0].version = VERSION_EMERALD;
+        gLinkPlayers[0].language = LANGUAGE_ENGLISH;
+
+        gLinkPlayers[1].id = 1; /* Opponent = battler 1 */
+        /* Default opponent name: "BLUE" in GF encoding */
+        gLinkPlayers[1].name[0] = CHAR_B;
+        gLinkPlayers[1].name[1] = CHAR_L;
+        gLinkPlayers[1].name[2] = CHAR_U;
+        gLinkPlayers[1].name[3] = CHAR_E;
+        gLinkPlayers[1].name[4] = EOS;
+        gLinkPlayers[1].gender = MALE;
+        gLinkPlayers[1].version = VERSION_EMERALD;
+        gLinkPlayers[1].language = LANGUAGE_ENGLISH;
+    }
+    else
+        gBattleTypeFlags = BATTLE_TYPE_TRAINER;
+
+    if (sDoubleBattle)
+        gBattleTypeFlags |= BATTLE_TYPE_DOUBLE;
+
+    /* Trainer ID (only meaningful for trainer battles) */
+    gTrainerBattleOpponent_A = 1;
     gPartnerTrainerId = 0;
 
     /* Initialize battle resources */
@@ -145,37 +186,43 @@ static void InitBattle(void)
     /* Setup controllers and initial state */
     SetUpBattleVarsAndBirchZigzagoon();
 
-    /* InitBattleControllers (below) calls InitSinglePlayerBtlControllers which
-     * sets gBattlersCount=4, gBattlerPositions[0..3], gBattlerControllerFuncs
-     * (to setup-funcs), and gBattlerPartyIndexes via SetBattlePartyIds.
-     * The values set here are placeholders that get overwritten. */
-    gBattlersCount = 4;
-    gBattlerPositions[0] = B_POSITION_PLAYER_LEFT;
-    gBattlerPositions[1] = B_POSITION_OPPONENT_LEFT;
-    gBattlerPositions[2] = B_POSITION_PLAYER_RIGHT;
-    gBattlerPositions[3] = B_POSITION_OPPONENT_RIGHT;
-    gBattlerPartyIndexes[0] = 0;
-    gBattlerPartyIndexes[1] = 0;
-    gBattlerPartyIndexes[2] = 1;
-    gBattlerPartyIndexes[3] = 1;
+    /* Set placeholder battler layout — overwritten by InitBattleControllers below.
+     * We set it here so the pre-init SetControllerToConsole calls have valid state. */
+    if (sDoubleBattle) {
+        gBattlersCount = 4;
+        gBattlerPositions[0] = B_POSITION_PLAYER_LEFT;
+        gBattlerPositions[1] = B_POSITION_OPPONENT_LEFT;
+        gBattlerPositions[2] = B_POSITION_PLAYER_RIGHT;
+        gBattlerPositions[3] = B_POSITION_OPPONENT_RIGHT;
+        gBattlerPartyIndexes[0] = 0;
+        gBattlerPartyIndexes[1] = 0;
+        gBattlerPartyIndexes[2] = 1;
+        gBattlerPartyIndexes[3] = 1;
+        gActiveBattler = 0; SetControllerToConsole();
+        gActiveBattler = 1; SetControllerToConsole();
+        gActiveBattler = 2; SetControllerToConsole();
+        gActiveBattler = 3; SetControllerToConsole();
+    } else {
+        gBattlersCount = 2;
+        gBattlerPositions[0] = B_POSITION_PLAYER_LEFT;
+        gBattlerPositions[1] = B_POSITION_OPPONENT_LEFT;
+        gBattlerPartyIndexes[0] = 0;
+        gBattlerPartyIndexes[1] = 0;
+        gActiveBattler = 0; SetControllerToConsole();
+        gActiveBattler = 1; SetControllerToConsole();
+    }
 
-    /* Set console controllers for all 4 battlers (also overwritten by InitBattleControllers) */
-    gActiveBattler = 0; SetControllerToConsole();
-    gActiveBattler = 1; SetControllerToConsole();
-    gActiveBattler = 2; SetControllerToConsole();
-    gActiveBattler = 3; SetControllerToConsole();
-
-    /* Initialize battle controllers and set party IDs */
+    /* Initialize battle controllers (sets up gBattlerControllerFuncs, positions, etc.) */
     InitBattleControllers();
 
-    /* Copy party data into battle mons (BattleIntroGetMonsData equivalent) */
     gBattleMainFunc = BeginBattleIntro;
 
     printf("==============================================\n");
     printf("   POKEMON BATTLE - DESKTOP ENGINE\n");
     printf("==============================================\n");
-    printf("Player's team: %d Pokemon\n", 2);
-    printf("Opponent's team: %d Pokemon\n", 2);
+    printf("Mode: %s %s\n",
+           gPvpMode ? "PvP (Player vs Player)" : "Trainer (Player vs AI)",
+           sDoubleBattle ? "| Doubles" : "| Singles");
     printf("----------------------------------------------\n\n");
 }
 
@@ -241,13 +288,14 @@ static void RunBattleLoop(void)
     {
         /* Run the battle state machine */
         if (gDebugMode && frameCount < 2000)
-            fprintf(stderr, "[FRAME %u] func=%p execFlags=%08X comm=%d,%d,%d,%d,%d\n",
-                    frameCount, (void*)gBattleMainFunc,
-                    gBattleControllerExecFlags,
+            fprintf(stderr, "[FRAME %u] execFlags=%08X comm=%d,%d func=%p outcome=%d\n",
+                    frameCount, gBattleControllerExecFlags,
                     gBattleCommunication[0], gBattleCommunication[1],
-                    gBattleCommunication[2], gBattleCommunication[3],
-                    gBattleCommunication[4]);
+                    (void*)gBattleMainFunc, gBattleOutcome);
         gBattleMainFunc();
+        if (gDebugMode && gBattleOutcome != 0)
+            fprintf(stderr, "[OUTCOME SET] frame=%u outcome=%d func=%p\n",
+                    frameCount, gBattleOutcome, (void*)gBattleMainFunc);
 
         /* Inject yes/no input for the battle-script yesnobox command */
         HandleYesNoBoxIfPending(&yesNoAsked);
@@ -255,6 +303,11 @@ static void RunBattleLoop(void)
         /* Run each battler's controller */
         for (gActiveBattler = 0; gActiveBattler < gBattlersCount; gActiveBattler++)
             gBattlerControllerFuncs[gActiveBattler]();
+
+        /* In link mode, reset the send-buffer write pointer so next frame's
+         * BtlController_Emit* calls start at offset 0 in gLinkBattleSendBuffer. */
+        if (gBattleTypeFlags & BATTLE_TYPE_LINK)
+            Desktop_ResetLinkSendBuffer();
 
         /* Run any pending tasks (health bar animations, etc. - all stubs on desktop) */
         RunTasks();
@@ -291,10 +344,18 @@ static void PrintBattleResult(void)
 
 int main(int argc, char **argv)
 {
-    /* Parse flags */
+    /* Parse flags:
+     *   --debug / -d   : enable verbose debug output
+     *   --pvp   / -p   : player-vs-player (both sides use stdin, no AI)
+     *   --double / -2  : doubles battle (default: singles)
+     */
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0 || strcmp(argv[i], "-d") == 0)
             gDebugMode = TRUE;
+        else if (strcmp(argv[i], "--pvp") == 0 || strcmp(argv[i], "-p") == 0)
+            gPvpMode = TRUE;
+        else if (strcmp(argv[i], "--double") == 0 || strcmp(argv[i], "-2") == 0)
+            sDoubleBattle = TRUE;
     }
 
     /* Set console to UTF-8 so accented characters (é, etc.) display correctly */

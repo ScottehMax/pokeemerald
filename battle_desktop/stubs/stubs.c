@@ -85,7 +85,7 @@ u16 gSpecialVar_0x8008 = 0;
 /* Link state */
 u8 gWirelessCommType = 0;
 bool8 gReceivedRemoteLinkPlayers = FALSE;
-struct LinkPlayer gLinkPlayers[4] = {0};
+struct LinkPlayer gLinkPlayers[MAX_RFU_PLAYERS] = {0};
 
 /* Sprite system */
 struct Sprite gSprites[MAX_SPRITES + 1] = {0};

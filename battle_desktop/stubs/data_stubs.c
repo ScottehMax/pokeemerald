@@ -192,7 +192,8 @@ void SetLinkStandbyCallback(void) {}
 void SetCloseLinkCallback(void) {}
 void LoadWirelessStatusIndicatorSpriteGfx(void) {}
 void CreateWirelessStatusIndicatorSprite(u8 x, u8 y) {}
-u8 GetLinkPlayerCount_2(void) { return 1; }
+extern bool8 gPvpMode;
+u8 GetLinkPlayerCount_2(void) { return gPvpMode ? 2 : 1; }
 void DestroyTask_RfuIdle(void) {}
 
 /* ===========================================================================
@@ -256,7 +257,10 @@ void SwitchPartyMonSlots(u8 slot, u8 slot2)
 }
 u8 GetPartyIdFromBattlePartyId(u8 battlePartyId) { return battlePartyId; }
 void ShowPartyMenuToShowcaseMultiBattleParty(void) {}
-u8 *GetMonNickname(struct Pokemon *mon, u8 *dest) { if (dest) dest[0] = 0xFF; return dest; }
+u8 *GetMonNickname(struct Pokemon *mon, u8 *dest) {
+    GetMonData(mon, MON_DATA_NICKNAME, dest);
+    return StringGet_Nickname(dest);
+}
 
 /* ===========================================================================
  * Function stubs — evolution / pokedex

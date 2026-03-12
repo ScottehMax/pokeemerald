@@ -29,6 +29,7 @@
 #include "util.h"
 #include "data.h"
 #include "party_menu.h"
+#include "task.h"
 #include "constants/party_menu.h"
 #include "constants/moves.h"
 #include "constants/species.h"
@@ -36,6 +37,156 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+/* =========================================================================
+ * Link-mode buffer loopback
+ *
+ * In BATTLE_TYPE_LINK mode, BtlController_Emit* routes all command data
+ * to gLinkBattleSendBuffer (via PrepareBufferDataTransferLink) rather than
+ * to gBattleBufferA[battler] directly.  On real GBA the link hardware would
+ * send the data to remote players who copy it into gBattleBufferA.  On
+ * desktop there is no link hardware, so we do the copy ourselves.
+ *
+ * Layout of each message in gLinkBattleSendBuffer (from battle_controllers.c):
+ *   [0] LINK_BUFF_BUFFER_ID         — B_COMM_TO_CONTROLLER or B_COMM_TO_ENGINE
+ *   [1] LINK_BUFF_ACTIVE_BATTLER    — which battler this is for
+ *   [2] LINK_BUFF_ATTACKER
+ *   [3] LINK_BUFF_TARGET
+ *   [4] LINK_BUFF_SIZE_LO           — alignedSize low byte
+ *   [5] LINK_BUFF_SIZE_HI           — alignedSize high byte
+ *   [6] LINK_BUFF_ABSENT_BATTLER_FLAGS
+ *   [7] LINK_BUFF_EFFECT_BATTLER
+ *   [8..8+alignedSize-1] data payload
+ *
+ * We know (from battle_controllers.c task creation order, with ResetTasks()
+ * called before InitBattle):
+ *   slot 0 = Task_WaitForLinkPlayerConnection (no-op stub)
+ *   slot 1 = Task_HandleSendLinkBuffersData   → sLinkSendTaskId = 1
+ * gTasks[1].data[14] = tCurrentBlock_End (next-write position in the buffer).
+ * ========================================================================= */
+
+enum {
+    LBUF_BUFFER_ID = 0,
+    LBUF_ACTIVE_BATTLER,
+    LBUF_ATTACKER,
+    LBUF_TARGET,
+    LBUF_SIZE_LO,
+    LBUF_SIZE_HI,
+    LBUF_ABSENT_FLAGS,
+    LBUF_EFFECT_BATTLER,
+    LBUF_DATA,            /* first byte of payload */
+};
+#define LINK_SEND_TASK_END_IDX 14  /* data[14] = tCurrentBlock_End */
+#define LINK_SEND_TASK_WRAP_IDX 12 /* data[12] = tCurrentBlock_WrapFrom */
+
+/*
+ * Scan gLinkBattleSendBuffer for the message addressed to `battler` and
+ * copy its payload to gBattleBufferA[battler].
+ *
+ * Instead of reading a task's data[14] to know the buffer end, we scan
+ * linearly: each message's header contains the payload size (alignSz).
+ * We advance by (alignSz + LBUF_DATA) per message.  A zero alignSz
+ * marks the end (the buffer is zeroed after each frame by
+ * Desktop_ResetLinkSendBuffer).
+ *
+ * Called from ConsoleBufferRunCommand before dispatching the command.
+ */
+static void Desktop_CopyLinkMessageForBattler(u8 battler)
+{
+    u16 pos = 0;
+
+    while (pos + LBUF_DATA < BATTLE_BUFFER_LINK_SIZE)
+    {
+        u16 alignSz = (u16)gLinkBattleSendBuffer[pos + LBUF_SIZE_LO]
+                     | ((u16)gLinkBattleSendBuffer[pos + LBUF_SIZE_HI] << 8);
+
+        if (alignSz == 0)
+            break;
+
+        if (gLinkBattleSendBuffer[pos + LBUF_ACTIVE_BATTLER] == battler)
+        {
+            u8  bufId = gLinkBattleSendBuffer[pos + LBUF_BUFFER_ID];
+            /* Only copy B_COMM_TO_CONTROLLER messages (→ gBattleBufferA).
+             * B_COMM_TO_ENGINE messages (controller responses) are handled
+             * by Desktop_ResetLinkSendBuffer after all controllers run.
+             * Scan ALL messages without early return so the LAST
+             * B_COMM_TO_CONTROLLER command for this battler wins — e.g.
+             * CHOOSEACTION is emitted after DRAWPARTYSTATUSSUMMARY/PRINTSTRING
+             * in the same frame and must not be shadowed by them. */
+            if (bufId != B_COMM_TO_ENGINE)
+            {
+                u8 *dst = gBattleBufferA[battler];
+                const u8 *src = &gLinkBattleSendBuffer[pos + LBUF_DATA];
+                u16 i;
+                for (i = 0; i < alignSz && i < 0x200; i++)
+                    dst[i] = src[i];
+            }
+        }
+
+        pos += (u16)(alignSz + LBUF_DATA);
+    }
+}
+
+/*
+ * Flush all pending messages from gLinkBattleSendBuffer, then zero the
+ * buffer and reset the write pointer.  Called from RunBattleLoop after
+ * all battler controllers have run for the frame.
+ *
+ * B_COMM_TO_CONTROLLER messages were already copied to gBattleBufferA by
+ * Desktop_CopyLinkMessageForBattler() inside ConsoleBufferRunCommand.
+ *
+ * B_COMM_TO_ENGINE messages are controller RESPONSES (chosen action, chosen
+ * move, mon data, etc.).  The battle engine reads these from gBattleBufferB
+ * on the NEXT frame.  We copy them here before clearing the buffer so the
+ * engine sees them.
+ */
+void Desktop_ResetLinkSendBuffer(void)
+{
+    u16 pos = 0;
+    u8 i;
+
+    while (pos + LBUF_DATA < BATTLE_BUFFER_LINK_SIZE)
+    {
+        u8  battler  = gLinkBattleSendBuffer[pos + LBUF_ACTIVE_BATTLER];
+        u16 alignSz  = (u16)gLinkBattleSendBuffer[pos + LBUF_SIZE_LO]
+                     | ((u16)gLinkBattleSendBuffer[pos + LBUF_SIZE_HI] << 8);
+        u8  bufId    = gLinkBattleSendBuffer[pos + LBUF_BUFFER_ID];
+
+        if (alignSz == 0)
+            break;
+
+        if (bufId == B_COMM_TO_ENGINE && battler < MAX_BATTLERS_COUNT)
+        {
+            const u8 *src = &gLinkBattleSendBuffer[pos + LBUF_DATA];
+            u16 j;
+            for (j = 0; j < alignSz && j < 0x200; j++)
+                gBattleBufferB[battler][j] = src[j];
+        }
+
+        pos += (u16)(alignSz + LBUF_DATA);
+    }
+
+    /* Zero the entire buffer so next frame's scan sees alignSz=0 at pos 0 */
+    memset(gLinkBattleSendBuffer, 0, BATTLE_BUFFER_LINK_SIZE);
+
+    /* Reset the write pointer in ALL candidate task slots.
+     * sLinkSendTaskId is private to battle_controllers.c; rather than
+     * guessing which slot it is, we reset all of them.  This is safe
+     * because the send task is stuck at state 2 on desktop (it never
+     * reaches the state that reads tCurrentBlock_End). */
+    for (i = 0; i < 3; i++)
+    {
+        gTasks[i].data[LINK_SEND_TASK_END_IDX]  = 0;
+        gTasks[i].data[LINK_SEND_TASK_WRAP_IDX] = 0;
+    }
+}
+
+/* Set to TRUE by main() when --debug flag is passed */
+bool8 gDebugMode = FALSE;
+
+/* Set to TRUE by main() when --pvp flag is passed.
+ * Both sides are human-controlled via stdin; BATTLE_TYPE_LINK is used. */
+bool8 gPvpMode = FALSE;
 
 /* Forward declarations */
 static void ConsoleBufferRunCommand(void);
@@ -143,6 +294,10 @@ static void PrintGFString(const u8 *str)
 void SetControllerToConsole(void)
 {
     gBattlerControllerFuncs[gActiveBattler] = ConsoleBufferRunCommand;
+    /* If a command is already pending (dispatched before InitBattleControllers ran its
+     * SetControllerToX init), process it now while the link buffer still has the message. */
+    if (gBattleControllerExecFlags & gBitTable[gActiveBattler])
+        ConsoleBufferRunCommand();
 }
 
 /* Called by our replacements of SetControllerToPlayer and SetControllerToOpponent */
@@ -174,11 +329,38 @@ static bool8 IsPlayerSide(void)
 /* Returns TRUE for any battler on the player's side.
  * In singles: only battler 0 (B_POSITION_PLAYER_LEFT).
  * In doubles: battlers 0 and 2 (both player positions) — the human controls both.
- * Opponents (battlers 1 and 3) and non-player-side battlers use AI. */
+ * Opponents (battlers 1 and 3) use AI in normal mode.
+ * In PvP mode (--pvp / BATTLE_TYPE_LINK), ALL battlers are human-controlled. */
 static bool8 IsHumanControlled(void)
 {
+    if (gPvpMode)
+        return TRUE;
     u8 position = GetBattlerPosition(gActiveBattler);
     return (position == B_POSITION_PLAYER_LEFT || position == B_POSITION_PLAYER_RIGHT);
+}
+
+/* Returns a short label for the active battler suitable for prompts.
+ * Normal mode: "Your Left" / "Your Right" / etc.
+ * PvP mode: "P1 Left" / "P1 Right" / "P2 Left" / "P2 Right". */
+static const char *GetBattlerLabel(void)
+{
+    u8 position = GetBattlerPosition(gActiveBattler);
+    if (gPvpMode) {
+        switch (position) {
+        case B_POSITION_PLAYER_LEFT:    return "P1 Left";
+        case B_POSITION_PLAYER_RIGHT:   return "P1 Right";
+        case B_POSITION_OPPONENT_LEFT:  return "P2 Left";
+        case B_POSITION_OPPONENT_RIGHT: return "P2 Right";
+        default:                        return "?";
+        }
+    }
+    switch (position) {
+    case B_POSITION_PLAYER_LEFT:    return "Your Left";
+    case B_POSITION_PLAYER_RIGHT:   return "Your Right";
+    case B_POSITION_OPPONENT_LEFT:  return "Opponent Left";
+    case B_POSITION_OPPONENT_RIGHT: return "Opponent Right";
+    default:                        return "?";
+    }
 }
 
 /* =========================================================================
@@ -237,11 +419,9 @@ static void ConsoleHandleChooseAction(void)
 
     /* Player: show a text menu */
     if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) {
-        const char *side = (GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_LEFT)
-                           ? "Left" : "Right";
-        printf("\n--- Choose Action (Your %s Pokemon) ---\n", side);
+        printf("\n--- Choose Action (%s Pokemon) ---\n", GetBattlerLabel());
     } else {
-        printf("\n--- Choose Action ---\n");
+        printf("\n--- Choose Action%s ---\n", gPvpMode ? (IsPlayerSide() ? " (P1)" : " (P2)") : "");
     }
     printf("  1. FIGHT\n");
     printf("  2. BAG\n");
@@ -334,11 +514,9 @@ static void ConsoleHandleChooseMove(void)
 
     /* Player: display available moves */
     if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) {
-        const char *side = (GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_LEFT)
-                           ? "Left" : "Right";
-        printf("\n--- Choose Move (Your %s Pokemon) ---\n", side);
+        printf("\n--- Choose Move (%s Pokemon) ---\n", GetBattlerLabel());
     } else {
-        printf("\n--- Choose Move ---\n");
+        printf("\n--- Choose Move%s ---\n", gPvpMode ? (IsPlayerSide() ? " (P1)" : " (P2)") : "");
     }
     u8 validMoves = 0;
     for (int i = 0; i < MAX_MON_MOVES; i++) {
@@ -495,7 +673,7 @@ static void ConsoleHandleChoosePokemon(void)
     u8 caseId = gBattleBufferA[gActiveBattler][1] & 0xF;
     bool8 forced = (caseId == PARTY_ACTION_SEND_OUT);
 
-    struct Pokemon *party = gPlayerParty;
+    struct Pokemon *party = IsPlayerSide() ? gPlayerParty : gEnemyParty;
 
     /* Count valid (switchable) mons */
     int validCount = 0;
@@ -514,7 +692,7 @@ static void ConsoleHandleChoosePokemon(void)
     }
 
     /* Player: show party */
-    printf("\n--- Choose Pokemon ---\n");
+    printf("\n--- Choose Pokemon (%s) ---\n", GetBattlerLabel());
     for (int j = 0; j < PARTY_SIZE; j++) {
         u16 species = GetMonData(&party[j], MON_DATA_SPECIES, NULL);
         if (species == SPECIES_NONE) continue;
@@ -589,6 +767,14 @@ static void ConsoleHandleGetMonData(void)
     u8 monToCheck;
     s32 i;
     struct Pokemon *party = IsPlayerSide() ? gPlayerParty : gEnemyParty;
+
+    if (gDebugMode)
+        fprintf(stderr, "[GETMONDATA] battler=%d request=%d monToCheck=%d partyIdx=%d side=%s\n",
+                gActiveBattler,
+                gBattleBufferA[gActiveBattler][1],
+                gBattleBufferA[gActiveBattler][2],
+                gBattlerPartyIndexes[gActiveBattler],
+                IsPlayerSide() ? "player" : "opponent");
 
     if (gBattleBufferA[gActiveBattler][2] == 0) {
         /* Single mon */
@@ -791,9 +977,6 @@ static void (*const sConsoleBufferCommands[CONTROLLER_CMDS_COUNT])(void) =
     [CONTROLLER_TERMINATOR_NOP]           = ConsoleBufferExecCompleted,
 };
 
-/* Set to TRUE by main() when --debug flag is passed */
-bool8 gDebugMode = FALSE;
-
 static const char *sCmdNames[] = {
     "GETMONDATA","GETRAWMONDATA","SETMONDATA","SETRAWMONDATA","LOADMONSPRITE",
     "SWITCHINANIM","RETURNMONTOBALL","DRAWTRAINERPIC","TRAINERSLIDE","TRAINERSLIDEBACK",
@@ -812,6 +995,11 @@ static const char *sCmdNames[] = {
 static void ConsoleBufferRunCommand(void)
 {
     if (gBattleControllerExecFlags & gBitTable[gActiveBattler]) {
+        /* In link mode, BtlController_Emit* routes data to gLinkBattleSendBuffer
+         * instead of gBattleBufferA.  Copy the message for this battler now. */
+        if (gBattleTypeFlags & BATTLE_TYPE_LINK)
+            Desktop_CopyLinkMessageForBattler(gActiveBattler);
+
         u8 cmd = gBattleBufferA[gActiveBattler][0];
         if (gDebugMode) {
             const char *name = (cmd < ARRAY_COUNT(sCmdNames)) ? sCmdNames[cmd] : "UNKNOWN";
