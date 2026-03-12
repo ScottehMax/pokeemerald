@@ -494,14 +494,16 @@ static void ConsoleHandleChooseMove(void)
                 BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 15, gBattlerTarget);
                 break;
             default: {
-                u8 target = gBattlerTarget;
+                u8 target;
                 u16 moveTgt = gBattleMoves[moveInfo->moves[chosenMoveId]].target;
                 if (moveTgt & (MOVE_TARGET_USER_OR_SELECTED | MOVE_TARGET_USER))
                     target = gActiveBattler;
                 else if (moveTgt & MOVE_TARGET_BOTH) {
-                    target = GetBattlerAtPosition(B_POSITION_PLAYER_LEFT);
+                    target = GetBattlerAtPosition(BATTLE_OPPOSITE(GetBattlerPosition(gActiveBattler)));
                     if (gAbsentBattlerFlags & gBitTable[target])
-                        target = GetBattlerAtPosition(B_POSITION_PLAYER_RIGHT);
+                        target = GetBattlerAtPosition(BATTLE_PARTNER(BATTLE_OPPOSITE(GetBattlerPosition(gActiveBattler))));
+                } else {
+                    target = GetBattlerAtPosition(BATTLE_OPPOSITE(GetBattlerPosition(gActiveBattler)));
                 }
                 BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10,
                     (chosenMoveId) | (target << 8));
@@ -534,7 +536,7 @@ static void ConsoleHandleChooseMove(void)
     if (validMoves == 0) {
         /* No PP left - Struggle */
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10,
-            (MOVE_STRUGGLE) | (GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT) << 8));
+            (MOVE_STRUGGLE) | (GetBattlerAtPosition(BATTLE_OPPOSITE(GetBattlerPosition(gActiveBattler))) << 8));
         ConsoleBufferExecCompleted();
         return;
     }
@@ -576,8 +578,10 @@ static void ConsoleHandleChooseMove(void)
         const char *tgtNames[4];
         int tgtCount = 0;
 
-        u8 oppL = GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT);
-        u8 oppR = GetBattlerAtPosition(B_POSITION_OPPONENT_RIGHT);
+        u8 oppLPos = BATTLE_OPPOSITE(GetBattlerPosition(gActiveBattler));
+        u8 oppRPos = BATTLE_PARTNER(oppLPos);
+        u8 oppL = GetBattlerAtPosition(oppLPos);
+        u8 oppR = GetBattlerAtPosition(oppRPos);
         if (!(gAbsentBattlerFlags & gBitTable[oppL])) {
             tgtBattlers[tgtCount] = oppL;
             tgtNames[tgtCount]    = "Opponent-Left";
@@ -605,7 +609,7 @@ static void ConsoleHandleChooseMove(void)
 
         if (tgtCount == 0 || tgtCount == 1) {
             target = (tgtCount == 0)
-                     ? GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT)
+                     ? GetBattlerAtPosition(BATTLE_OPPOSITE(GetBattlerPosition(gActiveBattler)))
                      : tgtBattlers[0];
         } else {
             printf("\n--- Choose Target ---\n");
@@ -627,7 +631,7 @@ static void ConsoleHandleChooseMove(void)
     } else if (moveTgt & MOVE_TARGET_USER_OR_SELECTED) {
         target = gActiveBattler;
     } else {
-        target = GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT);
+        target = GetBattlerAtPosition(BATTLE_OPPOSITE(GetBattlerPosition(gActiveBattler)));
     }
 
     BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10,
