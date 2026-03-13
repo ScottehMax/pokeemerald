@@ -649,6 +649,21 @@ static void ConsoleHandleChoosePokemon(void)
     for (i = 0; i < (int)ARRAY_COUNT(gBattlePartyCurrentOrder); i++)
         gBattlePartyCurrentOrder[i] = gBattleBufferA[gActiveBattler][4 + i];
 
+    /* In doubles, the partner's party index is also unavailable for switching.
+     * Additionally, gBattleBufferA[gActiveBattler][2] holds the partner's
+     * already-chosen monToSwitchIntoId (PARTY_SIZE means none chosen). */
+    s32 partnerPartyIdx = -1;
+    s32 alreadyChosenIdx = -1;
+    if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) {
+        u8 partnerPos = BATTLE_PARTNER(GetBattlerPosition(gActiveBattler));
+        u8 partner = GetBattlerAtPosition(partnerPos);
+        if (partner != gActiveBattler && !(gAbsentBattlerFlags & gBitTable[partner]))
+            partnerPartyIdx = gBattlerPartyIndexes[partner];
+        u8 slotId = gBattleBufferA[gActiveBattler][2];
+        if (slotId != PARTY_SIZE)
+            alreadyChosenIdx = slotId;
+    }
+
     if (!IsHumanControlled()) {
         s32 chosenMonId;
         if (*(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler) == PARTY_SIZE) {
@@ -658,6 +673,8 @@ static void ConsoleHandleChoosePokemon(void)
                 chosenMonId = gBattlerPartyIndexes[gActiveBattler];
                 for (int i = 0; i < PARTY_SIZE; i++) {
                     if (i != gBattlerPartyIndexes[gActiveBattler]
+                            && i != partnerPartyIdx
+                            && i != alreadyChosenIdx
                             && GetMonData(&gEnemyParty[i], MON_DATA_HP, NULL) != 0
                             && GetMonData(&gEnemyParty[i], MON_DATA_SPECIES, NULL) != SPECIES_NONE) {
                         chosenMonId = i;
@@ -684,7 +701,10 @@ static void ConsoleHandleChoosePokemon(void)
     for (int j = 0; j < PARTY_SIZE; j++) {
         u16 sp = GetMonData(&party[j], MON_DATA_SPECIES, NULL);
         u16 hp = GetMonData(&party[j], MON_DATA_HP, NULL);
-        if (sp != SPECIES_NONE && hp > 0 && j != gBattlerPartyIndexes[gActiveBattler])
+        if (sp != SPECIES_NONE && hp > 0
+            && j != gBattlerPartyIndexes[gActiveBattler]
+            && j != partnerPartyIdx
+            && j != alreadyChosenIdx)
             validCount++;
     }
 
@@ -710,6 +730,8 @@ static void ConsoleHandleChoosePokemon(void)
         printf("  %d. %-10s Lv%-3d HP: %d/%d%s\n",
             j + 1, nick, lvl, hp, mhp,
             (j == gBattlerPartyIndexes[gActiveBattler]) ? " [active]" :
+            (j == partnerPartyIdx) ? " [active]" :
+            (j == alreadyChosenIdx) ? " [switching]" :
             (hp == 0) ? " [fainted]" : "");
     }
     if (!forced)
@@ -730,7 +752,10 @@ static void ConsoleHandleChoosePokemon(void)
             for (int j = 0; j < PARTY_SIZE; j++) {
                 u16 sp = GetMonData(&party[j], MON_DATA_SPECIES, NULL);
                 u16 hp = GetMonData(&party[j], MON_DATA_HP, NULL);
-                if (sp != SPECIES_NONE && hp > 0 && j != gBattlerPartyIndexes[gActiveBattler]) {
+                if (sp != SPECIES_NONE && hp > 0
+                    && j != gBattlerPartyIndexes[gActiveBattler]
+                    && j != partnerPartyIdx
+                    && j != alreadyChosenIdx) {
                     choice = j + 1;
                     break;
                 }
@@ -747,7 +772,10 @@ static void ConsoleHandleChoosePokemon(void)
         if (choice >= 1 && choice <= PARTY_SIZE) {
             u16 sp = GetMonData(&party[choice - 1], MON_DATA_SPECIES, NULL);
             u16 hp = GetMonData(&party[choice - 1], MON_DATA_HP, NULL);
-            if (sp != SPECIES_NONE && hp > 0 && (choice - 1) != gBattlerPartyIndexes[gActiveBattler])
+            if (sp != SPECIES_NONE && hp > 0
+                && (choice - 1) != gBattlerPartyIndexes[gActiveBattler]
+                && (choice - 1) != partnerPartyIdx
+                && (choice - 1) != alreadyChosenIdx)
                 break;
         }
         printf("Invalid choice (pick a healthy, non-active mon%s): ",
