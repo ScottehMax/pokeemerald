@@ -39,6 +39,7 @@
 #include "gba/io_reg.h"
 #include "link.h"
 #include "constants/characters.h"
+#include "constants/trainers.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,6 +105,7 @@ static void SetupOpponentTeam(void)
         move = MOVE_IRON_TAIL;   SetMonData(&gEnemyParty[1], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[1], MON_DATA_PP1, &pp);
         move = MOVE_ROCK_SLIDE;  SetMonData(&gEnemyParty[1], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[1], MON_DATA_PP2, &pp);
     }
+    CreateMon(&gEnemyParty[2], SPECIES_KECLEON, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
 }
 
 /* ===========================================================================
@@ -175,8 +177,10 @@ static void InitBattle(void)
     if (sDoubleBattle)
         gBattleTypeFlags |= BATTLE_TYPE_DOUBLE;
 
-    /* Trainer ID (only meaningful for trainer battles) */
-    gTrainerBattleOpponent_A = 1;
+    /* Trainer ID: use TRAINER_LINK_OPPONENT for PvP so the battle message
+     * system selects link-style strings (e.g. "BLUE withdrew" instead of
+     * "CHAMPION STEVEN withdrew"). */
+    gTrainerBattleOpponent_A = gPvpMode ? TRAINER_LINK_OPPONENT : 1;
     gPartnerTrainerId = 0;
 
     /* Initialize battle resources */
