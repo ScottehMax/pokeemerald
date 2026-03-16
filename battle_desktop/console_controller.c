@@ -264,6 +264,9 @@ static void DecodeGFString(const u8 *src, char *dst, size_t dstSize)
         if (c == 0x1B && i + 2 < (int)dstSize - 1) { /* é */
             dst[i++] = (char)0xC3; dst[i++] = (char)0xA9; continue;
         }
+        if (c == 0xB0 && i + 3 < (int)dstSize - 1) { /* … */
+            dst[i++] = (char)0xE2; dst[i++] = (char)0x80; dst[i++] = (char)0xA6; continue;
+        }
         if (c >= 0x20 && c <= 0x7E) {  /* printable ASCII — modern _() strings */
             dst[i++] = (char)c;
         } else {

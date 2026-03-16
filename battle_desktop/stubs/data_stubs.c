@@ -42,6 +42,7 @@
 #include "window.h"
 #include "apprentice.h"
 #include "international_string_util.h"
+#include "constants/battle_ai.h"
 #include "constants/battle_move_effects.h"
 #include "constants/battle_script_commands.h"
 
@@ -129,7 +130,7 @@ const u8 gTrainerClassNames[256][13] = {
 /* gTrainers: trainerName must be GF-EOS (0xFF) terminated */
 const struct Trainer gTrainers[2] = {
     [0] = { .trainerName = {GF_EOS} },
-    [1] = { .trainerClass = 1, .trainerName = {'S','T','E','V','E','N', GF_EOS} },
+    [1] = { .trainerClass = 1, .trainerName = {'S','T','E','V','E','N', GF_EOS}, .aiFlags = AI_SCRIPT_CHECK_BAD_MOVE | AI_SCRIPT_TRY_TO_FAINT | AI_SCRIPT_CHECK_VIABILITY },
 };
 const struct PokedexEntry gPokedexEntries[NUM_SPECIES + 1] = {{0}};
 
