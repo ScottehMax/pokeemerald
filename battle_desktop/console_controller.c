@@ -188,6 +188,10 @@ bool8 gDebugMode = FALSE;
  * Both sides are human-controlled via stdin; BATTLE_TYPE_LINK is used. */
 bool8 gPvpMode = FALSE;
 
+/* Set to TRUE by main() when --ai flag is passed.
+ * Both sides are AI-controlled; no stdin input is required. */
+bool8 gBothAiMode = FALSE;
+
 /* Forward declarations */
 static void ConsoleBufferRunCommand(void);
 static void ConsoleBufferExecCompleted(void);
@@ -336,6 +340,8 @@ static bool8 IsPlayerSide(void)
  * In PvP mode (--pvp / BATTLE_TYPE_LINK), ALL battlers are human-controlled. */
 static bool8 IsHumanControlled(void)
 {
+    if (gBothAiMode)
+        return FALSE;
     if (gPvpMode)
         return TRUE;
     u8 position = GetBattlerPosition(gActiveBattler);

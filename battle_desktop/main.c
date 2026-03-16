@@ -10,6 +10,7 @@
  * Flags:
  *   --pvp   / -p   Player-vs-player: both sides controlled via stdin (no AI).
  *                  Uses BATTLE_TYPE_LINK internally (link-battle rules apply).
+ *   --ai    / -a   AI-vs-AI: both sides controlled by the AI (no stdin input).
  *   --double / -2  Doubles battle. Default is singles.
  *   --debug / -d   Verbose debug output to stderr.
  *
@@ -59,8 +60,9 @@ static void RunBattleLoop(void);
 static void PrintBattleResult(void);
 static void InitSaveBlock(void);
 extern void SetControllerToConsole(void);
-extern bool8 gDebugMode; /* Set by --debug flag; defined in console_controller.c */
-extern bool8 gPvpMode;   /* Set by --pvp flag;   defined in console_controller.c */
+extern bool8 gDebugMode;    /* Set by --debug flag; defined in console_controller.c */
+extern bool8 gPvpMode;      /* Set by --pvp flag;   defined in console_controller.c */
+extern bool8 gBothAiMode;   /* Set by --ai flag;    defined in console_controller.c */
 extern void Desktop_ResetLinkSendBuffer(void); /* Flush link send buffer each frame */
 
 static bool8 sDoubleBattle = FALSE; /* Set by --double flag */
@@ -225,7 +227,7 @@ static void InitBattle(void)
     printf("   POKEMON BATTLE - DESKTOP ENGINE\n");
     printf("==============================================\n");
     printf("Mode: %s %s\n",
-           gPvpMode ? "PvP (Player vs Player)" : "Trainer (Player vs AI)",
+           gBothAiMode ? "AI vs AI" : (gPvpMode ? "PvP (Player vs Player)" : "Trainer (Player vs AI)"),
            sDoubleBattle ? "| Doubles" : "| Singles");
     printf("----------------------------------------------\n\n");
 }
@@ -254,6 +256,11 @@ static void HandleYesNoBoxIfPending(bool8 *askedOut)
         && *gBattlescriptCurrInstr == B_SCR_OP_YESNOBOX
         && gBattleCommunication[0] == 1)
     {
+        if (gBothAiMode) {
+            /* Both-AI mode: auto-answer "No" (decline shift) */
+            gMain.newKeys = B_BUTTON;
+            return;
+        }
         *askedOut = TRUE;
         printf("(1=Yes / 2=No): ");
         fflush(stdout);
@@ -351,6 +358,7 @@ int main(int argc, char **argv)
     /* Parse flags:
      *   --debug / -d   : enable verbose debug output
      *   --pvp   / -p   : player-vs-player (both sides use stdin, no AI)
+     *   --ai    / -a   : AI-vs-AI (both sides use AI, no stdin input)
      *   --double / -2  : doubles battle (default: singles)
      */
     for (int i = 1; i < argc; i++) {
@@ -358,6 +366,8 @@ int main(int argc, char **argv)
             gDebugMode = TRUE;
         else if (strcmp(argv[i], "--pvp") == 0 || strcmp(argv[i], "-p") == 0)
             gPvpMode = TRUE;
+        else if (strcmp(argv[i], "--ai") == 0 || strcmp(argv[i], "-a") == 0)
+            gBothAiMode = TRUE;
         else if (strcmp(argv[i], "--double") == 0 || strcmp(argv[i], "-2") == 0)
             sDoubleBattle = TRUE;
     }
