@@ -216,7 +216,10 @@ static const char sGfCharTable[256] = {
     /* 0x20 */ '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?',
     /* 0x30 */ '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?',
     /* 0x40 */ '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?',
-    /* 0x50 */ '?', '?', '?', 'P', 'K', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?',
+    /* 0x50 */ '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '%', '(', ')', '?', '?',
+    /* 0x53/0x54 (PK/MN glyphs) are multi-char — handled in DecodeGFString, not here.
+     * 0x5B='%', 0x5C='(', 0x5D=')': ASCII equivalents ('[','\',']') never appear in
+     * game text, so these are safe to override without conflicting with _() strings. */
     /* 0x60 */ '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?',
     /* 0x70 */ '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?',
     /* 0x80 */ '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?', '?',
@@ -233,10 +236,18 @@ static const char sGfCharTable[256] = {
 /* Decode a GF-encoded string into a C string (null-terminated ASCII).
  *
  * Handles two string formats that coexist in the desktop build:
- *   Modern (MODERN=1): _() macro stores strings as plain ASCII + 0xFF.
- *     Printable ASCII bytes (0x20-0x7E) are passed through directly.
- *   GF encoding: bytes 0x80+ are looked up in sGfCharTable.
- *     Used for player name, pokemon nicknames set via SetMonData, etc.
+ *   _() strings: plain ASCII + 0xFF terminator (from C source literals).
+ *     Unassigned GF bytes in 0x20-0x7E fall back to their ASCII value.
+ *   GF encoding: bytes 0x80+ looked up in sGfCharTable.
+ *     Used for player name, Pokémon nicknames, etc.
+ *
+ * For bytes in 0x20-0x7E: the table takes priority when assigned (non-'?').
+ * Only bytes whose ASCII equivalent never appears in game text are assigned
+ * in the table (e.g. 0x5C='(' beats ASCII '\', which is never in battle text).
+ * Bytes like 0x53/0x54 whose ASCII values ('S'/'T') DO appear in _() strings
+ * are left as '?' in the table so they fall back to ASCII.
+ * Note: the PK/MN glyphs (GF 0x53/0x54) are not used in battle output;
+ * all battle strings spell out "PKMN" as ASCII via _().
  */
 static void DecodeGFString(const u8 *src, char *dst, size_t dstSize)
 {
@@ -271,10 +282,14 @@ static void DecodeGFString(const u8 *src, char *dst, size_t dstSize)
         if (c == 0xB0 && i + 3 < (int)dstSize - 1) { /* … */
             dst[i++] = (char)0xE2; dst[i++] = (char)0x80; dst[i++] = (char)0xA6; continue;
         }
-        if (c >= 0x20 && c <= 0x7E) {  /* printable ASCII — modern _() strings */
-            dst[i++] = (char)c;
-        } else {
+        {
             char ch = sGfCharTable[c];
+            /* For unassigned GF codes in the printable ASCII range, fall back to
+             * the raw byte value so that _() strings (stored as plain ASCII) decode
+             * correctly.  Assigned GF codes (e.g. 0x5C='(', 0x5D=')') take
+             * priority over their ASCII interpretations ('\', ']'). */
+            if (ch == '?' && c >= 0x20 && c <= 0x7E)
+                ch = (char)c;
             if (ch != '\0')
                 dst[i++] = ch;
         }

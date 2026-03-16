@@ -123,14 +123,28 @@ const struct CompressedSpriteSheet gTrainerBackPicTable[1] = {{{NULL}, 0, 0}};
 #define GF_EOS 0xFF
 
 /* gSpeciesNames is in battle_desktop/stubs/text_data.c */
+/* Trainer class name strings — stored as plain ASCII (no GF encoding).
+ * PKMN-prefixed classes use literal 'P','K','M','N' bytes, not the GF
+ * PK/MN glyphs (0x53/0x54), which never appear in this stub data. */
 const u8 gTrainerClassNames[256][13] = {
     [0 ... 255] = {GF_EOS},
-    [1] = {'C','H','A','M','P','I','O','N', GF_EOS},
+    /* TRAINER_CLASS_PKMN_TRAINER_1 = 0x00 */
+    [0x00] = {'P','K','M','N',' ','T','R','A','I','N','E','R', GF_EOS},
+    /* TRAINER_CLASS_PKMN_TRAINER_2 = 0x01 */
+    [0x01] = {'P','K','M','N',' ','T','R','A','I','N','E','R', GF_EOS},
+    /* TRAINER_CLASS_PKMN_BREEDER   = 0x04 */
+    [0x04] = {'P','K','M','N',' ','B','R','E','E','D','E','R', GF_EOS},
+    /* TRAINER_CLASS_CHAMPION       = 0x26 */
+    [0x26] = {'C','H','A','M','P','I','O','N', GF_EOS},
+    /* TRAINER_CLASS_RIVAL          = 0x32 */
+    [0x32] = {'P','K','M','N',' ','T','R','A','I','N','E','R', GF_EOS},
+    /* TRAINER_CLASS_PKMN_RANGER    = 0x34 */
+    [0x34] = {'P','K','M','N',' ','R','A','N','G','E','R', GF_EOS},
 };
 /* gTrainers: trainerName must be GF-EOS (0xFF) terminated */
 const struct Trainer gTrainers[2] = {
     [0] = { .trainerName = {GF_EOS} },
-    [1] = { .trainerClass = 1, .trainerName = {'S','T','E','V','E','N', GF_EOS}, .aiFlags = AI_SCRIPT_CHECK_BAD_MOVE | AI_SCRIPT_TRY_TO_FAINT | AI_SCRIPT_CHECK_VIABILITY },
+    [1] = { .trainerClass = 0x26 /* CHAMPION */, .trainerName = {'S','T','E','V','E','N', GF_EOS}, .aiFlags = AI_SCRIPT_CHECK_BAD_MOVE | AI_SCRIPT_TRY_TO_FAINT | AI_SCRIPT_CHECK_VIABILITY },
 };
 const struct PokedexEntry gPokedexEntries[NUM_SPECIES + 1] = {{0}};
 
