@@ -693,32 +693,65 @@ static void ConsoleHandleChoosePokemon(void)
         if (*(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler) == PARTY_SIZE) {
             chosenMonId = GetMostSuitableMonToSwitchInto();
             if (chosenMonId == PARTY_SIZE) {
-                /* Fallback: first alive non-active mon */
-                chosenMonId = gBattlerPartyIndexes[gActiveBattler];
-                for (int i = 0; i < PARTY_SIZE; i++) {
-                    if (i != gBattlerPartyIndexes[gActiveBattler]
-                            && i != partnerPartyIdx
-                            && i != alreadyChosenIdx
-                            && GetMonData(&gEnemyParty[i], MON_DATA_HP, NULL) != 0
-                            && GetMonData(&gEnemyParty[i], MON_DATA_SPECIES, NULL) != SPECIES_NONE) {
-                        chosenMonId = i;
-                        break;
-                    }
+                /* Mirror OpponentHandleChoosePokemon: find first alive mon that isn't
+                 * already on the field.  Use the correct party for the active side. */
+                struct Pokemon *party = IsPlayerSide() ? gPlayerParty : gEnemyParty;
+                s32 battler1, battler2;
+                if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) {
+                    u8 leftPos  = IsPlayerSide() ? B_POSITION_PLAYER_LEFT  : B_POSITION_OPPONENT_LEFT;
+                    u8 rightPos = IsPlayerSide() ? B_POSITION_PLAYER_RIGHT : B_POSITION_OPPONENT_RIGHT;
+                    battler1 = GetBattlerAtPosition(leftPos);
+                    battler2 = GetBattlerAtPosition(rightPos);
+                } else {
+                    u8 pos = IsPlayerSide() ? B_POSITION_PLAYER_LEFT : B_POSITION_OPPONENT_LEFT;
+                    battler2 = battler1 = GetBattlerAtPosition(pos);
                 }
+                for (chosenMonId = 0; chosenMonId < PARTY_SIZE; chosenMonId++) {
+                    if (GetMonData(&party[chosenMonId], MON_DATA_HP, NULL) != 0
+                        && chosenMonId != gBattlerPartyIndexes[battler1]
+                        && chosenMonId != gBattlerPartyIndexes[battler2])
+                        break;
+                }
+                /* If no valid mon found, chosenMonId == PARTY_SIZE (team lost) */
             }
         } else {
             chosenMonId = *(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler);
+            *(gBattleStruct->AI_monToSwitchIntoId + gActiveBattler) = PARTY_SIZE;
         }
+        *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = chosenMonId;
         BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, chosenMonId, gBattlePartyCurrentOrder);
         ConsoleBufferExecCompleted();
         return;
     }
+
+    /* Mirror what PlayerHandleChoosePokemon does: store these fields so any
+     * downstream code (e.g. SetMonPreventsSwitchingString) can read them. */
+    *(&gBattleStruct->battlerPreventingSwitchout) = gBattleBufferA[gActiveBattler][1] >> 4;
+    *(&gBattleStruct->prevSelectedPartySlot)       = gBattleBufferA[gActiveBattler][2];
+    *(&gBattleStruct->abilityPreventingSwitchout)  = gBattleBufferA[gActiveBattler][3];
 
     /* Determine if this is a forced switch (fainted mon must be replaced) */
     u8 caseId = gBattleBufferA[gActiveBattler][1] & 0xF;
     bool8 forced = (caseId == PARTY_ACTION_SEND_OUT);
 
     struct Pokemon *party = IsPlayerSide() ? gPlayerParty : gEnemyParty;
+
+    /* CANT_SWITCH: active mon is trapped (Block, Spider Web, etc.) — cancel.
+     * ABILITY_PREVENTS: ability (Arena Trap, Shadow Tag, etc.) traps it.
+     * Mirror what the GBA party menu does: refuse all selections and cancel back. */
+    if (caseId == PARTY_ACTION_CANT_SWITCH || caseId == PARTY_ACTION_ABILITY_PREVENTS) {
+        u8 gfNick[12];
+        char nick[12];
+        GetMonData(&party[gBattlerPartyIndexes[gActiveBattler]], MON_DATA_NICKNAME, gfNick);
+        DecodeGFString(gfNick, nick, sizeof(nick));
+        if (caseId == PARTY_ACTION_CANT_SWITCH)
+            printf("%s can't be switched out!\n", nick);
+        else
+            printf("%s is prevented from switching out!\n", nick);
+        BtlController_EmitChosenMonReturnValue(B_COMM_TO_ENGINE, PARTY_SIZE, gBattlePartyCurrentOrder);
+        ConsoleBufferExecCompleted();
+        return;
+    }
 
     /* Count valid (switchable) mons */
     int validCount = 0;
