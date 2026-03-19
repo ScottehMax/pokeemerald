@@ -12,15 +12,6 @@
 #define MODERN 1
 #endif
 
-/* The _() macro normally runs through the pokeemerald preproc tool which
- * applies charmap.txt to encode ASCII strings into GF byte encoding.
- * On desktop we append \xff (GF EOS = 0xFF) so BattleStringExpandPlaceholders
- * and other string functions terminate correctly at the end of the string. */
-#ifndef _
-#define _(x)  {x "\xff"}
-#define __(x) {x "\xff"}
-#endif
-
 /* INCBIN macros load binary blobs from files. Stub them to zero initializers. */
 #ifndef INCBIN
 #define INCBIN(...)     {0}
@@ -34,6 +25,18 @@
 
 /* Include the real global.h from include/ (next in the include search path) */
 #include_next "global.h"
+
+/* The _() macro normally runs through the pokeemerald preproc tool which
+ * applies charmap.txt to encode ASCII strings into GF byte encoding.
+ * On desktop we append \xff (GF EOS = 0xFF) so BattleStringExpandPlaceholders
+ * and other string functions terminate correctly at the end of the string.
+ *
+ * IMPORTANT: include/global.h defines _(x) as {x} (no EOS) unconditionally,
+ * so we must redefine AFTER including it, not before. */
+#undef _
+#define _(x)  {x "\xff"}
+#undef __
+#define __(x) {x "\xff"}
 
 /* ---------------------------------------------------------------------------
  * Option A: delta-offset pointer decoding for battle scripts.

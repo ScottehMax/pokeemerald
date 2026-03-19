@@ -1,0 +1,21 @@
+Groudon @ Lum Berry  
+Ability: Drought  
+Level: 50  
+EVs: 4 HP / 252 Atk / 252 Spe  
+Adamant Nature  
+- Fire Blast  
+- Toxic 
+- Rock Slide  
+- Dragon Claw  
+
+Blissey @ Leftovers  
+Ability: Natural Cure  
+Level: 50  
+EVs: 252 HP / 252 Def / 4 SpD  
+Bold Nature  
+IVs: 0 Atk  
+- Softboiled  
+- Ice Beam  
+- Thunder Wave  
+- Seismic Toss  
+

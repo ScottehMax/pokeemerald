@@ -360,9 +360,27 @@ u8 GetPlayerTextSpeedDelay(void) { return 1; }
 
 const u8 *GetApprenticeNameInLanguage(u32 apprenticeId, s32 language) { return NULL; }
 
-u8 GetItemHoldEffect(u16 itemId) { return 0; }
-u8 GetItemHoldEffectParam(u16 itemId) { return 0; }
-void CopyItemName(u16 itemId, u8 *dst) { if (dst) dst[0] = 0xFF; }
+/* Real hold-effect data extracted from src/data/items.h at build time. */
+#include "battle_desktop/generated/item_hold_effects.h"
+u8 GetItemHoldEffect(u16 itemId)
+{
+    return (itemId < DESKTOP_ITEMS_COUNT) ? gDesktopItemHoldEffects[itemId] : 0;
+}
+u8 GetItemHoldEffectParam(u16 itemId)
+{
+    return (itemId < DESKTOP_ITEMS_COUNT) ? gDesktopItemHoldEffectParams[itemId] : 0;
+}
+void CopyItemName(u16 itemId, u8 *dst)
+{
+    if (!dst) return;
+    if (itemId < DESKTOP_ITEMS_COUNT && gDesktopItemNames[itemId] != NULL)
+    {
+        const char *src = gDesktopItemNames[itemId];
+        while (*src)
+            *dst++ = (u8)*src++;
+    }
+    *dst = 0xFF; /* GF string EOS */
+}
 
 void BgAffineSet(struct BgAffineSrcData *src, struct BgAffineDstData *dest, s16 numCalcs) {}
 

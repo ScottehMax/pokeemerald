@@ -1,0 +1,31 @@
+Foom (Kyogre) @ Starf Berry
+Ability: Drought  
+Level: 50  
+EVs: 252 HP / 252 SpA / 4 SpD  
+Modest Nature  
+- Metronome
+- Thunder  
+- Ice Beam  
+- Calm Mind  
+
+Skarmory @ Leftovers
+Ability: Sturdy  
+Level: 50  
+EVs: 252 HP / 252 Def / 4 SpD  
+Impish Nature  
+IVs: 0 SpA  
+- Spikes  
+- Whirlwind  
+- Steel Wing  
+- Aerial Ace  
+
+Breloom @ Salac Berry  
+Ability: Effect Spore  
+Level: 50  
+EVs: 4 HP / 252 Atk / 252 Spe  
+Jolly Nature  
+- Spore  
+- Focus Punch  
+- Mach Punch  
+- Rock Slide  
+

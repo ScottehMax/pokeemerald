@@ -5,7 +5,7 @@
  * Generation III battle engine extracted from the pokeemerald decomp.
  *
  * Usage:
- *   battle_desktop [flags]
+ *   battle_desktop [flags] [--team1 FILE] [--team2 FILE]
  *
  * Flags:
  *   --pvp   / -p   Player-vs-player: both sides controlled via stdin (no AI).
@@ -13,8 +13,24 @@
  *   --ai    / -a   AI-vs-AI: both sides controlled by the AI (no stdin input).
  *   --double / -2  Doubles battle. Default is singles.
  *   --debug / -d   Verbose debug output to stderr.
+ *   --team1 FILE   Load the player's team from FILE instead of the built-in team.
+ *   --team2 FILE   Load the opponent's team from FILE instead of the built-in team.
  *
- * How to configure teams:
+ * Team file format uses the Showdown format.
+ *
+ *   Example:
+ * # team1.txt
+ * Foom (Kyogre) @ Starf Berry
+ * Ability: Drought  
+ * Level: 50  
+ * EVs: 252 HP / 252 SpA / 4 SpD  
+ * Modest Nature  
+ * - Metronome
+ * - Thunder  
+ * - Ice Beam  
+ * - Calm Mind  
+ *
+ * How to configure built-in teams (if no --team file is given):
  *   1. Call CreateMon() to create a Pokémon in the party array
  *   2. Use SetMonData() to set species, moves, EVs, IVs, etc.
  *   3. Call CalcLevel() and CalculateMonStats() to compute stats
@@ -28,6 +44,7 @@
 #include "battle_controllers.h"
 #include "battle_setup.h"
 #include "battle_desktop/generated/battle_scripts.h"
+#include "battle_desktop/team_parser.h"
 #include "pokemon.h"
 #include "random.h"
 #include "task.h"
@@ -65,7 +82,9 @@ extern bool8 gPvpMode;      /* Set by --pvp flag;   defined in console_controlle
 extern bool8 gBothAiMode;   /* Set by --ai flag;    defined in console_controller.c */
 extern void Desktop_ResetLinkSendBuffer(void); /* Flush link send buffer each frame */
 
-static bool8 sDoubleBattle = FALSE; /* Set by --double flag */
+static bool8  sDoubleBattle = FALSE; /* Set by --double flag */
+static const char *sTeam1File = NULL; /* Set by --team1 flag */
+static const char *sTeam2File = NULL; /* Set by --team2 flag */
 
 /* ===========================================================================
  * Default team setup
@@ -82,23 +101,23 @@ static void SetupPlayerTeam(void)
     {
         u16 move;
         u8 pp;
-        move = MOVE_FOCUS_PUNCH;  SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
-        // move = MOVE_BRICK_BREAK; SetMonData(&gPlayerParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP2, &pp);
-        // move = MOVE_SLASH;       SetMonData(&gPlayerParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP3, &pp);
-        // move = MOVE_BULK_UP;     SetMonData(&gPlayerParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP4, &pp);
+        move = MOVE_TOXIC; SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP1, &pp);
+        move = MOVE_BODY_SLAM; SetMonData(&gPlayerParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP2, &pp);
+        move = MOVE_SHEER_COLD; SetMonData(&gPlayerParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP3, &pp);
+        move = MOVE_METRONOME; SetMonData(&gPlayerParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gPlayerParty[0], MON_DATA_PP4, &pp);
     }
 }
 
 static void SetupOpponentTeam(void)
 {
-    CreateMon(&gEnemyParty[0], SPECIES_GROUDON, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
+    CreateMon(&gEnemyParty[0], SPECIES_GROUDON, 50, 15, TRUE, 0, OT_ID_RANDOM_NO_SHINY, 0);
     {
         u16 move;
         u8 pp;
         move = MOVE_FIRE_BLAST; SetMonData(&gEnemyParty[0], MON_DATA_MOVE1, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP1, &pp);
-        move = MOVE_TOXIC;      SetMonData(&gEnemyParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP2, &pp);
-        move = MOVE_TOXIC;      SetMonData(&gEnemyParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP3, &pp);
-        move = MOVE_TOXIC;      SetMonData(&gEnemyParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP4, &pp);
+        move = MOVE_ICE_BEAM;   SetMonData(&gEnemyParty[0], MON_DATA_MOVE2, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP2, &pp);
+        move = MOVE_EARTHQUAKE; SetMonData(&gEnemyParty[0], MON_DATA_MOVE3, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP3, &pp);
+        move = MOVE_THUNDER;    SetMonData(&gEnemyParty[0], MON_DATA_MOVE4, &move); pp = gBattleMoves[move].pp; SetMonData(&gEnemyParty[0], MON_DATA_PP4, &pp);
     }
     CreateMon(&gEnemyParty[1], SPECIES_AGGRON, 50, 15, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
     {
@@ -299,9 +318,12 @@ static void RunBattleLoop(void)
     {
         /* Run the battle state machine */
         if (gDebugMode && frameCount < 2000)
-            fprintf(stderr, "[FRAME %u] execFlags=%08X comm=%d,%d func=%p outcome=%d\n",
+            fprintf(stderr, "[FRAME %u] execFlags=%08X comm=%d,%d,%d,%d,%d battlers=%d func=%p outcome=%d\n",
                     frameCount, gBattleControllerExecFlags,
                     gBattleCommunication[0], gBattleCommunication[1],
+                    gBattleCommunication[2], gBattleCommunication[3],
+                    gBattleCommunication[4],
+                    gBattlersCount,
                     (void*)gBattleMainFunc, gBattleOutcome);
         gBattleMainFunc();
         if (gDebugMode && gBattleOutcome != 0)
@@ -370,6 +392,10 @@ int main(int argc, char **argv)
             gBothAiMode = TRUE;
         else if (strcmp(argv[i], "--double") == 0 || strcmp(argv[i], "-2") == 0)
             sDoubleBattle = TRUE;
+        else if (strcmp(argv[i], "--team1") == 0 && i + 1 < argc)
+            sTeam1File = argv[++i];
+        else if (strcmp(argv[i], "--team2") == 0 && i + 1 < argc)
+            sTeam2File = argv[++i];
     }
 
     /* Set console to UTF-8 so accented characters (é, etc.) display correctly */
@@ -379,7 +405,7 @@ int main(int argc, char **argv)
 
     /* Seed the RNG */
     srand((unsigned)time(NULL));
-    SeedRng((u16)(rand() & 0xFFFF));
+    SeedRng(rand() & 0xFFFF);
 
     /* Initialize battle script variable address table (Option A) */
     InitBattleScriptVarTable();
@@ -394,9 +420,22 @@ int main(int argc, char **argv)
     ZeroPlayerPartyMons();
     ZeroEnemyPartyMons();
 
-    /* Set up both teams */
-    SetupPlayerTeam();
-    SetupOpponentTeam();
+    /* Set up both teams (from file if --team1/--team2 were given, else built-in) */
+    if (sTeam1File)
+    {
+        if (!ParseTeamFile(sTeam1File, gPlayerParty, OT_ID_PLAYER_ID))
+            return 1;
+    }
+    else
+        SetupPlayerTeam();
+
+    if (sTeam2File)
+    {
+        if (!ParseTeamFile(sTeam2File, gEnemyParty, OT_ID_RANDOM_NO_SHINY))
+            return 1;
+    }
+    else
+        SetupOpponentTeam();
 
     /* Initialize and run the battle */
     InitBattle();

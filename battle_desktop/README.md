@@ -1,0 +1,3 @@
+## What is this?
+
+This is an experiment with agentic ("vibe") coding, mainly via use of Claude Sonnet/Opus 4.6. The end goal is to extract pokeemerald's battle system into something that can be run natively on desktop, while maintaining as much of the original engine functionality as possible. Requires devkitPro, Python, and any regular native C compiler. I've only tested the build on Windows, so if you're on another platform, it might take some fiddling to get it working.

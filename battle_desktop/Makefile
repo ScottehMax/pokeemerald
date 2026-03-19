@@ -63,10 +63,13 @@ DESKTOP_SRCS := \
     battle_desktop/main.c \
     battle_desktop/console_controller.c \
     battle_desktop/data_transfer.c \
+    battle_desktop/team_parser.c \
     battle_desktop/stubs/stubs.c \
     battle_desktop/stubs/data_stubs.c \
     battle_desktop/stubs/text_data.c \
-    battle_desktop/generated/battle_scripts.c
+    battle_desktop/generated/battle_scripts.c \
+    battle_desktop/generated/name_tables.c \
+    battle_desktop/generated/item_hold_effects.c
 
 # -----------------------------------------------------------------------
 # Core battle engine source files from src/
