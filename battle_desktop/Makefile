@@ -48,10 +48,13 @@ LDFLAGS := -lm
 # Output (.exe suffix on Windows — MinGW gcc always appends it when linking)
 ifeq ($(OS),Windows_NT)
   EXE := .exe
+  DLL := .dll
 else
   EXE :=
+  DLL := .so
 endif
 TARGET  := battle_desktop/battle_desktop$(EXE)
+LIB_TARGET := battle_desktop/battle_desktop$(DLL)
 
 # Build directory
 OBJDIR  := battle_desktop/build
@@ -61,6 +64,21 @@ OBJDIR  := battle_desktop/build
 # -----------------------------------------------------------------------
 DESKTOP_SRCS := \
     battle_desktop/main.c \
+    battle_desktop/console_controller.c \
+    battle_desktop/data_transfer.c \
+    battle_desktop/team_parser.c \
+    battle_desktop/stubs/stubs.c \
+    battle_desktop/stubs/data_stubs.c \
+    battle_desktop/stubs/text_data.c \
+    battle_desktop/generated/battle_scripts.c \
+    battle_desktop/generated/name_tables.c \
+    battle_desktop/generated/item_hold_effects.c
+
+# Additional sources for the shared library build (ML API)
+LIB_SRCS := \
+    battle_desktop/battle_api.c \
+    battle_desktop/programmatic_controller.c \
+    battle_desktop/team_randomiser.c \
     battle_desktop/console_controller.c \
     battle_desktop/data_transfer.c \
     battle_desktop/team_parser.c \
@@ -101,18 +119,30 @@ ALL_SRCS := $(DESKTOP_SRCS) $(BATTLE_SRCS) $(UTIL_SRCS)
 # Generate object file names
 OBJS := $(patsubst %.c,$(OBJDIR)/%.o,$(ALL_SRCS))
 
+# Library object files (in a separate directory to avoid CFLAGS conflicts)
+LIB_OBJDIR := $(OBJDIR)/lib
+LIB_ALL_SRCS := $(LIB_SRCS) $(BATTLE_SRCS) $(UTIL_SRCS)
+LIB_OBJS := $(patsubst %.c,$(LIB_OBJDIR)/%.o,$(LIB_ALL_SRCS))
+
 # -----------------------------------------------------------------------
 # Build rules
 # -----------------------------------------------------------------------
 
-.PHONY: all clean run
+.PHONY: all clean run lib
 
 all: $(TARGET)
+
+lib: $(LIB_TARGET)
 
 $(TARGET): $(OBJS)
 	@echo "Linking $@..."
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
 	@echo "Build complete: $@"
+
+$(LIB_TARGET): $(LIB_OBJS)
+	@echo "Linking shared library $@..."
+	$(CC) -shared $(LIB_OBJS) $(LDFLAGS) -o $@
+	@echo "Library build complete: $@"
 
 # Files that contain _("...{B_...}...") placeholders must go through preproc
 # to convert GF charmap + placeholder tokens into the 0xFD byte sequences that
@@ -174,9 +204,32 @@ $(OBJDIR)/%.o: %.c
 	@echo "Compiling $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# -----------------------------------------------------------------------
+# Library build rules (separate object directory, with DLL export flag)
+# -----------------------------------------------------------------------
+LIB_CFLAGS := $(CFLAGS) -DBATTLE_API_BUILD
+
+$(LIB_OBJDIR)/src/battle_message.o: src/battle_message.c $(PREPROC_EXE)
+	@$(call MKDIR,$(dir $@))
+	@echo "[lib] Preproc+compiling $<..."
+	$(PREPROC) $< $(CHARMAP) > $(@:.o=.i)
+	$(CC) $(LIB_CFLAGS) -x c $(@:.o=.i) -c -o $@
+
+$(LIB_OBJDIR)/src/strings.o: src/strings.c $(PREPROC_EXE)
+	@$(call MKDIR,$(dir $@))
+	@echo "[lib] Preproc+compiling $<..."
+	$(PREPROC) $< $(CHARMAP) > $(@:.o=.i)
+	$(CC) $(LIB_CFLAGS) -x c $(@:.o=.i) -c -o $@
+
+$(LIB_OBJDIR)/%.o: %.c
+	@$(call MKDIR,$(dir $@))
+	@echo "[lib] Compiling $<..."
+	$(CC) $(LIB_CFLAGS) -c $< -o $@
+
 clean:
 	$(call RM_DIR,$(OBJDIR))
 	$(call RM_FILE,$(TARGET))
+	$(call RM_FILE,$(LIB_TARGET))
 	$(call RM_FILE,$(PREPROC_EXE))
 
 run: all

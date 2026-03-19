@@ -1,0 +1,23 @@
+[project]
+name = "pokeemerald-battle"
+version = "0.1.0"
+description = "Gymnasium/PettingZoo environments wrapping the pokeemerald Gen III battle engine"
+readme = "README.md"
+authors = [
+    { name = "Scott Maxwell", email = "scott@scotteh.me" }
+]
+requires-python = ">=3.12.6"
+dependencies = [
+    "gymnasium>=1.0.0",
+    "pettingzoo>=1.24.0",
+    "numpy>=1.26.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.25,<0.10.0"]
+build-backend = "uv_build"

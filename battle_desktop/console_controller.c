@@ -91,7 +91,7 @@ enum {
  *
  * Called from ConsoleBufferRunCommand before dispatching the command.
  */
-static void Desktop_CopyLinkMessageForBattler(u8 battler)
+void Desktop_CopyLinkMessageForBattler(u8 battler)
 {
     u16 pos = 0;
 
@@ -298,8 +298,15 @@ static void DecodeGFString(const u8 *src, char *dst, size_t dstSize)
 }
 
 /* Print a GF-encoded battle string to stdout */
+#ifdef BATTLE_API_BUILD
+extern int gBattleVerbose;
+#else
+int gBattleVerbose = 1;  /* exe build: always verbose */
+#endif
 static void PrintGFString(const u8 *str)
 {
+    if (!gBattleVerbose)
+        return;
     char buf[512];
     DecodeGFString(str, buf, sizeof(buf));
     if (buf[0] != '\0' && buf[0] != '\n') {
@@ -322,9 +329,29 @@ void SetControllerToConsole(void)
         ConsoleBufferRunCommand();
 }
 
-/* Called by our replacements of SetControllerToPlayer and SetControllerToOpponent */
+/* Called by our replacements of SetControllerToPlayer and SetControllerToOpponent.
+ * In API builds, check ShouldControlBattler to route to programmatic controller. */
+#ifdef BATTLE_API_BUILD
+extern int ShouldControlBattler(u8 battler);
+extern void SetControllerToProgrammatic(void);
+void SetControllerToPlayer(void)
+{
+    if (ShouldControlBattler(gActiveBattler))
+        SetControllerToProgrammatic();
+    else
+        SetControllerToConsole();
+}
+void SetControllerToOpponent(void)
+{
+    if (ShouldControlBattler(gActiveBattler))
+        SetControllerToProgrammatic();
+    else
+        SetControllerToConsole();
+}
+#else
 void SetControllerToPlayer(void)   { SetControllerToConsole(); }
 void SetControllerToOpponent(void) { SetControllerToConsole(); }
+#endif
 
 /* =========================================================================
  * Controller completion
