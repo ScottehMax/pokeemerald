@@ -148,18 +148,7 @@ BATTLE_API int battle_set_team_showdown(int side, const char *text)
 {
     struct Pokemon *party = (side == 0) ? gPlayerParty : gEnemyParty;
     u8 otIdType = (side == 0) ? OT_ID_PLAYER_ID : OT_ID_RANDOM_NO_SHINY;
-
-    /* ParseTeamFile reads from a file, so we write to a temp file.
-     * A future improvement would add a ParseTeamString function. */
-    const char *tmpPath = (side == 0) ? "_tmp_team_p1.txt" : "_tmp_team_p2.txt";
-    FILE *f = fopen(tmpPath, "w");
-    if (!f) return 0;
-    fputs(text, f);
-    fclose(f);
-
-    int result = ParseTeamFile(tmpPath, party, otIdType);
-    remove(tmpPath);
-    return result;
+    return ParseTeamString(text, party, otIdType);
 }
 
 /* Defined in team_randomiser.c */

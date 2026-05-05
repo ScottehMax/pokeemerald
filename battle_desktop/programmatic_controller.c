@@ -182,9 +182,13 @@ static void FillChooseMoveRequest(void)
     gPendingRequest.battler = gActiveBattler;
     gPendingRequest.side = GET_BATTLER_SIDE(gActiveBattler);
 
+    /* Apply full move limitations (Disable, Taunt, Torment, Imprison,
+     * Encore, Choice Band, PP) so Python's action mask is accurate. */
+    u8 unusable = CheckMoveLimitations(gActiveBattler, 0, MOVE_LIMITATIONS_ALL);
+
     for (int i = 0; i < MAX_MON_MOVES; i++) {
         gPendingRequest.availableMoves[i] = moveInfo->moves[i];
-        gPendingRequest.movePp[i] = moveInfo->currentPp[i];
+        gPendingRequest.movePp[i] = (unusable & (1 << i)) ? 0 : moveInfo->currentPp[i];
         gPendingRequest.moveMaxPp[i] = moveInfo->maxPp[i];
     }
 }
@@ -275,15 +279,9 @@ static void ProgHandleChooseMove(void)
     struct ChooseMoveStruct *moveInfo =
         (struct ChooseMoveStruct *)(&gBattleBufferA[gActiveBattler][4]);
 
-    /* ---- Auto-Struggle (no PP left at all) ---- */
-    u8 hasValidMove = 0;
-    for (int i = 0; i < MAX_MON_MOVES; i++) {
-        if (moveInfo->moves[i] != MOVE_NONE && moveInfo->currentPp[i] > 0) {
-            hasValidMove = 1;
-            break;
-        }
-    }
-    if (!hasValidMove) {
+    /* ---- Auto-Struggle (no usable moves at all) ---- */
+    u8 unusable = CheckMoveLimitations(gActiveBattler, 0, MOVE_LIMITATIONS_ALL);
+    if (unusable == ALL_MOVES_MASK) {
         sPendingMoveSlot[gActiveBattler] = -1;
         BtlController_EmitTwoReturnValues(B_COMM_TO_ENGINE, 10,
             (MOVE_STRUGGLE) | (GetBattlerAtPosition(
@@ -298,13 +296,13 @@ static void ProgHandleChooseMove(void)
         u8 target   = sPendingTarget[gActiveBattler];
         sPendingMoveSlot[gActiveBattler] = -1;
 
-        /* Validate — the move could have become unusable since CHOOSE_ACTION */
+        /* Validate with full limitations (PP, Disable, Taunt, etc.) */
         if (moveSlot >= MAX_MON_MOVES
             || moveInfo->moves[moveSlot] == MOVE_NONE
-            || moveInfo->currentPp[moveSlot] == 0) {
+            || (unusable & (1 << moveSlot))) {
             /* Fall back to first usable move */
             for (int i = 0; i < MAX_MON_MOVES; i++) {
-                if (moveInfo->moves[i] != MOVE_NONE && moveInfo->currentPp[i] > 0) {
+                if (moveInfo->moves[i] != MOVE_NONE && !(unusable & (1 << i))) {
                     moveSlot = i;
                     break;
                 }
@@ -329,7 +327,9 @@ static void ProgHandleChooseMove(void)
     if (sActionSubmitted[gActiveBattler]) {
         sActionSubmitted[gActiveBattler] = 0;
         u8 moveSlot = sSubmittedAction[gActiveBattler].moveSlot;
-        if (moveSlot >= MAX_MON_MOVES || moveInfo->moves[moveSlot] == MOVE_NONE)
+        if (moveSlot >= MAX_MON_MOVES
+            || moveInfo->moves[moveSlot] == MOVE_NONE
+            || (unusable & (1 << moveSlot)))
             moveSlot = 0;
         u8 target;
         u16 moveTgt = gBattleMoves[moveInfo->moves[moveSlot]].target;

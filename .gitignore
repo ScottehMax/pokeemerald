@@ -40,3 +40,9 @@ prefabs.json
 *.js
 /pokeemerald-*.png
 /pokeemerald_modern-*.png
+
+battle_desktop/*.exe
+battle_desktop/*.dll
+battle_desktop/pokeemerald_battle/examples/__pycache__
+*.pyc
+*.csv

@@ -63,6 +63,13 @@ def _build_obs_space() -> spaces.Dict:
             "party_hp": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint16),
             "party_max_hp": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint16),
             "party_alive": spaces.Box(0, 1, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint8),
+            "party_moves": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE, BATTLE_MAX_MOVES), dtype=np.uint16),
+            "party_pp": spaces.Box(0, 255, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE, BATTLE_MAX_MOVES), dtype=np.uint8),
+            "party_types": spaces.Box(0, 255, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE, 2), dtype=np.uint8),
+            "party_ability": spaces.Box(0, 255, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint8),
+            "party_level": spaces.Box(0, 255, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint8),
+            "party_status": spaces.Box(0, 2**32 - 1, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint32),
+            "party_item": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint16),
             "weather": spaces.Box(0, 65535, shape=(1,), dtype=np.uint16),
             "side_status": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES,), dtype=np.uint16),
             "spikes": spaces.Box(0, 3, shape=(BATTLE_NUM_SIDES,), dtype=np.uint8),
@@ -155,6 +162,13 @@ class PokemonBattlePettingZooEnv(AECEnv):
         obs["party_hp"] = np.array([[s.party[side][j].hp for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint16)
         obs["party_max_hp"] = np.array([[s.party[side][j].maxHp for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint16)
         obs["party_alive"] = np.array([[s.party[side][j].isAlive for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_moves"] = np.array([[[s.party[side][j].moves[m] for m in range(BATTLE_MAX_MOVES)] for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint16)
+        obs["party_pp"] = np.array([[[s.party[side][j].pp[m] for m in range(BATTLE_MAX_MOVES)] for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_types"] = np.array([[[s.party[side][j].types[t] for t in range(2)] for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_ability"] = np.array([[s.party[side][j].ability for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_level"] = np.array([[s.party[side][j].level for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_status"] = np.array([[s.party[side][j].status for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint32)
+        obs["party_item"] = np.array([[s.party[side][j].item for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint16)
 
         obs["weather"] = np.array([s.weather], dtype=np.uint16)
         obs["side_status"] = np.array([s.sides[i].sideStatus for i in range(BATTLE_NUM_SIDES)], dtype=np.uint16)

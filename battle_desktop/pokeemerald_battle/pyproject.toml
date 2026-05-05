@@ -11,11 +11,16 @@ dependencies = [
     "gymnasium>=1.0.0",
     "pettingzoo>=1.24.0",
     "numpy>=1.26.0",
+    "setuptools==81.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+]
+train = [
+    "sb3-contrib>=2.4.0",
+    "tensorboard>=2.16.0",
 ]
 
 [build-system]

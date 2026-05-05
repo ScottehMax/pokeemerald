@@ -61,4 +61,10 @@
  */
 bool8 ParseTeamFile(const char *path, struct Pokemon *party, u8 otIdType);
 
+/*
+ * ParseTeamString — same as ParseTeamFile but reads from an in-memory string.
+ * Thread-safe: does not use any temporary files.
+ */
+bool8 ParseTeamString(const char *text, struct Pokemon *party, u8 otIdType);
+
 #endif /* GUARD_BATTLE_DESKTOP_TEAM_PARSER_H */

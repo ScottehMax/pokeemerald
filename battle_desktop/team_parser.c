@@ -252,9 +252,9 @@ static void ParseFirstLine(const char *line, ShowdownSet *s)
 
     /* Strip gender suffix " (M)" or " (F)" */
     size_t len = strlen(buf);
-    if (len >= 4 && buf[len-1] == ')' && buf[len-2] == 'M' && buf[len-3] == ' ' && buf[len-4] == '(')
+    if (len >= 4 && buf[len-1] == ')' && buf[len-2] == 'M' && buf[len-3] == '(' && buf[len-4] == ' ')
         buf[len-4] = '\0';
-    else if (len >= 4 && buf[len-1] == ')' && buf[len-2] == 'F' && buf[len-3] == ' ' && buf[len-4] == '(')
+    else if (len >= 4 && buf[len-1] == ')' && buf[len-2] == 'F' && buf[len-3] == '(' && buf[len-4] == ' ')
         buf[len-4] = '\0';
 
     /* Check for "Nickname (Species)" pattern: find the last " (" */
@@ -447,6 +447,7 @@ static void CommitSet(const ShowdownSet *s, struct Pokemon *mon, u8 otIdType, in
     /* Recompute stats now that EVs/IVs are finalised */
     CalculateMonStats(mon);
 
+#ifdef TEAM_PARSER_VERBOSE
     /* Human-readable summary so the user can verify what was loaded */
     printf("  [%d] %s", slot + 1,
            s->nickname[0] ? s->nickname : "(no nickname)");
@@ -471,6 +472,7 @@ static void CommitSet(const ShowdownSet *s, struct Pokemon *mon, u8 otIdType, in
     }
 
     printf("\n");
+#endif
 }
 
 /* -------------------------------------------------------------------------
@@ -549,6 +551,94 @@ bool8 ParseTeamFile(const char *path, struct Pokemon *party, u8 otIdType)
         return FALSE;
     }
 
+#ifdef TEAM_PARSER_VERBOSE
     printf("Loaded %d Pokémon from '%s'\n", monIdx, path);
+#endif
+    return TRUE;
+}
+
+bool8 ParseTeamString(const char *text, struct Pokemon *party, u8 otIdType)
+{
+    if (!text || *text == '\0')
+        return FALSE;
+
+    /* Work on a mutable copy so we can tokenise with strtok-style splitting */
+    size_t len = strlen(text);
+    char *buf = malloc(len + 1);
+    if (!buf)
+        return FALSE;
+    memcpy(buf, text, len + 1);
+
+    char line[512];
+    int  monIdx = 0;
+    bool8 inSet = FALSE;
+    ShowdownSet cur;
+
+    /* Walk through buf line by line */
+    char *pos = buf;
+    while (pos && *pos)
+    {
+        /* Find end of current line */
+        char *eol = strchr(pos, '\n');
+        size_t lineLen;
+        if (eol)
+        {
+            lineLen = (size_t)(eol - pos);
+            if (lineLen > 0 && pos[lineLen - 1] == '\r')
+                lineLen--;
+        }
+        else
+        {
+            lineLen = strlen(pos);
+        }
+        if (lineLen >= sizeof(line))
+            lineLen = sizeof(line) - 1;
+        memcpy(line, pos, lineLen);
+        line[lineLen] = '\0';
+        RStripInPlace(line);
+
+        pos = eol ? eol + 1 : NULL;
+
+        /* Trim leading whitespace */
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+
+        if (*p == '\0' || strcmp(p, "---") == 0)
+        {
+            if (inSet && cur.species != 0 && monIdx < PARTY_SIZE)
+            {
+                CommitSet(&cur, &party[monIdx], otIdType, monIdx);
+                monIdx++;
+            }
+            inSet = FALSE;
+            continue;
+        }
+
+        if (strncmp(p, "===", 3) == 0)
+            continue;
+
+        if (!inSet)
+        {
+            ResetSet(&cur);
+            inSet = TRUE;
+            ParseFirstLine(p, &cur);
+        }
+        else
+        {
+            ParseBodyLine(p, &cur);
+        }
+    }
+
+    if (inSet && cur.species != 0 && monIdx < PARTY_SIZE)
+    {
+        CommitSet(&cur, &party[monIdx], otIdType, monIdx);
+        monIdx++;
+    }
+
+    free(buf);
+
+    if (monIdx == 0)
+        return FALSE;
+
     return TRUE;
 }

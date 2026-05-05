@@ -5,6 +5,8 @@ Single-agent: one side is controlled by the agent, the other by the built-in AI.
 
 from __future__ import annotations
 
+import glob
+from pathlib import Path
 from typing import Any
 
 import gymnasium as gym
@@ -63,6 +65,8 @@ class PokemonBattleEnv(gym.Env):
         reward_shaping: bool = False,
         max_turns: int = 200,
         verbose: bool = False,
+        team_files: list[str] | None = None,
+        team_mix_rate: float = 0.5,
     ) -> None:
         super().__init__()
         self.render_mode = render_mode
@@ -71,11 +75,21 @@ class PokemonBattleEnv(gym.Env):
         self.reward_shaping = reward_shaping
         self.max_turns = max_turns
         self.verbose = verbose
+        self._team_mix_rate = team_mix_rate
+
+        # Load preset team texts (Showdown paste format)
+        self._team_texts: list[str] = []
+        if team_files:
+            for path in team_files:
+                self._team_texts.append(Path(path).read_text(encoding="utf-8"))
 
         self._lib = get_lib()
         self._state = BattleState()
         self._request = BattleActionRequest()
         self._prev_hp_frac: tuple[float, float] = (1.0, 1.0)
+        self._prev_alive: tuple[int, int] = (0, 0)
+        self._step_count = 0
+        self._max_steps = max_turns * 10  # hard cap on env.step() calls per episode
 
         # Action space: Discrete(10) with masking
         self.action_space = spaces.Discrete(NUM_ACTIONS)
@@ -103,6 +117,13 @@ class PokemonBattleEnv(gym.Env):
                 "party_hp": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint16),
                 "party_max_hp": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint16),
                 "party_alive": spaces.Box(0, 1, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint8),
+                "party_moves": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE, BATTLE_MAX_MOVES), dtype=np.uint16),
+                "party_pp": spaces.Box(0, 255, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE, BATTLE_MAX_MOVES), dtype=np.uint8),
+                "party_types": spaces.Box(0, 255, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE, 2), dtype=np.uint8),
+                "party_ability": spaces.Box(0, 255, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint8),
+                "party_level": spaces.Box(0, 255, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint8),
+                "party_status": spaces.Box(0, 2**32 - 1, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint32),
+                "party_item": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES, BATTLE_PARTY_SIZE), dtype=np.uint16),
                 # Field
                 "weather": spaces.Box(0, 65535, shape=(1,), dtype=np.uint16),
                 "side_status": spaces.Box(0, 65535, shape=(BATTLE_NUM_SIDES,), dtype=np.uint16),
@@ -144,6 +165,13 @@ class PokemonBattleEnv(gym.Env):
         obs["party_hp"] = np.array([[s.party[side][j].hp for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint16)
         obs["party_max_hp"] = np.array([[s.party[side][j].maxHp for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint16)
         obs["party_alive"] = np.array([[s.party[side][j].isAlive for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_moves"] = np.array([[[s.party[side][j].moves[m] for m in range(BATTLE_MAX_MOVES)] for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint16)
+        obs["party_pp"] = np.array([[[s.party[side][j].pp[m] for m in range(BATTLE_MAX_MOVES)] for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_types"] = np.array([[[s.party[side][j].types[t] for t in range(2)] for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_ability"] = np.array([[s.party[side][j].ability for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_level"] = np.array([[s.party[side][j].level for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint8)
+        obs["party_status"] = np.array([[s.party[side][j].status for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint32)
+        obs["party_item"] = np.array([[s.party[side][j].item for j in range(BATTLE_PARTY_SIZE)] for side in range(BATTLE_NUM_SIDES)], dtype=np.uint16)
 
         # Field
         obs["weather"] = np.array([s.weather], dtype=np.uint16)
@@ -191,6 +219,16 @@ class PokemonBattleEnv(gym.Env):
 
         return mask
 
+    def _count_alive(self) -> tuple[int, int]:
+        """Count alive mons per side."""
+        counts = [0, 0]
+        for side in range(BATTLE_NUM_SIDES):
+            for j in range(BATTLE_PARTY_SIZE):
+                mon = self._state.party[side][j]
+                if mon.species != 0 and mon.isAlive:
+                    counts[side] += 1
+        return (counts[0], counts[1])
+
     def _compute_hp_fractions(self) -> tuple[float, float]:
         """Sum HP fractions for each side."""
         fracs = [0.0, 0.0]
@@ -226,9 +264,13 @@ class PokemonBattleEnv(gym.Env):
         config.verbose = 1 if self.verbose else 0
         self._lib.battle_configure(config)
 
-        # Random teams
-        self._lib.battle_set_team_random(0, rng_seed)
-        self._lib.battle_set_team_random(1, rng_seed + 1)
+        # Teams: mix preset teams from files with random
+        for side in range(2):
+            if self._team_texts and self.np_random.random() < self._team_mix_rate:
+                idx = int(self.np_random.integers(0, len(self._team_texts)))
+                self._lib.battle_set_team_showdown(side, self._team_texts[idx].encode("utf-8"))
+            else:
+                self._lib.battle_set_team_random(side, rng_seed + side)
 
         # Start battle
         self._lib.battle_start()
@@ -239,6 +281,8 @@ class PokemonBattleEnv(gym.Env):
             self._lib.battle_get_action_request(self._request)
 
         self._prev_hp_frac = self._compute_hp_fractions()
+        self._prev_alive = self._count_alive()
+        self._step_count = 0
 
         obs = self._get_obs()
         info = {"action_mask": obs["action_mask"]}
@@ -274,6 +318,11 @@ class PokemonBattleEnv(gym.Env):
         terminated = outcome != BATTLE_OUTCOME_NONE
         truncated = self._state.turn >= self.max_turns
 
+        # Safety: force truncation if too many step() calls per episode
+        self._step_count += 1
+        if not terminated and self._step_count >= self._max_steps:
+            truncated = True
+
         reward = 0.0
         if terminated:
             if outcome == BATTLE_OUTCOME_WON:
@@ -283,13 +332,19 @@ class PokemonBattleEnv(gym.Env):
             # DREW → 0.0
         elif self.reward_shaping:
             cur_hp = self._compute_hp_fractions()
+            cur_alive = self._count_alive()
             agent = self.agent_side
             opponent = 1 - self.agent_side
             # Reward = opponent HP lost - agent HP lost
             reward = (self._prev_hp_frac[opponent] - cur_hp[opponent]) - (
                 self._prev_hp_frac[agent] - cur_hp[agent]
             )
+            # KO bonus: +0.15 per opponent KO, -0.15 per agent KO
+            opp_kos = self._prev_alive[opponent] - cur_alive[opponent]
+            agent_kos = self._prev_alive[agent] - cur_alive[agent]
+            reward += 0.15 * opp_kos - 0.15 * agent_kos
             self._prev_hp_frac = cur_hp
+            self._prev_alive = cur_alive
 
         info: dict[str, Any] = {"action_mask": obs["action_mask"]}
         if terminated:

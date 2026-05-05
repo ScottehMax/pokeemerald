@@ -1,0 +1,2842 @@
+{
+  "0": {
+    "name": "MOVE_NONE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 0
+  },
+  "1": {
+    "name": "MOVE_POUND",
+    "power": 40,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 35
+  },
+  "2": {
+    "name": "MOVE_KARATE_CHOP",
+    "power": 50,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "3": {
+    "name": "MOVE_DOUBLE_SLAP",
+    "power": 15,
+    "type": 0,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 10
+  },
+  "4": {
+    "name": "MOVE_COMET_PUNCH",
+    "power": 18,
+    "type": 0,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 15
+  },
+  "5": {
+    "name": "MOVE_MEGA_PUNCH",
+    "power": 80,
+    "type": 0,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 20
+  },
+  "6": {
+    "name": "MOVE_PAY_DAY",
+    "power": 40,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "7": {
+    "name": "MOVE_FIRE_PUNCH",
+    "power": 75,
+    "type": 10,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "8": {
+    "name": "MOVE_ICE_PUNCH",
+    "power": 75,
+    "type": 15,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "9": {
+    "name": "MOVE_THUNDER_PUNCH",
+    "power": 75,
+    "type": 13,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "10": {
+    "name": "MOVE_SCRATCH",
+    "power": 40,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 35
+  },
+  "11": {
+    "name": "MOVE_VICE_GRIP",
+    "power": 55,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "12": {
+    "name": "MOVE_GUILLOTINE",
+    "power": 1,
+    "type": 0,
+    "accuracy": 30,
+    "priority": 0,
+    "pp": 5
+  },
+  "13": {
+    "name": "MOVE_RAZOR_WIND",
+    "power": 80,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "14": {
+    "name": "MOVE_SWORDS_DANCE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "15": {
+    "name": "MOVE_CUT",
+    "power": 50,
+    "type": 0,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 30
+  },
+  "16": {
+    "name": "MOVE_GUST",
+    "power": 40,
+    "type": 2,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 35
+  },
+  "17": {
+    "name": "MOVE_WING_ATTACK",
+    "power": 60,
+    "type": 2,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 35
+  },
+  "18": {
+    "name": "MOVE_WHIRLWIND",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": -6,
+    "pp": 20
+  },
+  "19": {
+    "name": "MOVE_FLY",
+    "power": 70,
+    "type": 2,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 15
+  },
+  "20": {
+    "name": "MOVE_BIND",
+    "power": 15,
+    "type": 0,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 20
+  },
+  "21": {
+    "name": "MOVE_SLAM",
+    "power": 80,
+    "type": 0,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 20
+  },
+  "22": {
+    "name": "MOVE_VINE_WHIP",
+    "power": 35,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "23": {
+    "name": "MOVE_STOMP",
+    "power": 65,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "24": {
+    "name": "MOVE_DOUBLE_KICK",
+    "power": 30,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "25": {
+    "name": "MOVE_MEGA_KICK",
+    "power": 120,
+    "type": 0,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 5
+  },
+  "26": {
+    "name": "MOVE_JUMP_KICK",
+    "power": 70,
+    "type": 1,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 25
+  },
+  "27": {
+    "name": "MOVE_ROLLING_KICK",
+    "power": 60,
+    "type": 1,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 15
+  },
+  "28": {
+    "name": "MOVE_SAND_ATTACK",
+    "power": 0,
+    "type": 4,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "29": {
+    "name": "MOVE_HEADBUTT",
+    "power": 70,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "30": {
+    "name": "MOVE_HORN_ATTACK",
+    "power": 65,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "31": {
+    "name": "MOVE_FURY_ATTACK",
+    "power": 15,
+    "type": 0,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 20
+  },
+  "32": {
+    "name": "MOVE_HORN_DRILL",
+    "power": 1,
+    "type": 0,
+    "accuracy": 30,
+    "priority": 0,
+    "pp": 5
+  },
+  "33": {
+    "name": "MOVE_TACKLE",
+    "power": 35,
+    "type": 0,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 35
+  },
+  "34": {
+    "name": "MOVE_BODY_SLAM",
+    "power": 85,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "35": {
+    "name": "MOVE_WRAP",
+    "power": 15,
+    "type": 0,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 20
+  },
+  "36": {
+    "name": "MOVE_TAKE_DOWN",
+    "power": 90,
+    "type": 0,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 20
+  },
+  "37": {
+    "name": "MOVE_THRASH",
+    "power": 90,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "38": {
+    "name": "MOVE_DOUBLE_EDGE",
+    "power": 120,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "39": {
+    "name": "MOVE_TAIL_WHIP",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "40": {
+    "name": "MOVE_POISON_STING",
+    "power": 15,
+    "type": 3,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 35
+  },
+  "41": {
+    "name": "MOVE_TWINEEDLE",
+    "power": 25,
+    "type": 6,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "42": {
+    "name": "MOVE_PIN_MISSILE",
+    "power": 14,
+    "type": 6,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 20
+  },
+  "43": {
+    "name": "MOVE_LEER",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "44": {
+    "name": "MOVE_BITE",
+    "power": 60,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "45": {
+    "name": "MOVE_GROWL",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 40
+  },
+  "46": {
+    "name": "MOVE_ROAR",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": -6,
+    "pp": 20
+  },
+  "47": {
+    "name": "MOVE_SING",
+    "power": 0,
+    "type": 0,
+    "accuracy": 55,
+    "priority": 0,
+    "pp": 15
+  },
+  "48": {
+    "name": "MOVE_SUPERSONIC",
+    "power": 0,
+    "type": 0,
+    "accuracy": 55,
+    "priority": 0,
+    "pp": 20
+  },
+  "49": {
+    "name": "MOVE_SONIC_BOOM",
+    "power": 1,
+    "type": 0,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 20
+  },
+  "50": {
+    "name": "MOVE_DISABLE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 55,
+    "priority": 0,
+    "pp": 20
+  },
+  "51": {
+    "name": "MOVE_ACID",
+    "power": 40,
+    "type": 3,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "52": {
+    "name": "MOVE_EMBER",
+    "power": 40,
+    "type": 10,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "53": {
+    "name": "MOVE_FLAMETHROWER",
+    "power": 95,
+    "type": 10,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "54": {
+    "name": "MOVE_MIST",
+    "power": 0,
+    "type": 15,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "55": {
+    "name": "MOVE_WATER_GUN",
+    "power": 40,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "56": {
+    "name": "MOVE_HYDRO_PUMP",
+    "power": 120,
+    "type": 11,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 5
+  },
+  "57": {
+    "name": "MOVE_SURF",
+    "power": 95,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "58": {
+    "name": "MOVE_ICE_BEAM",
+    "power": 95,
+    "type": 15,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "59": {
+    "name": "MOVE_BLIZZARD",
+    "power": 120,
+    "type": 15,
+    "accuracy": 70,
+    "priority": 0,
+    "pp": 5
+  },
+  "60": {
+    "name": "MOVE_PSYBEAM",
+    "power": 65,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "61": {
+    "name": "MOVE_BUBBLE_BEAM",
+    "power": 65,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "62": {
+    "name": "MOVE_AURORA_BEAM",
+    "power": 65,
+    "type": 15,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "63": {
+    "name": "MOVE_HYPER_BEAM",
+    "power": 150,
+    "type": 0,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 5
+  },
+  "64": {
+    "name": "MOVE_PECK",
+    "power": 35,
+    "type": 2,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 35
+  },
+  "65": {
+    "name": "MOVE_DRILL_PECK",
+    "power": 80,
+    "type": 2,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "66": {
+    "name": "MOVE_SUBMISSION",
+    "power": 80,
+    "type": 1,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 25
+  },
+  "67": {
+    "name": "MOVE_LOW_KICK",
+    "power": 1,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "68": {
+    "name": "MOVE_COUNTER",
+    "power": 1,
+    "type": 1,
+    "accuracy": 100,
+    "priority": -5,
+    "pp": 20
+  },
+  "69": {
+    "name": "MOVE_SEISMIC_TOSS",
+    "power": 1,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "70": {
+    "name": "MOVE_STRENGTH",
+    "power": 80,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "71": {
+    "name": "MOVE_ABSORB",
+    "power": 20,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "72": {
+    "name": "MOVE_MEGA_DRAIN",
+    "power": 40,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "73": {
+    "name": "MOVE_LEECH_SEED",
+    "power": 0,
+    "type": 12,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 10
+  },
+  "74": {
+    "name": "MOVE_GROWTH",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 40
+  },
+  "75": {
+    "name": "MOVE_RAZOR_LEAF",
+    "power": 55,
+    "type": 12,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 25
+  },
+  "76": {
+    "name": "MOVE_SOLAR_BEAM",
+    "power": 120,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "77": {
+    "name": "MOVE_POISON_POWDER",
+    "power": 0,
+    "type": 3,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 35
+  },
+  "78": {
+    "name": "MOVE_STUN_SPORE",
+    "power": 0,
+    "type": 12,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 30
+  },
+  "79": {
+    "name": "MOVE_SLEEP_POWDER",
+    "power": 0,
+    "type": 12,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 15
+  },
+  "80": {
+    "name": "MOVE_PETAL_DANCE",
+    "power": 70,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "81": {
+    "name": "MOVE_STRING_SHOT",
+    "power": 0,
+    "type": 6,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 40
+  },
+  "82": {
+    "name": "MOVE_DRAGON_RAGE",
+    "power": 1,
+    "type": 16,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "83": {
+    "name": "MOVE_FIRE_SPIN",
+    "power": 15,
+    "type": 10,
+    "accuracy": 70,
+    "priority": 0,
+    "pp": 15
+  },
+  "84": {
+    "name": "MOVE_THUNDER_SHOCK",
+    "power": 40,
+    "type": 13,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "85": {
+    "name": "MOVE_THUNDERBOLT",
+    "power": 95,
+    "type": 13,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "86": {
+    "name": "MOVE_THUNDER_WAVE",
+    "power": 0,
+    "type": 13,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "87": {
+    "name": "MOVE_THUNDER",
+    "power": 120,
+    "type": 13,
+    "accuracy": 70,
+    "priority": 0,
+    "pp": 10
+  },
+  "88": {
+    "name": "MOVE_ROCK_THROW",
+    "power": 50,
+    "type": 5,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 15
+  },
+  "89": {
+    "name": "MOVE_EARTHQUAKE",
+    "power": 100,
+    "type": 4,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "90": {
+    "name": "MOVE_FISSURE",
+    "power": 1,
+    "type": 4,
+    "accuracy": 30,
+    "priority": 0,
+    "pp": 5
+  },
+  "91": {
+    "name": "MOVE_DIG",
+    "power": 60,
+    "type": 4,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "92": {
+    "name": "MOVE_TOXIC",
+    "power": 0,
+    "type": 3,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 10
+  },
+  "93": {
+    "name": "MOVE_CONFUSION",
+    "power": 50,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "94": {
+    "name": "MOVE_PSYCHIC",
+    "power": 90,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "95": {
+    "name": "MOVE_HYPNOSIS",
+    "power": 0,
+    "type": 14,
+    "accuracy": 60,
+    "priority": 0,
+    "pp": 20
+  },
+  "96": {
+    "name": "MOVE_MEDITATE",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 40
+  },
+  "97": {
+    "name": "MOVE_AGILITY",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "98": {
+    "name": "MOVE_QUICK_ATTACK",
+    "power": 40,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 1,
+    "pp": 30
+  },
+  "99": {
+    "name": "MOVE_RAGE",
+    "power": 20,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "100": {
+    "name": "MOVE_TELEPORT",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "101": {
+    "name": "MOVE_NIGHT_SHADE",
+    "power": 1,
+    "type": 7,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "102": {
+    "name": "MOVE_MIMIC",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "103": {
+    "name": "MOVE_SCREECH",
+    "power": 0,
+    "type": 0,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 40
+  },
+  "104": {
+    "name": "MOVE_DOUBLE_TEAM",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 15
+  },
+  "105": {
+    "name": "MOVE_RECOVER",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "106": {
+    "name": "MOVE_HARDEN",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "107": {
+    "name": "MOVE_MINIMIZE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "108": {
+    "name": "MOVE_SMOKESCREEN",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "109": {
+    "name": "MOVE_CONFUSE_RAY",
+    "power": 0,
+    "type": 7,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "110": {
+    "name": "MOVE_WITHDRAW",
+    "power": 0,
+    "type": 11,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 40
+  },
+  "111": {
+    "name": "MOVE_DEFENSE_CURL",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 40
+  },
+  "112": {
+    "name": "MOVE_BARRIER",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "113": {
+    "name": "MOVE_LIGHT_SCREEN",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "114": {
+    "name": "MOVE_HAZE",
+    "power": 0,
+    "type": 15,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "115": {
+    "name": "MOVE_REFLECT",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "116": {
+    "name": "MOVE_FOCUS_ENERGY",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "117": {
+    "name": "MOVE_BIDE",
+    "power": 1,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "118": {
+    "name": "MOVE_METRONOME",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "119": {
+    "name": "MOVE_MIRROR_MOVE",
+    "power": 0,
+    "type": 2,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "120": {
+    "name": "MOVE_SELF_DESTRUCT",
+    "power": 200,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "121": {
+    "name": "MOVE_EGG_BOMB",
+    "power": 100,
+    "type": 0,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 10
+  },
+  "122": {
+    "name": "MOVE_LICK",
+    "power": 20,
+    "type": 7,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "123": {
+    "name": "MOVE_SMOG",
+    "power": 20,
+    "type": 3,
+    "accuracy": 70,
+    "priority": 0,
+    "pp": 20
+  },
+  "124": {
+    "name": "MOVE_SLUDGE",
+    "power": 65,
+    "type": 3,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "125": {
+    "name": "MOVE_BONE_CLUB",
+    "power": 65,
+    "type": 4,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 20
+  },
+  "126": {
+    "name": "MOVE_FIRE_BLAST",
+    "power": 120,
+    "type": 10,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 5
+  },
+  "127": {
+    "name": "MOVE_WATERFALL",
+    "power": 80,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "128": {
+    "name": "MOVE_CLAMP",
+    "power": 35,
+    "type": 11,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 10
+  },
+  "129": {
+    "name": "MOVE_SWIFT",
+    "power": 60,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "130": {
+    "name": "MOVE_SKULL_BASH",
+    "power": 100,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "131": {
+    "name": "MOVE_SPIKE_CANNON",
+    "power": 20,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "132": {
+    "name": "MOVE_CONSTRICT",
+    "power": 10,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 35
+  },
+  "133": {
+    "name": "MOVE_AMNESIA",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "134": {
+    "name": "MOVE_KINESIS",
+    "power": 0,
+    "type": 14,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 15
+  },
+  "135": {
+    "name": "MOVE_SOFT_BOILED",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "136": {
+    "name": "MOVE_HI_JUMP_KICK",
+    "power": 85,
+    "type": 1,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 20
+  },
+  "137": {
+    "name": "MOVE_GLARE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 30
+  },
+  "138": {
+    "name": "MOVE_DREAM_EATER",
+    "power": 100,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "139": {
+    "name": "MOVE_POISON_GAS",
+    "power": 0,
+    "type": 3,
+    "accuracy": 55,
+    "priority": 0,
+    "pp": 40
+  },
+  "140": {
+    "name": "MOVE_BARRAGE",
+    "power": 15,
+    "type": 0,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 20
+  },
+  "141": {
+    "name": "MOVE_LEECH_LIFE",
+    "power": 20,
+    "type": 6,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "142": {
+    "name": "MOVE_LOVELY_KISS",
+    "power": 0,
+    "type": 0,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 10
+  },
+  "143": {
+    "name": "MOVE_SKY_ATTACK",
+    "power": 140,
+    "type": 2,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 5
+  },
+  "144": {
+    "name": "MOVE_TRANSFORM",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "145": {
+    "name": "MOVE_BUBBLE",
+    "power": 20,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "146": {
+    "name": "MOVE_DIZZY_PUNCH",
+    "power": 70,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "147": {
+    "name": "MOVE_SPORE",
+    "power": 0,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "148": {
+    "name": "MOVE_FLASH",
+    "power": 0,
+    "type": 0,
+    "accuracy": 70,
+    "priority": 0,
+    "pp": 20
+  },
+  "149": {
+    "name": "MOVE_PSYWAVE",
+    "power": 1,
+    "type": 14,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 15
+  },
+  "150": {
+    "name": "MOVE_SPLASH",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 40
+  },
+  "151": {
+    "name": "MOVE_ACID_ARMOR",
+    "power": 0,
+    "type": 3,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 40
+  },
+  "152": {
+    "name": "MOVE_CRABHAMMER",
+    "power": 90,
+    "type": 11,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 10
+  },
+  "153": {
+    "name": "MOVE_EXPLOSION",
+    "power": 250,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "154": {
+    "name": "MOVE_FURY_SWIPES",
+    "power": 18,
+    "type": 0,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 15
+  },
+  "155": {
+    "name": "MOVE_BONEMERANG",
+    "power": 50,
+    "type": 4,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 10
+  },
+  "156": {
+    "name": "MOVE_REST",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "157": {
+    "name": "MOVE_ROCK_SLIDE",
+    "power": 75,
+    "type": 5,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 10
+  },
+  "158": {
+    "name": "MOVE_HYPER_FANG",
+    "power": 80,
+    "type": 0,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 15
+  },
+  "159": {
+    "name": "MOVE_SHARPEN",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "160": {
+    "name": "MOVE_CONVERSION",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 30
+  },
+  "161": {
+    "name": "MOVE_TRI_ATTACK",
+    "power": 80,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "162": {
+    "name": "MOVE_SUPER_FANG",
+    "power": 1,
+    "type": 0,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 10
+  },
+  "163": {
+    "name": "MOVE_SLASH",
+    "power": 70,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "164": {
+    "name": "MOVE_SUBSTITUTE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "165": {
+    "name": "MOVE_STRUGGLE",
+    "power": 50,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 1
+  },
+  "166": {
+    "name": "MOVE_SKETCH",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 1
+  },
+  "167": {
+    "name": "MOVE_TRIPLE_KICK",
+    "power": 10,
+    "type": 1,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 10
+  },
+  "168": {
+    "name": "MOVE_THIEF",
+    "power": 40,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "169": {
+    "name": "MOVE_SPIDER_WEB",
+    "power": 0,
+    "type": 6,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "170": {
+    "name": "MOVE_MIND_READER",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "171": {
+    "name": "MOVE_NIGHTMARE",
+    "power": 0,
+    "type": 7,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "172": {
+    "name": "MOVE_FLAME_WHEEL",
+    "power": 60,
+    "type": 10,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "173": {
+    "name": "MOVE_SNORE",
+    "power": 40,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "174": {
+    "name": "MOVE_CURSE",
+    "power": 0,
+    "type": 9,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "175": {
+    "name": "MOVE_FLAIL",
+    "power": 1,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "176": {
+    "name": "MOVE_CONVERSION_2",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "177": {
+    "name": "MOVE_AEROBLAST",
+    "power": 100,
+    "type": 2,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 5
+  },
+  "178": {
+    "name": "MOVE_COTTON_SPORE",
+    "power": 0,
+    "type": 12,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 40
+  },
+  "179": {
+    "name": "MOVE_REVERSAL",
+    "power": 1,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "180": {
+    "name": "MOVE_SPITE",
+    "power": 0,
+    "type": 7,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "181": {
+    "name": "MOVE_POWDER_SNOW",
+    "power": 40,
+    "type": 15,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "182": {
+    "name": "MOVE_PROTECT",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 3,
+    "pp": 10
+  },
+  "183": {
+    "name": "MOVE_MACH_PUNCH",
+    "power": 40,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 1,
+    "pp": 30
+  },
+  "184": {
+    "name": "MOVE_SCARY_FACE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 10
+  },
+  "185": {
+    "name": "MOVE_FAINT_ATTACK",
+    "power": 60,
+    "type": 17,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "186": {
+    "name": "MOVE_SWEET_KISS",
+    "power": 0,
+    "type": 0,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 10
+  },
+  "187": {
+    "name": "MOVE_BELLY_DRUM",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "188": {
+    "name": "MOVE_SLUDGE_BOMB",
+    "power": 90,
+    "type": 3,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "189": {
+    "name": "MOVE_MUD_SLAP",
+    "power": 20,
+    "type": 4,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "190": {
+    "name": "MOVE_OCTAZOOKA",
+    "power": 65,
+    "type": 11,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 10
+  },
+  "191": {
+    "name": "MOVE_SPIKES",
+    "power": 0,
+    "type": 4,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "192": {
+    "name": "MOVE_ZAP_CANNON",
+    "power": 100,
+    "type": 13,
+    "accuracy": 50,
+    "priority": 0,
+    "pp": 5
+  },
+  "193": {
+    "name": "MOVE_FORESIGHT",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 40
+  },
+  "194": {
+    "name": "MOVE_DESTINY_BOND",
+    "power": 0,
+    "type": 7,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "195": {
+    "name": "MOVE_PERISH_SONG",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "196": {
+    "name": "MOVE_ICY_WIND",
+    "power": 55,
+    "type": 15,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 15
+  },
+  "197": {
+    "name": "MOVE_DETECT",
+    "power": 0,
+    "type": 1,
+    "accuracy": 0,
+    "priority": 3,
+    "pp": 5
+  },
+  "198": {
+    "name": "MOVE_BONE_RUSH",
+    "power": 25,
+    "type": 4,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 10
+  },
+  "199": {
+    "name": "MOVE_LOCK_ON",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "200": {
+    "name": "MOVE_OUTRAGE",
+    "power": 90,
+    "type": 16,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "201": {
+    "name": "MOVE_SANDSTORM",
+    "power": 0,
+    "type": 5,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "202": {
+    "name": "MOVE_GIGA_DRAIN",
+    "power": 60,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "203": {
+    "name": "MOVE_ENDURE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 3,
+    "pp": 10
+  },
+  "204": {
+    "name": "MOVE_CHARM",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "205": {
+    "name": "MOVE_ROLLOUT",
+    "power": 30,
+    "type": 5,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 20
+  },
+  "206": {
+    "name": "MOVE_FALSE_SWIPE",
+    "power": 40,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 40
+  },
+  "207": {
+    "name": "MOVE_SWAGGER",
+    "power": 0,
+    "type": 0,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 15
+  },
+  "208": {
+    "name": "MOVE_MILK_DRINK",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "209": {
+    "name": "MOVE_SPARK",
+    "power": 65,
+    "type": 13,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "210": {
+    "name": "MOVE_FURY_CUTTER",
+    "power": 10,
+    "type": 6,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 20
+  },
+  "211": {
+    "name": "MOVE_STEEL_WING",
+    "power": 70,
+    "type": 8,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 25
+  },
+  "212": {
+    "name": "MOVE_MEAN_LOOK",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "213": {
+    "name": "MOVE_ATTRACT",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "214": {
+    "name": "MOVE_SLEEP_TALK",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "215": {
+    "name": "MOVE_HEAL_BELL",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "216": {
+    "name": "MOVE_RETURN",
+    "power": 1,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "217": {
+    "name": "MOVE_PRESENT",
+    "power": 1,
+    "type": 0,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 15
+  },
+  "218": {
+    "name": "MOVE_FRUSTRATION",
+    "power": 1,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "219": {
+    "name": "MOVE_SAFEGUARD",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 25
+  },
+  "220": {
+    "name": "MOVE_PAIN_SPLIT",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "221": {
+    "name": "MOVE_SACRED_FIRE",
+    "power": 100,
+    "type": 10,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 5
+  },
+  "222": {
+    "name": "MOVE_MAGNITUDE",
+    "power": 1,
+    "type": 4,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "223": {
+    "name": "MOVE_DYNAMIC_PUNCH",
+    "power": 100,
+    "type": 1,
+    "accuracy": 50,
+    "priority": 0,
+    "pp": 5
+  },
+  "224": {
+    "name": "MOVE_MEGAHORN",
+    "power": 120,
+    "type": 6,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 10
+  },
+  "225": {
+    "name": "MOVE_DRAGON_BREATH",
+    "power": 60,
+    "type": 16,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "226": {
+    "name": "MOVE_BATON_PASS",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 40
+  },
+  "227": {
+    "name": "MOVE_ENCORE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "228": {
+    "name": "MOVE_PURSUIT",
+    "power": 40,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "229": {
+    "name": "MOVE_RAPID_SPIN",
+    "power": 20,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 40
+  },
+  "230": {
+    "name": "MOVE_SWEET_SCENT",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "231": {
+    "name": "MOVE_IRON_TAIL",
+    "power": 100,
+    "type": 8,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 15
+  },
+  "232": {
+    "name": "MOVE_METAL_CLAW",
+    "power": 50,
+    "type": 8,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 35
+  },
+  "233": {
+    "name": "MOVE_VITAL_THROW",
+    "power": 70,
+    "type": 1,
+    "accuracy": 100,
+    "priority": -1,
+    "pp": 10
+  },
+  "234": {
+    "name": "MOVE_MORNING_SUN",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "235": {
+    "name": "MOVE_SYNTHESIS",
+    "power": 0,
+    "type": 12,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "236": {
+    "name": "MOVE_MOONLIGHT",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "237": {
+    "name": "MOVE_HIDDEN_POWER",
+    "power": 1,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "238": {
+    "name": "MOVE_CROSS_CHOP",
+    "power": 100,
+    "type": 1,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 5
+  },
+  "239": {
+    "name": "MOVE_TWISTER",
+    "power": 40,
+    "type": 16,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "240": {
+    "name": "MOVE_RAIN_DANCE",
+    "power": 0,
+    "type": 11,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "241": {
+    "name": "MOVE_SUNNY_DAY",
+    "power": 0,
+    "type": 10,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "242": {
+    "name": "MOVE_CRUNCH",
+    "power": 80,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "243": {
+    "name": "MOVE_MIRROR_COAT",
+    "power": 1,
+    "type": 14,
+    "accuracy": 100,
+    "priority": -5,
+    "pp": 20
+  },
+  "244": {
+    "name": "MOVE_PSYCH_UP",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "245": {
+    "name": "MOVE_EXTREME_SPEED",
+    "power": 80,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 1,
+    "pp": 5
+  },
+  "246": {
+    "name": "MOVE_ANCIENT_POWER",
+    "power": 60,
+    "type": 5,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "247": {
+    "name": "MOVE_SHADOW_BALL",
+    "power": 80,
+    "type": 7,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "248": {
+    "name": "MOVE_FUTURE_SIGHT",
+    "power": 80,
+    "type": 14,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 15
+  },
+  "249": {
+    "name": "MOVE_ROCK_SMASH",
+    "power": 20,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "250": {
+    "name": "MOVE_WHIRLPOOL",
+    "power": 15,
+    "type": 11,
+    "accuracy": 70,
+    "priority": 0,
+    "pp": 15
+  },
+  "251": {
+    "name": "MOVE_BEAT_UP",
+    "power": 10,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "252": {
+    "name": "MOVE_FAKE_OUT",
+    "power": 40,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 1,
+    "pp": 10
+  },
+  "253": {
+    "name": "MOVE_UPROAR",
+    "power": 50,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "254": {
+    "name": "MOVE_STOCKPILE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "255": {
+    "name": "MOVE_SPIT_UP",
+    "power": 100,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "256": {
+    "name": "MOVE_SWALLOW",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "257": {
+    "name": "MOVE_HEAT_WAVE",
+    "power": 100,
+    "type": 10,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 10
+  },
+  "258": {
+    "name": "MOVE_HAIL",
+    "power": 0,
+    "type": 15,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 10
+  },
+  "259": {
+    "name": "MOVE_TORMENT",
+    "power": 0,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "260": {
+    "name": "MOVE_FLATTER",
+    "power": 0,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "261": {
+    "name": "MOVE_WILL_O_WISP",
+    "power": 0,
+    "type": 10,
+    "accuracy": 75,
+    "priority": 0,
+    "pp": 15
+  },
+  "262": {
+    "name": "MOVE_MEMENTO",
+    "power": 0,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "263": {
+    "name": "MOVE_FACADE",
+    "power": 70,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "264": {
+    "name": "MOVE_FOCUS_PUNCH",
+    "power": 150,
+    "type": 1,
+    "accuracy": 100,
+    "priority": -3,
+    "pp": 20
+  },
+  "265": {
+    "name": "MOVE_SMELLING_SALT",
+    "power": 60,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "266": {
+    "name": "MOVE_FOLLOW_ME",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 3,
+    "pp": 20
+  },
+  "267": {
+    "name": "MOVE_NATURE_POWER",
+    "power": 0,
+    "type": 0,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 20
+  },
+  "268": {
+    "name": "MOVE_CHARGE",
+    "power": 0,
+    "type": 13,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "269": {
+    "name": "MOVE_TAUNT",
+    "power": 0,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "270": {
+    "name": "MOVE_HELPING_HAND",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 5,
+    "pp": 20
+  },
+  "271": {
+    "name": "MOVE_TRICK",
+    "power": 0,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "272": {
+    "name": "MOVE_ROLE_PLAY",
+    "power": 0,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "273": {
+    "name": "MOVE_WISH",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "274": {
+    "name": "MOVE_ASSIST",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "275": {
+    "name": "MOVE_INGRAIN",
+    "power": 0,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "276": {
+    "name": "MOVE_SUPERPOWER",
+    "power": 120,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "277": {
+    "name": "MOVE_MAGIC_COAT",
+    "power": 0,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 4,
+    "pp": 15
+  },
+  "278": {
+    "name": "MOVE_RECYCLE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "279": {
+    "name": "MOVE_REVENGE",
+    "power": 60,
+    "type": 1,
+    "accuracy": 100,
+    "priority": -4,
+    "pp": 10
+  },
+  "280": {
+    "name": "MOVE_BRICK_BREAK",
+    "power": 75,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "281": {
+    "name": "MOVE_YAWN",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "282": {
+    "name": "MOVE_KNOCK_OFF",
+    "power": 20,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "283": {
+    "name": "MOVE_ENDEAVOR",
+    "power": 1,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "284": {
+    "name": "MOVE_ERUPTION",
+    "power": 150,
+    "type": 10,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "285": {
+    "name": "MOVE_SKILL_SWAP",
+    "power": 0,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "286": {
+    "name": "MOVE_IMPRISON",
+    "power": 0,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "287": {
+    "name": "MOVE_REFRESH",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "288": {
+    "name": "MOVE_GRUDGE",
+    "power": 0,
+    "type": 7,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "289": {
+    "name": "MOVE_SNATCH",
+    "power": 0,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 4,
+    "pp": 10
+  },
+  "290": {
+    "name": "MOVE_SECRET_POWER",
+    "power": 70,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "291": {
+    "name": "MOVE_DIVE",
+    "power": 60,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "292": {
+    "name": "MOVE_ARM_THRUST",
+    "power": 15,
+    "type": 1,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "293": {
+    "name": "MOVE_CAMOUFLAGE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "294": {
+    "name": "MOVE_TAIL_GLOW",
+    "power": 0,
+    "type": 6,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "295": {
+    "name": "MOVE_LUSTER_PURGE",
+    "power": 70,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "296": {
+    "name": "MOVE_MIST_BALL",
+    "power": 70,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "297": {
+    "name": "MOVE_FEATHER_DANCE",
+    "power": 0,
+    "type": 2,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "298": {
+    "name": "MOVE_TEETER_DANCE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "299": {
+    "name": "MOVE_BLAZE_KICK",
+    "power": 85,
+    "type": 10,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 10
+  },
+  "300": {
+    "name": "MOVE_MUD_SPORT",
+    "power": 0,
+    "type": 4,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "301": {
+    "name": "MOVE_ICE_BALL",
+    "power": 30,
+    "type": 15,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 20
+  },
+  "302": {
+    "name": "MOVE_NEEDLE_ARM",
+    "power": 60,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "303": {
+    "name": "MOVE_SLACK_OFF",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "304": {
+    "name": "MOVE_HYPER_VOICE",
+    "power": 90,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "305": {
+    "name": "MOVE_POISON_FANG",
+    "power": 50,
+    "type": 3,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "306": {
+    "name": "MOVE_CRUSH_CLAW",
+    "power": 75,
+    "type": 0,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 10
+  },
+  "307": {
+    "name": "MOVE_BLAST_BURN",
+    "power": 150,
+    "type": 10,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 5
+  },
+  "308": {
+    "name": "MOVE_HYDRO_CANNON",
+    "power": 150,
+    "type": 11,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 5
+  },
+  "309": {
+    "name": "MOVE_METEOR_MASH",
+    "power": 100,
+    "type": 8,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 10
+  },
+  "310": {
+    "name": "MOVE_ASTONISH",
+    "power": 30,
+    "type": 7,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "311": {
+    "name": "MOVE_WEATHER_BALL",
+    "power": 50,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 10
+  },
+  "312": {
+    "name": "MOVE_AROMATHERAPY",
+    "power": 0,
+    "type": 12,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 5
+  },
+  "313": {
+    "name": "MOVE_FAKE_TEARS",
+    "power": 0,
+    "type": 17,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "314": {
+    "name": "MOVE_AIR_CUTTER",
+    "power": 55,
+    "type": 2,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 25
+  },
+  "315": {
+    "name": "MOVE_OVERHEAT",
+    "power": 140,
+    "type": 10,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 5
+  },
+  "316": {
+    "name": "MOVE_ODOR_SLEUTH",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 40
+  },
+  "317": {
+    "name": "MOVE_ROCK_TOMB",
+    "power": 50,
+    "type": 5,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 10
+  },
+  "318": {
+    "name": "MOVE_SILVER_WIND",
+    "power": 60,
+    "type": 6,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "319": {
+    "name": "MOVE_METAL_SOUND",
+    "power": 0,
+    "type": 8,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 40
+  },
+  "320": {
+    "name": "MOVE_GRASS_WHISTLE",
+    "power": 0,
+    "type": 12,
+    "accuracy": 55,
+    "priority": 0,
+    "pp": 15
+  },
+  "321": {
+    "name": "MOVE_TICKLE",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "322": {
+    "name": "MOVE_COSMIC_POWER",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "323": {
+    "name": "MOVE_WATER_SPOUT",
+    "power": 150,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "324": {
+    "name": "MOVE_SIGNAL_BEAM",
+    "power": 75,
+    "type": 6,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "325": {
+    "name": "MOVE_SHADOW_PUNCH",
+    "power": 60,
+    "type": 7,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "326": {
+    "name": "MOVE_EXTRASENSORY",
+    "power": 80,
+    "type": 14,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "327": {
+    "name": "MOVE_SKY_UPPERCUT",
+    "power": 85,
+    "type": 1,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 15
+  },
+  "328": {
+    "name": "MOVE_SAND_TOMB",
+    "power": 15,
+    "type": 4,
+    "accuracy": 70,
+    "priority": 0,
+    "pp": 15
+  },
+  "329": {
+    "name": "MOVE_SHEER_COLD",
+    "power": 1,
+    "type": 15,
+    "accuracy": 30,
+    "priority": 0,
+    "pp": 5
+  },
+  "330": {
+    "name": "MOVE_MUDDY_WATER",
+    "power": 95,
+    "type": 11,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 10
+  },
+  "331": {
+    "name": "MOVE_BULLET_SEED",
+    "power": 10,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "332": {
+    "name": "MOVE_AERIAL_ACE",
+    "power": 60,
+    "type": 2,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "333": {
+    "name": "MOVE_ICICLE_SPEAR",
+    "power": 10,
+    "type": 15,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 30
+  },
+  "334": {
+    "name": "MOVE_IRON_DEFENSE",
+    "power": 0,
+    "type": 8,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 15
+  },
+  "335": {
+    "name": "MOVE_BLOCK",
+    "power": 0,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 5
+  },
+  "336": {
+    "name": "MOVE_HOWL",
+    "power": 0,
+    "type": 0,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 40
+  },
+  "337": {
+    "name": "MOVE_DRAGON_CLAW",
+    "power": 80,
+    "type": 16,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "338": {
+    "name": "MOVE_FRENZY_PLANT",
+    "power": 150,
+    "type": 12,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 5
+  },
+  "339": {
+    "name": "MOVE_BULK_UP",
+    "power": 0,
+    "type": 1,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "340": {
+    "name": "MOVE_BOUNCE",
+    "power": 85,
+    "type": 2,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 5
+  },
+  "341": {
+    "name": "MOVE_MUD_SHOT",
+    "power": 55,
+    "type": 4,
+    "accuracy": 95,
+    "priority": 0,
+    "pp": 15
+  },
+  "342": {
+    "name": "MOVE_POISON_TAIL",
+    "power": 50,
+    "type": 3,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 25
+  },
+  "343": {
+    "name": "MOVE_COVET",
+    "power": 40,
+    "type": 0,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 40
+  },
+  "344": {
+    "name": "MOVE_VOLT_TACKLE",
+    "power": 120,
+    "type": 13,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "345": {
+    "name": "MOVE_MAGICAL_LEAF",
+    "power": 60,
+    "type": 12,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "346": {
+    "name": "MOVE_WATER_SPORT",
+    "power": 0,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "347": {
+    "name": "MOVE_CALM_MIND",
+    "power": 0,
+    "type": 14,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "348": {
+    "name": "MOVE_LEAF_BLADE",
+    "power": 70,
+    "type": 12,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 15
+  },
+  "349": {
+    "name": "MOVE_DRAGON_DANCE",
+    "power": 0,
+    "type": 16,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "350": {
+    "name": "MOVE_ROCK_BLAST",
+    "power": 25,
+    "type": 5,
+    "accuracy": 80,
+    "priority": 0,
+    "pp": 10
+  },
+  "351": {
+    "name": "MOVE_SHOCK_WAVE",
+    "power": 60,
+    "type": 13,
+    "accuracy": 0,
+    "priority": 0,
+    "pp": 20
+  },
+  "352": {
+    "name": "MOVE_WATER_PULSE",
+    "power": 60,
+    "type": 11,
+    "accuracy": 100,
+    "priority": 0,
+    "pp": 20
+  },
+  "353": {
+    "name": "MOVE_DOOM_DESIRE",
+    "power": 120,
+    "type": 8,
+    "accuracy": 85,
+    "priority": 0,
+    "pp": 5
+  },
+  "354": {
+    "name": "MOVE_PSYCHO_BOOST",
+    "power": 140,
+    "type": 14,
+    "accuracy": 90,
+    "priority": 0,
+    "pp": 5
+  }
+}
