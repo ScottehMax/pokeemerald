@@ -8,6 +8,7 @@ void BattleOverworldScene_Reset(void);
 bool8 BattleOverworldScene_IsEnabled(void);
 void BattleOverworldScene_SetSuspended(bool8 suspended);
 u32 BattleOverworldScene_GetBgPaletteMask(void);
+u32 BattleOverworldScene_ApplyBgPaletteMask(u32 selectedPalettes);
 void BattleOverworldScene_TraceBg3(u16 phase);
 void BattleOverworldScene_LoadBackground(void);
 void BattleOverworldScene_RestoreBackground(void);

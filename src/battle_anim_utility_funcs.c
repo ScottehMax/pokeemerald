@@ -156,6 +156,8 @@ void AnimTask_BlendParticle(u8 taskId)
 
 void StartBlendAnimSpriteColor(u8 taskId, u32 selectedPalettes)
 {
+    selectedPalettes = BattleOverworldScene_ApplyBgPaletteMask(selectedPalettes);
+
     gTasks[taskId].data[0] = selectedPalettes;
     gTasks[taskId].data[1] = selectedPalettes >> 16;
     gTasks[taskId].data[2] = gBattleAnimArgs[1];
