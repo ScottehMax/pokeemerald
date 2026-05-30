@@ -28,6 +28,8 @@ COMMON_DATA u32 gMonShrinkDuration = 0;
 COMMON_DATA u16 gMonShrinkDelta = 0;
 COMMON_DATA u16 gMonShrinkDistance = 0;
 
+#define OW_BALL_Y_OFFSET 8
+
 enum {
     BALL_ROLL_1,
     BALL_PIVOT_1,
@@ -643,25 +645,76 @@ static void AnimTask_FlashHealthboxOnLevelUp_Step(u8 taskId)
 void AnimTask_SwitchOutShrinkMon(u8 taskId)
 {
     u8 spriteId;
+    bool8 isOwSprite;
+    s16 xScale;
 
     spriteId = gBattlerSpriteIds[gBattleAnimAttacker];
+    isOwSprite = BattleOverworldScene_IsBattlerSprite(gBattleAnimAttacker, spriteId);
     switch (gTasks[taskId].data[0])
     {
     case 0:
-        PrepareBattlerSpriteForRotScale(spriteId, ST_OAM_OBJ_NORMAL);
+        if (isOwSprite)
+        {
+            gTasks[taskId].data[11] = AllocOamMatrix();
+            if (gTasks[taskId].data[11] == 0xFF)
+            {
+                gSprites[spriteId].invisible = TRUE;
+                DestroyAnimVisualTask(taskId);
+                return;
+            }
+
+            gSprites[spriteId].oam.objMode = ST_OAM_OBJ_NORMAL;
+            gSprites[spriteId].oam.matrixNum = gTasks[taskId].data[11];
+            gSprites[spriteId].oam.affineMode = ST_OAM_AFFINE_DOUBLE;
+            gSprites[spriteId].hFlip = FALSE;
+            gSprites[spriteId].affineAnimPaused = TRUE;
+            gSprites[spriteId].animPaused = TRUE;
+            gSprites[spriteId].affineAnimBeginning = FALSE;
+            gSprites[spriteId].affineAnimEnded = FALSE;
+            CalcCenterToCornerVec(&gSprites[spriteId], gSprites[spriteId].oam.shape, gSprites[spriteId].oam.size, gSprites[spriteId].oam.affineMode);
+        }
+        else
+        {
+            PrepareBattlerSpriteForRotScale(spriteId, ST_OAM_OBJ_NORMAL);
+        }
         gTasks[taskId].data[10] = 0x100;
+        xScale = gTasks[taskId].data[10];
+        if (isOwSprite && BattleOverworldScene_IsBattlerFacingRight(gBattleAnimAttacker))
+            xScale = -xScale;
+        SetSpriteRotScale(spriteId, xScale, gTasks[taskId].data[10], 0);
+        if (isOwSprite)
+            gSprites[spriteId].y2 = 0;
         gTasks[taskId].data[0]++;
         break;
     case 1:
         gTasks[taskId].data[10] += 0x30;
-        SetSpriteRotScale(spriteId, gTasks[taskId].data[10], gTasks[taskId].data[10], 0);
-        SetBattlerSpriteYOffsetFromYScale(spriteId);
+        xScale = gTasks[taskId].data[10];
+        if (isOwSprite && BattleOverworldScene_IsBattlerFacingRight(gBattleAnimAttacker))
+            xScale = -xScale;
+        SetSpriteRotScale(spriteId, xScale, gTasks[taskId].data[10], 0);
+        if (isOwSprite)
+            gSprites[spriteId].y2 = 0;
+        else
+            SetBattlerSpriteYOffsetFromYScale(spriteId);
         if (gTasks[taskId].data[10] >= 0x2D0)
             gTasks[taskId].data[0]++;
         break;
     case 2:
-        ResetSpriteRotScale(spriteId);
-        gSprites[spriteId].invisible = TRUE;
+        if (isOwSprite)
+        {
+            u8 matrixNum = gSprites[spriteId].oam.matrixNum;
+            BattleOverworldScene_SetBattlerHiddenByBall(gBattleAnimAttacker, TRUE);
+            gSprites[spriteId].invisible = TRUE;
+            gSprites[spriteId].animPaused = FALSE;
+            ResetSpriteRotScale(spriteId);
+            FreeOamMatrix(matrixNum);
+            BattleOverworldScene_RestoreBattlerSpriteAnim(gBattleAnimAttacker);
+        }
+        else
+        {
+            ResetSpriteRotScale(spriteId);
+            gSprites[spriteId].invisible = TRUE;
+        }
         DestroyAnimVisualTask(taskId);
         break;
     }
@@ -675,8 +728,11 @@ void AnimTask_SwitchOutBallEffect(u8 taskId)
     u8 x, y;
     u8 priority, subpriority;
     u32 selectedPalettes;
+    u8 ballSpriteId;
+    bool8 isOwSprite;
 
     spriteId = gBattlerSpriteIds[gBattleAnimAttacker];
+    isOwSprite = BattleOverworldScene_IsBattlerSprite(gBattleAnimAttacker, spriteId);
     if (GetBattlerSide(gBattleAnimAttacker) == B_SIDE_PLAYER)
         ball = GetMonData(&gPlayerParty[gBattlerPartyIndexes[gBattleAnimAttacker]], MON_DATA_POKEBALL);
     else
@@ -690,14 +746,37 @@ void AnimTask_SwitchOutBallEffect(u8 taskId)
         y = GetBattlerSpriteCoord(gBattleAnimAttacker, BATTLER_COORD_Y);
         priority = gSprites[spriteId].oam.priority;
         subpriority = gSprites[spriteId].subpriority;
-        gTasks[taskId].data[10] = AnimateBallOpenParticles(x, y + 32, priority, subpriority, ballId);
+        if (isOwSprite)
+            y += OW_BALL_Y_OFFSET;
+        else
+            y += 32;
+        LoadBallGfx(ballId);
+        ballSpriteId = CreateSprite(&gBallSpriteTemplates[ballId], x, y, 0);
+        if (ballSpriteId != MAX_SPRITES)
+        {
+            StartSpriteAnim(&gSprites[ballSpriteId], 2);
+            gSprites[ballSpriteId].oam.priority = priority;
+            gSprites[ballSpriteId].callback = SpriteCallbackDummy;
+        }
+        gTasks[taskId].data[12] = ballSpriteId;
+        gTasks[taskId].data[13] = ballId;
+        gTasks[taskId].data[10] = AnimateBallOpenParticles(x, y, priority, subpriority, ballId);
         selectedPalettes = GetBattlePalettesMask(TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE);
         gTasks[taskId].data[11] = LaunchBallFadeMonTask(FALSE, gBattleAnimAttacker, selectedPalettes, ballId);
         gTasks[taskId].data[0]++;
         break;
     case 1:
         if (!gTasks[gTasks[taskId].data[10]].isActive && !gTasks[gTasks[taskId].data[11]].isActive)
+        {
+            ballSpriteId = gTasks[taskId].data[12];
+            ballId = gTasks[taskId].data[13];
+            if (ballSpriteId < MAX_SPRITES)
+            {
+                DestroySprite(&gSprites[ballSpriteId]);
+                FreeBallGfx(ballId);
+            }
             DestroyAnimVisualTask(taskId);
+        }
         break;
     }
 }

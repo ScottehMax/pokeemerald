@@ -1874,7 +1874,6 @@ void BattleMainCB2(void)
 {
     BattleOverworldScene_TraceBg3(1);
     AnimateSprites();
-    BattleOverworldScene_FixBattlerSpriteOrientations();
     BuildOamBuffer();
     RunTextPrinters();
     UpdatePaletteFade();

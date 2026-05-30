@@ -32,6 +32,7 @@ void ReshowBattleScreenDummy(void)
 void ReshowBattleScreenAfterMenu(void)
 {
     gPaletteFade.bufferTransferDisabled = 1;
+    BattleOverworldScene_BeginReshowBlackout();
     SetHBlankCallback(NULL);
     SetVBlankCallback(NULL);
     SetGpuReg(REG_OFFSET_MOSAIC, 0);
@@ -62,6 +63,7 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
         gBattle_BG2_Y = 0;
         gBattle_BG3_X = 0;
         gBattle_BG3_Y = 0;
+        BattleOverworldScene_BeginReshowBlackout();
         break;
     case 1:
         CpuFastFill(0, (void *)(VRAM), VRAM_SIZE);
@@ -162,6 +164,7 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
         SetVBlankCallback(VBlankCB_Battle);
         if (BattleOverworldScene_IsEnabled())
         {
+            BattleOverworldScene_BeginReshowBlackout();
             BattleOverworldScene_LoadBackground();
             LoadBattleMenuWindowGfx();
         }
