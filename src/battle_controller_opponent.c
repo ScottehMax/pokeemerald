@@ -1872,6 +1872,19 @@ static void OpponentHandleIntroTrainerBallThrow(void)
 {
     u8 taskId;
 
+    if (BattleOverworldScene_IsEnabled())
+    {
+        taskId = CreateTask(Task_StartSendOutAnim, 5);
+        gTasks[taskId].data[0] = gActiveBattler;
+
+        if (gBattleSpritesDataPtr->healthBoxesData[gActiveBattler].partyStatusSummaryShown)
+            gTasks[gBattlerStatusSummaryTaskId[gActiveBattler]].func = Task_HidePartyStatusSummary;
+
+        gBattleSpritesDataPtr->animationData->introAnimActive = TRUE;
+        gBattlerControllerFuncs[gActiveBattler] = OpponentDummy;
+        return;
+    }
+
     SetSpritePrimaryCoordsFromSecondaryCoords(&gSprites[gBattlerSpriteIds[gActiveBattler]]);
 
     gSprites[gBattlerSpriteIds[gActiveBattler]].data[0] = 35;

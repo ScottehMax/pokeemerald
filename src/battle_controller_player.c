@@ -2202,6 +2202,7 @@ static void StartSendOutAnim(u8 battler, bool8 dontClearSubstituteBit)
     gBattlerPartyIndexes[battler] = gBattleBufferA[battler][1];
     species = GetMonData(&gPlayerParty[gBattlerPartyIndexes[battler]], MON_DATA_SPECIES);
     gBattleControllerData[battler] = CreateInvisibleSpriteWithCallback(SpriteCB_WaitForBattlerBallReleaseAnim);
+    BattleLoadPlayerMonSpriteGfx(&gPlayerParty[gBattlerPartyIndexes[battler]], battler);
     if (!BattleOverworldScene_SetMonSpriteTemplate(species, GetBattlerPosition(battler)))
         SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
 
@@ -2950,6 +2951,19 @@ static void PlayerHandleIntroTrainerBallThrow(void)
 {
     u8 paletteNum;
     u8 taskId;
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        taskId = CreateTask(Task_StartSendOutAnim, 5);
+        gTasks[taskId].tBattlerId = gActiveBattler;
+
+        if (gBattleSpritesDataPtr->healthBoxesData[gActiveBattler].partyStatusSummaryShown)
+            gTasks[gBattlerStatusSummaryTaskId[gActiveBattler]].func = Task_HidePartyStatusSummary;
+
+        gBattleSpritesDataPtr->animationData->introAnimActive = TRUE;
+        gBattlerControllerFuncs[gActiveBattler] = BattleControllerDummy;
+        return;
+    }
 
     SetSpritePrimaryCoordsFromSecondaryCoords(&gSprites[gBattlerSpriteIds[gActiveBattler]]);
 

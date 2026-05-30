@@ -943,6 +943,7 @@ static void HandleBallAnimEnd(struct Sprite *sprite)
         if (overworldBattler)
         {
             u8 matrixNum = gSprites[gBattlerSpriteIds[battler]].oam.matrixNum;
+            gSprites[gBattlerSpriteIds[battler]].affineAnimEnded = TRUE;
             ResetSpriteRotScale(gBattlerSpriteIds[battler]);
             FreeOamMatrix(matrixNum);
             BattleOverworldScene_RestoreBattlerSpriteAnim(battler);

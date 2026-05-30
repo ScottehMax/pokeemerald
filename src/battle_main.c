@@ -686,8 +686,10 @@ static void CB2_InitBattleInternal(void)
     LoadBattleTextboxAndBackground();
     ResetSpriteData();
     BattleOverworldScene_Reset();
+    BattleOverworldScene_BeginReshowBlackout();
     ResetTasks();
     DrawBattleEntryBackground();
+    BattleOverworldScene_BeginReshowBlackout();
     FreeAllSpritePalettes();
     gReservedSpritePaletteCount = MAX_BATTLERS_COUNT;
     SetVBlankCallback(VBlankCB_Battle);
@@ -978,10 +980,20 @@ static void CB2_HandleStartBattle(void)
     case 0:
         if (!IsDma3ManagerBusyWithBgCopy())
         {
-            ShowBg(0);
-            ShowBg(1);
-            ShowBg(2);
-            ShowBg(3);
+            if (BattleOverworldScene_IsEnabled())
+            {
+                HideBg(0);
+                HideBg(1);
+                HideBg(2);
+                HideBg(3);
+            }
+            else
+            {
+                ShowBg(0);
+                ShowBg(1);
+                ShowBg(2);
+                ShowBg(3);
+            }
             FillAroundBattleWindows();
             gBattleCommunication[MULTIUSE_STATE] = 1;
         }
@@ -1186,10 +1198,20 @@ static void CB2_HandleStartMultiPartnerBattle(void)
     case 0:
         if (!IsDma3ManagerBusyWithBgCopy())
         {
-            ShowBg(0);
-            ShowBg(1);
-            ShowBg(2);
-            ShowBg(3);
+            if (BattleOverworldScene_IsEnabled())
+            {
+                HideBg(0);
+                HideBg(1);
+                HideBg(2);
+                HideBg(3);
+            }
+            else
+            {
+                ShowBg(0);
+                ShowBg(1);
+                ShowBg(2);
+                ShowBg(3);
+            }
             FillAroundBattleWindows();
             gBattleCommunication[MULTIUSE_STATE] = 1;
         }
@@ -1589,10 +1611,20 @@ static void CB2_HandleStartMultiBattle(void)
     case 0:
         if (!IsDma3ManagerBusyWithBgCopy())
         {
-            ShowBg(0);
-            ShowBg(1);
-            ShowBg(2);
-            ShowBg(3);
+            if (BattleOverworldScene_IsEnabled())
+            {
+                HideBg(0);
+                HideBg(1);
+                HideBg(2);
+                HideBg(3);
+            }
+            else
+            {
+                ShowBg(0);
+                ShowBg(1);
+                ShowBg(2);
+                ShowBg(3);
+            }
             FillAroundBattleWindows();
             gBattleCommunication[MULTIUSE_STATE] = 1;
         }
@@ -3505,11 +3537,27 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
     }
     if (overworldScene)
     {
-        BattleOverworldScene_CreateInitialSprites();
-        gBattleStruct->switchInAbilitiesCounter = 0;
-        gBattleStruct->switchInItemsCounter = 0;
-        gBattleStruct->overworldWeatherDone = FALSE;
-        gBattleMainFunc = TryDoEventsBeforeFirstTurn;
+        BattleOverworldScene_CreateIntroSprites();
+        if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+        {
+            for (gActiveBattler = 0; gActiveBattler < gBattlersCount; gActiveBattler++)
+            {
+                if (GetBattlerSide(gActiveBattler) == B_SIDE_OPPONENT
+                 && !(gBattleTypeFlags & (BATTLE_TYPE_EREADER_TRAINER
+                                      | BATTLE_TYPE_FRONTIER
+                                      | BATTLE_TYPE_LINK
+                                      | BATTLE_TYPE_RECORDED_LINK
+                                      | BATTLE_TYPE_TRAINER_HILL)))
+                {
+                    HandleSetPokedexFlag(SpeciesToNationalPokedexNum(gBattleMons[gActiveBattler].species), FLAG_SET_SEEN, gBattleMons[gActiveBattler].personality);
+                    gBattleResults.lastOpponentSpecies = GetMonData(&gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], MON_DATA_SPECIES, NULL);
+                }
+            }
+            gActiveBattler = GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT);
+            PlayCry_ByMode(gBattleMons[gActiveBattler].species, 25, CRY_MODE_NORMAL);
+        }
+        BattleOverworldScene_BeginSceneFadeIn();
+        gBattleMainFunc = BattleIntroDrawPartySummaryScreens;
     }
     else
     {

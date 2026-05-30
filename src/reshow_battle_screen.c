@@ -172,7 +172,10 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
         {
             ClearBattleBgCntBaseBlocks();
         }
-        BeginHardwarePaletteFade(0xFF, 0, 0x10, 0, 1);
+        if (BattleOverworldScene_IsEnabled())
+            BattleOverworldScene_BeginSceneFadeIn();
+        else
+            BeginHardwarePaletteFade(0xFF, 0, 0x10, 0, 1);
         gPaletteFade.bufferTransferDisabled = 0;
         SetMainCallback2(BattleMainCB2);
         FillAroundBattleWindows();

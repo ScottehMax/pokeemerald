@@ -208,6 +208,8 @@ static bool8 sOwBattlerHiddenByBall[MAX_BATTLERS_COUNT];
 static bool8 sCreatedTrainerSprites;
 static bool8 sSceneSuspended;
 static bool8 sReshowTransitionAllowsBg3Blend;
+static bool8 sBg3BlendFadeStarted;
+static bool8 sSceneVisible;
 static u16 sCompositeLowerTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
 static u16 sCompositeUpperTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
 static u16 sCompositeDestTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
@@ -691,7 +693,10 @@ void BattleOverworldScene_RestoreBackground(void)
     gBattle_BG3_X = 0;
     gBattle_BG3_Y = 0;
     BattleOverworldScene_ApplyBg3Config();
-    ShowBg(OW_BG_LOWER_ID);
+    if (sSceneVisible)
+        ShowBg(OW_BG_LOWER_ID);
+    else
+        HideBg(OW_BG_LOWER_ID);
     SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
     SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
     SetGpuReg(REG_OFFSET_BG3VOFS, gBattle_BG3_Y);
@@ -709,7 +714,10 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
     gBattle_BG3_X = 0;
     gBattle_BG3_Y = 0;
     BattleOverworldScene_ApplyBg3Config();
-    ShowBg(OW_BG_LOWER_ID);
+    if (sSceneVisible)
+        ShowBg(OW_BG_LOWER_ID);
+    else
+        HideBg(OW_BG_LOWER_ID);
     SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
     SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
     SetGpuReg(REG_OFFSET_BG3VOFS, gBattle_BG3_Y);
@@ -719,8 +727,11 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
     SetGpuReg(REG_OFFSET_WININ, winIn | WININ_WIN0_BG3 | WININ_WIN1_BG3);
     SetGpuReg(REG_OFFSET_WINOUT, winOut | WINOUT_WIN01_BG3 | WINOUT_WINOBJ_BG3);
 
-    if (sReshowTransitionAllowsBg3Blend && !gPaletteFade.active)
+    if (sReshowTransitionAllowsBg3Blend && sBg3BlendFadeStarted && !gPaletteFade.active)
+    {
         sReshowTransitionAllowsBg3Blend = FALSE;
+        sBg3BlendFadeStarted = FALSE;
+    }
 
     if (!sReshowTransitionAllowsBg3Blend)
     {
@@ -736,8 +747,25 @@ void BattleOverworldScene_BeginReshowBlackout(void)
         return;
 
     sReshowTransitionAllowsBg3Blend = TRUE;
+    sBg3BlendFadeStarted = FALSE;
+    sSceneVisible = FALSE;
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_ALL | BLDCNT_EFFECT_DARKEN);
     SetGpuReg(REG_OFFSET_BLDY, 16);
+}
+
+void BattleOverworldScene_BeginSceneFadeIn(void)
+{
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+
+    sReshowTransitionAllowsBg3Blend = TRUE;
+    sBg3BlendFadeStarted = TRUE;
+    sSceneVisible = TRUE;
+    ShowBg(0);
+    ShowBg(1);
+    ShowBg(2);
+    ShowBg(3);
+    BeginHardwarePaletteFade(0xFF, 0, 0x10, 0, 1);
 }
 
 void BattleOverworldScene_RestoreBattlerSpriteAnim(u8 battler)
@@ -815,6 +843,10 @@ static void Task_BattleOverworldScene_KeepSpritesVisible(u8 taskId)
                 gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
             gBattleSpritesDataPtr->battlerData[battler].invisible = FALSE;
         }
+
+        if (gHealthboxSpriteIds[battler] < MAX_SPRITES
+         && (!BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]) || sOwBattlerHiddenByBall[battler]))
+            SetHealthboxSpriteInvisible(gHealthboxSpriteIds[battler]);
     }
 
     if (sPlayerTrainerSpriteId < MAX_SPRITES && gSprites[sPlayerTrainerSpriteId].inUse)
@@ -1037,6 +1069,8 @@ void BattleOverworldScene_Reset(void)
     sCreatedTrainerSprites = FALSE;
     sSceneSuspended = FALSE;
     sReshowTransitionAllowsBg3Blend = FALSE;
+    sBg3BlendFadeStarted = FALSE;
+    sSceneVisible = FALSE;
     sCompositeCount = 0;
     sCompositePalCount = 0;
 }
@@ -1179,6 +1213,42 @@ bool8 BattleOverworldScene_CreateBattlerSprite(u8 battler)
     }
 
     return TRUE;
+}
+
+void BattleOverworldScene_CreateIntroSprites(void)
+{
+    u8 battler;
+
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+
+    BattleOverworldScene_CreateTrainerSprites();
+
+    for (battler = 0; battler < gBattlersCount; battler++)
+    {
+        if (gHealthboxSpriteIds[battler] < MAX_SPRITES)
+            SetHealthboxSpriteInvisible(gHealthboxSpriteIds[battler]);
+    }
+
+    if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+    {
+        for (battler = 0; battler < gBattlersCount; battler++)
+        {
+            if (GetBattlerSide(battler) == B_SIDE_OPPONENT)
+            {
+                BattleOverworldScene_CreateBattlerSprite(battler);
+                if (gHealthboxSpriteIds[battler] < MAX_SPRITES)
+                {
+                    gSprites[gHealthboxSpriteIds[battler]].x2 = 0;
+                    gSprites[gHealthboxSpriteIds[battler]].y2 = 0;
+                    gSprites[gHealthboxSpriteIds[battler]].callback = SpriteCallbackDummy;
+                    SetHealthboxSpriteVisible(gHealthboxSpriteIds[battler]);
+                }
+            }
+        }
+    }
+
+    BattleOverworldScene_EnsureVisibilityTask();
 }
 
 void BattleOverworldScene_CreateInitialSprites(void)
