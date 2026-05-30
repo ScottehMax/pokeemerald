@@ -2947,6 +2947,19 @@ static void PlayerHandleIntroSlide(void)
 
 #define sBattlerId data[5]
 
+static bool8 IsIntroPartySummaryHidden(u8 battler)
+{
+    if (!BattleOverworldScene_IsEnabled())
+        return TRUE;
+    if (gBattleSpritesDataPtr->healthBoxesData[battler].partyStatusSummaryShown)
+        return FALSE;
+    if (IsDoubleBattle() && !(gBattleTypeFlags & BATTLE_TYPE_MULTI)
+     && gBattleSpritesDataPtr->healthBoxesData[BATTLE_PARTNER(battler)].partyStatusSummaryShown)
+        return FALSE;
+
+    return TRUE;
+}
+
 static void PlayerHandleIntroTrainerBallThrow(void)
 {
     u8 paletteNum;
@@ -3009,6 +3022,11 @@ void SpriteCB_FreePlayerSpriteLoadMonSprite(struct Sprite *sprite)
 // Send out at start of battle
 static void Task_StartSendOutAnim(u8 taskId)
 {
+    u8 battler = gTasks[taskId].tBattlerId;
+
+    if (!IsIntroPartySummaryHidden(battler))
+        return;
+
     if (gTasks[taskId].tStartTimer < 31)
     {
         gTasks[taskId].tStartTimer++;
@@ -3017,7 +3035,7 @@ static void Task_StartSendOutAnim(u8 taskId)
     {
         u8 savedActiveBattler = gActiveBattler;
 
-        gActiveBattler = gTasks[taskId].tBattlerId;
+        gActiveBattler = battler;
         if (!IsDoubleBattle() || (gBattleTypeFlags & BATTLE_TYPE_MULTI))
         {
             gBattleBufferA[gActiveBattler][1] = gBattlerPartyIndexes[gActiveBattler];

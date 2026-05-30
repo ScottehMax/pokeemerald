@@ -1868,6 +1868,19 @@ static void OpponentHandleIntroSlide(void)
     OpponentBufferExecCompleted();
 }
 
+static bool8 IsIntroPartySummaryHidden(u8 battler)
+{
+    if (!BattleOverworldScene_IsEnabled())
+        return TRUE;
+    if (gBattleSpritesDataPtr->healthBoxesData[battler].partyStatusSummaryShown)
+        return FALSE;
+    if (IsDoubleBattle() && !(gBattleTypeFlags & BATTLE_TYPE_MULTI)
+     && gBattleSpritesDataPtr->healthBoxesData[BATTLE_PARTNER(battler)].partyStatusSummaryShown)
+        return FALSE;
+
+    return TRUE;
+}
+
 static void OpponentHandleIntroTrainerBallThrow(void)
 {
     u8 taskId;
@@ -1914,8 +1927,12 @@ static void SpriteCB_FreeOpponentSprite(struct Sprite *sprite)
 static void Task_StartSendOutAnim(u8 taskId)
 {
     u8 savedActiveBank = gActiveBattler;
+    u8 battler = gTasks[taskId].data[0];
 
-    gActiveBattler = gTasks[taskId].data[0];
+    if (!IsIntroPartySummaryHidden(battler))
+        return;
+
+    gActiveBattler = battler;
     if (!IsDoubleBattle() || (gBattleTypeFlags & BATTLE_TYPE_MULTI))
     {
         gBattleBufferA[gActiveBattler][1] = gBattlerPartyIndexes[gActiveBattler];

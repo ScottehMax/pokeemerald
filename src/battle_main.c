@@ -3557,6 +3557,7 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
             PlayCry_ByMode(gBattleMons[gActiveBattler].species, 25, CRY_MODE_NORMAL);
         }
         BattleOverworldScene_BeginSceneFadeIn();
+        BattleOverworldScene_TryWildShinyAnimations();
         gBattleMainFunc = BattleIntroDrawPartySummaryScreens;
     }
     else
