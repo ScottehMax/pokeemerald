@@ -3,6 +3,8 @@
 #include "battle_controllers.h"
 #include "battle_ai_script_commands.h"
 #include "battle_anim.h"
+#include "battle_bg.h"
+#include "battle_overworld_scene.h"
 #include "constants/battle_anim.h"
 #include "battle_interface.h"
 #include "main.h"
@@ -362,6 +364,12 @@ void SpriteCB_WaitForBattlerBallReleaseAnim(struct Sprite *sprite)
 {
     u8 spriteId = sprite->data[1];
 
+    if (BattleOverworldScene_IsBattlerSprite(sprite->data[2], spriteId) && !gSprites[spriteId].invisible)
+    {
+        sprite->callback = SpriteCallbackDummy;
+        return;
+    }
+
     if (!gSprites[spriteId].affineAnimEnded)
         return;
     if (gSprites[spriteId].invisible)
@@ -370,6 +378,10 @@ void SpriteCB_WaitForBattlerBallReleaseAnim(struct Sprite *sprite)
     if (gSprites[spriteId].animPaused)
     {
         gSprites[spriteId].animPaused = 0;
+    }
+    else if (BattleOverworldScene_IsBattlerSprite(sprite->data[2], spriteId))
+    {
+        sprite->callback = SpriteCallbackDummy;
     }
     else
     {
@@ -597,6 +609,9 @@ void BattleLoadOpponentMonSpriteGfx(struct Pokemon *mon, u8 battler)
 
     otId = GetMonData(mon, MON_DATA_OT_ID);
     position = GetBattlerPosition(battler);
+    if (BattleOverworldScene_LoadMonSpriteGfx(mon, battler))
+        return;
+
     HandleLoadSpecialPokePic_DontHandleDeoxys(&gMonFrontPicTable[species],
                                               gMonSpritesGfxPtr->sprites.ptr[position],
                                               species, currentPersonality);
@@ -650,6 +665,8 @@ void BattleLoadPlayerMonSpriteGfx(struct Pokemon *mon, u8 battler)
 
     otId = GetMonData(mon, MON_DATA_OT_ID);
     position = GetBattlerPosition(battler);
+    if (BattleOverworldScene_LoadMonSpriteGfx(mon, battler))
+        return;
 
     if (ShouldIgnoreDeoxysForm(1, battler) == TRUE || gBattleSpritesDataPtr->battlerData[battler].transformSpecies != SPECIES_NONE)
     {
@@ -1159,11 +1176,16 @@ void HandleBattleLowHpMusicChange(void)
 void SetBattlerSpriteAffineMode(u8 affineMode)
 {
     s32 i;
+    bool8 overworldScene = BattleOverworldScene_IsEnabled();
+    u8 requestedAffineMode = affineMode;
 
     for (i = 0; i < gBattlersCount; i++)
     {
         if (IsBattlerSpritePresent(i))
         {
+            if (overworldScene)
+                affineMode = ST_OAM_AFFINE_OFF;
+
             gSprites[gBattlerSpriteIds[i]].oam.affineMode = affineMode;
             if (affineMode == ST_OAM_AFFINE_OFF)
             {
@@ -1174,7 +1196,14 @@ void SetBattlerSpriteAffineMode(u8 affineMode)
             {
                 gSprites[gBattlerSpriteIds[i]].oam.matrixNum = gBattleSpritesDataPtr->healthBoxesData[i].matrixNum;
             }
+            BattleOverworldScene_FixBattlerSpriteOrientation(i);
         }
+    }
+
+    if (overworldScene && requestedAffineMode == ST_OAM_AFFINE_NORMAL)
+    {
+        BattleOverworldScene_KeepBaseBackgroundVisible();
+        LoadBattleMenuWindowGfx();
     }
 }
 

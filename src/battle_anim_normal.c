@@ -1,6 +1,7 @@
 #include "global.h"
 #include "battle_anim.h"
 #include "battle_anim_internal.h"
+#include "battle_overworld_scene.h"
 #include "palette.h"
 #include "random.h"
 #include "task.h"
@@ -528,10 +529,15 @@ void AnimTask_BlendColorCycleExclude(u8 taskId)
     }
 
     if (cmd->unk0 == 1)
-        selectedPalettes |= 0xE;
+    {
+        if (BattleOverworldScene_IsEnabled())
+            selectedPalettes |= BattleOverworldScene_GetBgPaletteMask();
+        else
+            selectedPalettes |= 0xE;
+    }
 
     gTasks[taskId].tPalSelectorHi = selectedPalettes >> 16;
-    gTasks[taskId].tPalSelectorLo = selectedPalettes & 0xFF;
+    gTasks[taskId].tPalSelectorLo = selectedPalettes & 0xFFFF;
     BlendColorCycleExclude(taskId, 0, gTasks[taskId].tTargetBlendY);
     gTasks[taskId].func = AnimTask_BlendColorCycleExcludeLoop;
 }
@@ -859,6 +865,12 @@ static void AnimShakeMonOrBattlePlatforms(struct Sprite *sprite)
     sprite->sShakeTimer = cmd->shakeTimer;
     sprite->sShakeDuration = cmd->shakeTimer;
     sprite->sTimer = cmd->shakeDuration;
+
+    if (BattleOverworldScene_IsEnabled() && (cmd->type == SHAKE_BG_X || cmd->type == SHAKE_BG_Y))
+    {
+        DestroyAnimSprite(sprite);
+        return;
+    }
 
     switch (cmd->type)
     {

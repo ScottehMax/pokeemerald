@@ -1,6 +1,7 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_anim.h"
+#include "battle_overworld_scene.h"
 #include "battle_controllers.h"
 #include "battle_interface.h"
 #include "bg.h"
@@ -856,6 +857,7 @@ static void Cmd_clearmonbg(void)
     u8 taskId;
 
     sBattleAnimScriptPtr++;
+
     animBattlerId = sBattleAnimScriptPtr[0];
 
     if (animBattlerId == ANIM_ATTACKER)
@@ -964,6 +966,7 @@ static void Cmd_clearmonbg_static(void)
     u8 taskId;
 
     sBattleAnimScriptPtr++;
+
     animBattlerId = sBattleAnimScriptPtr[0];
 
     if (animBattlerId == ANIM_ATTACKER)
@@ -1184,6 +1187,12 @@ static void Task_FadeToBg(u8 taskId)
 
 static void LoadMoveBg(u16 bgId)
 {
+    if (BattleOverworldScene_IsEnabled())
+    {
+        BattleOverworldScene_KeepBaseBackgroundVisible();
+        return;
+    }
+
     if (IsContest())
     {
         const u32 *tilemap = gBattleAnimBackgroundTable[bgId].tilemap;

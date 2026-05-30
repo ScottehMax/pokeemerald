@@ -2,6 +2,8 @@
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_main.h"
+#include "battle_overworld_scene.h"
+#include "battle_bg.h"
 #include "battle_setup.h"
 #include "bg.h"
 #include "gpu_regs.h"
@@ -21,6 +23,8 @@ static void BattleIntroSlide2(u8);
 static void BattleIntroSlide3(u8);
 static void BattleIntroSlideLink(u8);
 static void BattleIntroSlidePartner(u8);
+static void Task_ClearInstantIntroSlideFlag(u8 taskId);
+static void HandleIntroSlideInstant(void);
 
 static const TaskFunc sBattleIntroSlideFuncs[] =
 {
@@ -38,6 +42,12 @@ static const TaskFunc sBattleIntroSlideFuncs[] =
 
 void SetAnimBgAttribute(u8 bgId, u8 attributeId, u8 value)
 {
+    if (BattleOverworldScene_IsEnabled() && bgId == 3)
+    {
+        BattleOverworldScene_KeepBaseBackgroundVisible();
+        return;
+    }
+
     if (bgId < 4)
     {
         sBgCnt = GetGpuReg(gBattleAnimBgCntSet[bgId]);
@@ -106,6 +116,12 @@ void HandleIntroSlide(u8 environment)
 {
     u8 taskId;
 
+    if (BattleOverworldScene_IsEnabled())
+    {
+        HandleIntroSlideInstant();
+        return;
+    }
+
     if ((gBattleTypeFlags & BATTLE_TYPE_INGAME_PARTNER) && gPartnerTrainerId != TRAINER_STEVEN_PARTNER)
     {
         taskId = CreateTask(BattleIntroSlidePartner, 0);
@@ -135,6 +151,38 @@ void HandleIntroSlide(u8 environment)
     gTasks[taskId].data[4] = 0;
     gTasks[taskId].data[5] = 0;
     gTasks[taskId].data[6] = 0;
+}
+
+static void Task_ClearInstantIntroSlideFlag(u8 taskId)
+{
+    gIntroSlideFlags &= ~1;
+    DestroyTask(taskId);
+}
+
+static void HandleIntroSlideInstant(void)
+{
+    gBattle_BG1_X = 0;
+    gBattle_BG1_Y = 0;
+    gBattle_BG2_X = 0;
+    gBattle_BG2_Y = 0;
+    gBattle_WIN0V = 0;
+    ScanlineEffect_Stop();
+    ScanlineEffect_Clear();
+
+    CpuFill32(0, (void *)BG_SCREEN_ADDR(28), BG_SCREEN_SIZE);
+    CpuFill32(0, (void *)BG_SCREEN_ADDR(30), BG_SCREEN_SIZE);
+    SetBgAttribute(1, BG_ATTR_CHARBASEINDEX, 0);
+    SetBgAttribute(2, BG_ATTR_CHARBASEINDEX, 0);
+    SetGpuReg(REG_OFFSET_BG1CNT, BGCNT_PRIORITY(0) | BGCNT_CHARBASE(0) | BGCNT_16COLOR | BGCNT_SCREENBASE(28) | BGCNT_TXT256x512);
+    SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(0) | BGCNT_CHARBASE(0) | BGCNT_16COLOR | BGCNT_SCREENBASE(30) | BGCNT_TXT512x256);
+    BattleOverworldScene_LoadBackground();
+    LoadBattleMenuWindowGfx();
+    SetGpuReg(REG_OFFSET_BLDCNT, 0);
+    SetGpuReg(REG_OFFSET_BLDALPHA, 0);
+    SetGpuReg(REG_OFFSET_BLDY, 0);
+    SetGpuReg(REG_OFFSET_WININ, WININ_WIN0_BG_ALL | WININ_WIN0_OBJ | WININ_WIN0_CLR | WININ_WIN1_BG_ALL | WININ_WIN1_OBJ | WININ_WIN1_CLR);
+    SetGpuReg(REG_OFFSET_WINOUT, WINOUT_WIN01_BG_ALL | WINOUT_WIN01_OBJ | WINOUT_WIN01_CLR | WINOUT_WINOBJ_BG_ALL | WINOUT_WINOBJ_OBJ | WINOUT_WINOBJ_CLR);
+    CreateTask(Task_ClearInstantIntroSlideFlag, 0);
 }
 
 static void BattleIntroSlideEnd(u8 taskId)

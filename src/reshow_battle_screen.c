@@ -11,6 +11,7 @@
 #include "battle_controllers.h"
 #include "link.h"
 #include "sprite.h"
+#include "battle_overworld_scene.h"
 #include "constants/trainers.h"
 #include "battle_interface.h"
 #include "battle_anim.h"
@@ -134,6 +135,7 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
             u8 opponentBattler;
             u16 species;
 
+            BattleOverworldScene_CreateTrainerSprites();
             LoadAndCreateEnemyShadowSprites();
 
             opponentBattler = GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT);
@@ -158,7 +160,15 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
         break;
     default:
         SetVBlankCallback(VBlankCB_Battle);
-        ClearBattleBgCntBaseBlocks();
+        if (BattleOverworldScene_IsEnabled())
+        {
+            BattleOverworldScene_LoadBackground();
+            LoadBattleMenuWindowGfx();
+        }
+        else
+        {
+            ClearBattleBgCntBaseBlocks();
+        }
         BeginHardwarePaletteFade(0xFF, 0, 0x10, 0, 1);
         gPaletteFade.bufferTransferDisabled = 0;
         SetMainCallback2(BattleMainCB2);
@@ -210,6 +220,9 @@ static void CreateBattlerSprite(u8 battler)
     if (battler < gBattlersCount)
     {
         u8 posY;
+
+        if (BattleOverworldScene_CreateBattlerSprite(battler))
+            return;
 
         if (gBattleSpritesDataPtr->battlerData[battler].behindSubstitute)
             posY = GetSubstituteSpriteDefault_Y(battler);

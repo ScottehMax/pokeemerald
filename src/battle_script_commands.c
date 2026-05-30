@@ -3,6 +3,7 @@
 #include "battle_message.h"
 #include "battle_anim.h"
 #include "battle_ai_script_commands.h"
+#include "battle_overworld_scene.h"
 #include "battle_scripts.h"
 #include "item.h"
 #include "util.h"
@@ -10112,6 +10113,7 @@ static void Cmd_displaydexinfo(void)
         if (!gPaletteFade.active)
         {
             FreeAllWindowBuffers();
+            BattleOverworldScene_SetSuspended(TRUE);
             gBattleCommunication[TASK_ID] = DisplayCaughtMonDexPage(SpeciesToNationalPokedexNum(species),
                                                                         gBattleMons[gBattlerTarget].otId,
                                                                         gBattleMons[gBattlerTarget].personality);
@@ -10128,6 +10130,7 @@ static void Cmd_displaydexinfo(void)
         }
         break;
     case 3:
+        BattleOverworldScene_SetSuspended(FALSE);
         InitBattleBgsVideo();
         LoadBattleTextboxAndBackground();
         gBattle_BG3_X = 256;

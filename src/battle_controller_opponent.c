@@ -5,6 +5,7 @@
 #include "battle_arena.h"
 #include "battle_controllers.h"
 #include "battle_message.h"
+#include "battle_overworld_scene.h"
 #include "battle_interface.h"
 #include "battle_setup.h"
 #include "battle_tower.h"
@@ -1139,7 +1140,8 @@ static void OpponentHandleLoadMonSprite(void)
     u16 species = GetMonData(&gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], MON_DATA_SPECIES);
 
     BattleLoadOpponentMonSpriteGfx(&gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], gActiveBattler);
-    SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(gActiveBattler));
+    if (!BattleOverworldScene_SetMonSpriteTemplate(species, GetBattlerPosition(gActiveBattler)))
+        SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(gActiveBattler));
 
     gBattlerSpriteIds[gActiveBattler] = CreateSprite(&gMultiuseSpriteTemplate,
                                                GetBattlerSpriteCoord(gActiveBattler, BATTLER_COORD_X_2),
@@ -1174,11 +1176,12 @@ static void StartSendOutAnim(u8 battler, bool8 dontClearSubstituteBit)
     species = GetMonData(&gEnemyParty[gBattlerPartyIndexes[battler]], MON_DATA_SPECIES);
     gBattleControllerData[battler] = CreateInvisibleSpriteWithCallback(SpriteCB_WaitForBattlerBallReleaseAnim);
     BattleLoadOpponentMonSpriteGfx(&gEnemyParty[gBattlerPartyIndexes[battler]], battler);
-    SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
+    if (!BattleOverworldScene_SetMonSpriteTemplate(species, GetBattlerPosition(battler)))
+        SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
 
     gBattlerSpriteIds[battler] = CreateSprite(&gMultiuseSpriteTemplate,
                                         GetBattlerSpriteCoord(battler, BATTLER_COORD_X_2),
-                                        GetBattlerSpriteDefault_Y(battler),
+                                        GetBattlerSpriteCoord(battler, BATTLER_COORD_Y),
                                         GetBattlerSpriteSubpriority(battler));
 
     gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
@@ -1186,6 +1189,7 @@ static void StartSendOutAnim(u8 battler, bool8 dontClearSubstituteBit)
 
     gSprites[gBattleControllerData[battler]].data[1] = gBattlerSpriteIds[battler];
     gSprites[gBattleControllerData[battler]].data[2] = battler;
+    BattleOverworldScene_RegisterBattlerSprite(battler, gBattlerSpriteIds[battler]);
 
     gSprites[gBattlerSpriteIds[battler]].oam.paletteNum = battler;
 

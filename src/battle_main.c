@@ -7,6 +7,7 @@
 #include "battle_interface.h"
 #include "battle_main.h"
 #include "battle_message.h"
+#include "battle_overworld_scene.h"
 #include "battle_pyramid.h"
 #include "battle_scripts.h"
 #include "battle_setup.h"
@@ -641,22 +642,30 @@ static void CB2_InitBattleInternal(void)
     }
     else
     {
-        gBattle_WIN0V = WIN_RANGE(DISPLAY_HEIGHT / 2, DISPLAY_HEIGHT / 2 + 1);
         ScanlineEffect_Clear();
 
-        for (i = 0; i < DISPLAY_HEIGHT / 2; i++)
+        if (BattleOverworldScene_IsEnabled())
         {
-            gScanlineEffectRegBuffers[0][i] = 0xF0;
-            gScanlineEffectRegBuffers[1][i] = 0xF0;
+            gBattle_WIN0V = 0;
         }
-
-        for (; i < DISPLAY_HEIGHT; i++)
+        else
         {
-            gScanlineEffectRegBuffers[0][i] = 0xFF10;
-            gScanlineEffectRegBuffers[1][i] = 0xFF10;
-        }
+            gBattle_WIN0V = WIN_RANGE(DISPLAY_HEIGHT / 2, DISPLAY_HEIGHT / 2 + 1);
 
-        ScanlineEffect_SetParams(sIntroScanlineParams16Bit);
+            for (i = 0; i < DISPLAY_HEIGHT / 2; i++)
+            {
+                gScanlineEffectRegBuffers[0][i] = 0xF0;
+                gScanlineEffectRegBuffers[1][i] = 0xF0;
+            }
+
+            for (; i < DISPLAY_HEIGHT; i++)
+            {
+                gScanlineEffectRegBuffers[0][i] = 0xFF10;
+                gScanlineEffectRegBuffers[1][i] = 0xFF10;
+            }
+
+            ScanlineEffect_SetParams(sIntroScanlineParams16Bit);
+        }
     }
 
     ResetPaletteFade();
@@ -676,6 +685,7 @@ static void CB2_InitBattleInternal(void)
     InitBattleBgsVideo();
     LoadBattleTextboxAndBackground();
     ResetSpriteData();
+    BattleOverworldScene_Reset();
     ResetTasks();
     DrawBattleEntryBackground();
     FreeAllSpritePalettes();
@@ -1862,11 +1872,16 @@ static void CB2_HandleStartMultiBattle(void)
 
 void BattleMainCB2(void)
 {
+    BattleOverworldScene_TraceBg3(1);
     AnimateSprites();
+    BattleOverworldScene_FixBattlerSpriteOrientations();
     BuildOamBuffer();
     RunTextPrinters();
     UpdatePaletteFade();
     RunTasks();
+    BattleOverworldScene_TraceBg3(2);
+    BattleOverworldScene_KeepBaseBackgroundVisible();
+    BattleOverworldScene_TraceBg3(3);
 
     if (JOY_HELD(B_BUTTON) && gBattleTypeFlags & BATTLE_TYPE_RECORDED && RecordedBattle_CanStopPlayback())
     {
@@ -2087,6 +2102,7 @@ void VBlankCB_Battle(void)
     if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_FRONTIER | BATTLE_TYPE_RECORDED)))
         Random();
 
+    BattleOverworldScene_TraceBg3(10);
     SetGpuReg(REG_OFFSET_BG0HOFS, gBattle_BG0_X);
     SetGpuReg(REG_OFFSET_BG0VOFS, gBattle_BG0_Y);
     SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
@@ -2099,9 +2115,11 @@ void VBlankCB_Battle(void)
     SetGpuReg(REG_OFFSET_WIN0V, gBattle_WIN0V);
     SetGpuReg(REG_OFFSET_WIN1H, gBattle_WIN1H);
     SetGpuReg(REG_OFFSET_WIN1V, gBattle_WIN1V);
+    BattleOverworldScene_TraceBg3(11);
     LoadOam();
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();
+    BattleOverworldScene_TraceBg3(12);
     ScanlineEffect_InitHBlankDmaTransfer();
 }
 
@@ -3394,6 +3412,7 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
 {
     u8 *ptr;
     s32 i;
+    bool8 overworldScene = BattleOverworldScene_IsEnabled();
 
     if (gBattleControllerExecFlags)
         return;
@@ -3425,13 +3444,13 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
             gBattleMons[gActiveBattler].status2 = 0;
         }
 
-        if (GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_LEFT)
+        if (!overworldScene && GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_LEFT)
         {
             BtlController_EmitDrawTrainerPic(B_COMM_TO_CONTROLLER);
             MarkBattlerForControllerExec(gActiveBattler);
         }
 
-        if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+        if (!overworldScene && gBattleTypeFlags & BATTLE_TYPE_TRAINER)
         {
             if (GetBattlerPosition(gActiveBattler) == B_POSITION_OPPONENT_LEFT)
             {
@@ -3448,7 +3467,7 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
                 HandleSetPokedexFlag(SpeciesToNationalPokedexNum(gBattleMons[gActiveBattler].species), FLAG_SET_SEEN, gBattleMons[gActiveBattler].personality);
             }
         }
-        else
+        else if (!overworldScene)
         {
             if (GetBattlerSide(gActiveBattler) == B_SIDE_OPPONENT)
             {
@@ -3466,7 +3485,7 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
             }
         }
 
-        if (gBattleTypeFlags & BATTLE_TYPE_MULTI)
+        if (!overworldScene && gBattleTypeFlags & BATTLE_TYPE_MULTI)
         {
             if (GetBattlerPosition(gActiveBattler) == B_POSITION_PLAYER_RIGHT
              || GetBattlerPosition(gActiveBattler) == B_POSITION_OPPONENT_RIGHT)
@@ -3476,7 +3495,7 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
             }
         }
 
-        if (gBattleTypeFlags & BATTLE_TYPE_TWO_OPPONENTS && GetBattlerPosition(gActiveBattler) == B_POSITION_OPPONENT_RIGHT)
+        if (!overworldScene && gBattleTypeFlags & BATTLE_TYPE_TWO_OPPONENTS && GetBattlerPosition(gActiveBattler) == B_POSITION_OPPONENT_RIGHT)
         {
             BtlController_EmitDrawTrainerPic(B_COMM_TO_CONTROLLER);
             MarkBattlerForControllerExec(gActiveBattler);
@@ -3485,7 +3504,18 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
         if (gBattleTypeFlags & BATTLE_TYPE_ARENA)
             BattleArena_InitPoints();
     }
-    gBattleMainFunc = BattleIntroDrawPartySummaryScreens;
+    if (overworldScene)
+    {
+        BattleOverworldScene_CreateInitialSprites();
+        gBattleStruct->switchInAbilitiesCounter = 0;
+        gBattleStruct->switchInItemsCounter = 0;
+        gBattleStruct->overworldWeatherDone = FALSE;
+        gBattleMainFunc = TryDoEventsBeforeFirstTurn;
+    }
+    else
+    {
+        gBattleMainFunc = BattleIntroDrawPartySummaryScreens;
+    }
 }
 
 static void BattleIntroDrawPartySummaryScreens(void)

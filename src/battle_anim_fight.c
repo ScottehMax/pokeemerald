@@ -1,5 +1,6 @@
 #include "global.h"
 #include "battle_anim.h"
+#include "battle_overworld_scene.h"
 #include "gpu_regs.h"
 #include "random.h"
 #include "task.h"
@@ -1000,6 +1001,11 @@ void AnimTask_MoveSkyUppercutBg(u8 taskId)
     switch (task->data[0])
     {
     case 0:
+        if (BattleOverworldScene_IsEnabled())
+        {
+            DestroyAnimVisualTask(taskId);
+            return;
+        }
         UpdateAnimBg3ScreenSize(FALSE);
         task->data[8] = gBattleAnimArgs[0];
         task->data[0]++;

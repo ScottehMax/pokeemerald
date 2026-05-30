@@ -3,6 +3,7 @@
 #include "battle_bg.h"
 #include "battle_main.h"
 #include "battle_message.h"
+#include "battle_overworld_scene.h"
 #include "battle_setup.h"
 #include "bg.h"
 #include "data.h"
@@ -724,6 +725,11 @@ void BattleInitBgsAndWindows(void)
     else
     {
         gBattleScripting.windowsType = B_WIN_TYPE_NORMAL;
+        if (BattleOverworldScene_IsEnabled())
+        {
+            SetBgTilemapBuffer(1, gBattleAnimBgTilemapBuffer);
+            SetBgTilemapBuffer(2, gBattleAnimBgTilemapBuffer);
+        }
     }
 
     InitWindows(gBattleWindowTemplates[gBattleScripting.windowsType]);
@@ -759,6 +765,12 @@ void LoadBattleMenuWindowGfx(void)
 
 void DrawMainBattleBackground(void)
 {
+    if (BattleOverworldScene_IsEnabled())
+    {
+        BattleOverworldScene_LoadBackground();
+        return;
+    }
+
     if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_FRONTIER | BATTLE_TYPE_EREADER_TRAINER | BATTLE_TYPE_RECORDED_LINK))
     {
         LZDecompressVram(gBattleEnvironmentTiles_Building, (void *)(BG_CHAR_ADDR(2)));
@@ -864,6 +876,8 @@ void LoadBattleTextboxAndBackground(void)
     LoadCompressedPalette(gBattleTextboxPalette, BG_PLTT_ID(0), 2 * PLTT_SIZE_4BPP);
     LoadBattleMenuWindowGfx();
     DrawMainBattleBackground();
+    if (BattleOverworldScene_IsEnabled())
+        LoadBattleMenuWindowGfx();
 }
 
 static void DrawLinkBattleParticipantPokeballs(u8 taskId, u8 multiplayerId, u8 bgId, u8 destX, u8 destY)

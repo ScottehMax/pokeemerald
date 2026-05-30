@@ -1,6 +1,7 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_anim.h"
+#include "battle_overworld_scene.h"
 #include "decompress.h"
 #include "graphics.h"
 #include "main.h"
@@ -812,9 +813,15 @@ static void SpriteCB_ReleaseMonFromBall(struct Sprite *sprite)
         gTasks[taskId].tCryTaskState = 0;
     }
 
-    StartSpriteAffineAnim(&gSprites[gBattlerSpriteIds[sprite->sBattler]], BATTLER_AFFINE_EMERGE);
+    if (!BattleOverworldScene_IsBattlerSprite(sprite->sBattler, gBattlerSpriteIds[sprite->sBattler]))
+        StartSpriteAffineAnim(&gSprites[gBattlerSpriteIds[sprite->sBattler]], BATTLER_AFFINE_EMERGE);
 
-    if (GetBattlerSide(sprite->sBattler) == B_SIDE_OPPONENT)
+    if (BattleOverworldScene_IsBattlerSprite(sprite->sBattler, gBattlerSpriteIds[sprite->sBattler]))
+    {
+        gSprites[gBattlerSpriteIds[sprite->sBattler]].callback = SpriteCallbackDummy;
+        BattleOverworldScene_FixBattlerSpriteOrientation(sprite->sBattler);
+    }
+    else if (GetBattlerSide(sprite->sBattler) == B_SIDE_OPPONENT)
         gSprites[gBattlerSpriteIds[sprite->sBattler]].callback = SpriteCB_OpponentMonFromBall;
     else
         gSprites[gBattlerSpriteIds[sprite->sBattler]].callback = SpriteCB_PlayerMonFromBall;
@@ -846,11 +853,16 @@ static void HandleBallAnimEnd(struct Sprite *sprite)
 {
     bool8 affineAnimEnded = FALSE;
     u8 battler = sprite->sBattler;
+    bool8 overworldBattler = BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]);
 
     gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
     if (sprite->animEnded)
         sprite->invisible = TRUE;
-    if (gSprites[gBattlerSpriteIds[battler]].affineAnimEnded)
+    if (overworldBattler && gSprites[gBattlerSpriteIds[battler]].data[1] <= 0)
+    {
+        affineAnimEnded = TRUE;
+    }
+    else if (gSprites[gBattlerSpriteIds[battler]].affineAnimEnded)
     {
         StartSpriteAffineAnim(&gSprites[gBattlerSpriteIds[battler]], BATTLER_AFFINE_NORMAL);
         affineAnimEnded = TRUE;
