@@ -168,6 +168,11 @@ enum
 #define NEW_HPBAR_FILL_TILE_COUNT 8
 #define NEW_HPBAR_FILL_TILE_OFFSET 3
 #define NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN 4
+#define TAG_OW_STATUS_ICON_PAL 0xD715
+#define OW_STATUS_ICON_X_OFFSET (-33)
+#define OW_STATUS_ICON_Y_OFFSET (-19)
+#define OW_STATUS_ICON_OPPONENT_X_OFFSET 8
+#define OW_STATUS_ICON_OPPONENT_Y_OFFSET 8
 #define OW_HEALTHBOX_TEXT_OUTLINE_COLOR 1
 #define OW_HEALTHBOX_TEXT_FILL_COLOR 2
 #define OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH 8
@@ -180,6 +185,8 @@ static void ClearHealthboxBackingTiles(u8 healthboxSpriteId);
 static void ApplyOverworldHealthboxTextPalette(u8 healthboxSpriteId);
 static void CopyNewHpBarBase(u8 healthbarSpriteId);
 static u8 GetNewHpBarObjTileOffset(u8 column, u8 row);
+static void TryAddPokeballIconToHealthbox(u8 healthboxSpriteId);
+static void RestoreHpBarStatusTileInHealthbox(u8 healthboxSpriteId);
 static u8 *AddTextPrinterAndCreateWindowOnHealthbox(const u8 *, u32, u32, u32, u32 *);
 
 static void RemoveWindowOnHealthbox(u32 windowId);
@@ -191,6 +198,10 @@ static void TextIntoHealthboxObject(void *, u8 *, s32);
 static void SafariTextIntoHealthboxObject(void *, u8 *, u32);
 static void HpTextIntoHealthboxObject(void *, u8 *, u32);
 static void FillHealthboxObject(void *, u32, u32);
+static void UpdateOverworldStatusIconSprite(u8, u8);
+static void DestroyOverworldStatusIconSprite(u8);
+static void SetOverworldStatusIconSpriteCoords(u8);
+static void SpriteCB_OverworldStatusIcon(struct Sprite *);
 static void CopyStatusIconToHealthboxObject(void *, const u8 *);
 static s16 DivFloorBy8(s16 value);
 static u8 ModFloorBy8(s16 value);
@@ -212,6 +223,7 @@ static EWRAM_DATA u8 sOverworldHealthboxTextSnapshot[OW_HEALTHBOX_TEXT_OBJ_MAX_W
 static EWRAM_DATA u8 sOverworldHealthboxTextTiles[(OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH + 2) * 4 * TILE_SIZE_4BPP] = {};
 static EWRAM_DATA u8 (*sOverworldHealthboxTextCopyTiles)[TILE_SIZE_4BPP] = NULL;
 static EWRAM_DATA u8 sOverworldHealthboxTextCopyTileCursor = 0;
+static EWRAM_DATA u8 sOverworldStatusSpriteIds[MAX_BATTLERS_COUNT] = {MAX_SPRITES, MAX_SPRITES, MAX_SPRITES, MAX_SPRITES};
 
 static void SpriteCB_HealthBoxOther(struct Sprite *);
 static void SpriteCB_HealthBar(struct Sprite *);
@@ -716,6 +728,54 @@ static const struct SpriteSheet sStatusSummaryBallsSpriteSheet =
     &gHealthboxElementsGfxTable[HEALTHBOX_GFX_STATUS_BALL], 0x80, TAG_STATUS_SUMMARY_BALLS_TILE
 };
 
+static const struct OamData sOamData_OverworldStatusIcon =
+{
+    .y = 0,
+    .affineMode = ST_OAM_AFFINE_OFF,
+    .objMode = ST_OAM_OBJ_NORMAL,
+    .mosaic = FALSE,
+    .bpp = ST_OAM_4BPP,
+    .shape = SPRITE_SHAPE(16x16),
+    .x = 0,
+    .matrixNum = 0,
+    .size = SPRITE_SIZE(16x16),
+    .tileNum = 0,
+    .priority = 1,
+    .paletteNum = 0,
+    .affineParam = 0,
+};
+
+static const union AnimCmd sAnim_OverworldStatusIcon[] =
+{
+    ANIMCMD_FRAME(0, 0),
+    ANIMCMD_END,
+};
+
+static const union AnimCmd *const sAnims_OverworldStatusIcon[] =
+{
+    sAnim_OverworldStatusIcon,
+};
+
+static const struct SpriteFrameImage sOverworldStatusIconFrameImages[] =
+{
+    { gBattleInterface_NewStatusGfx[0], 4 * TILE_SIZE_4BPP },
+    { gBattleInterface_NewStatusGfx[1], 4 * TILE_SIZE_4BPP },
+    { gBattleInterface_NewStatusGfx[2], 4 * TILE_SIZE_4BPP },
+    { gBattleInterface_NewStatusGfx[3], 4 * TILE_SIZE_4BPP },
+    { gBattleInterface_NewStatusGfx[4], 4 * TILE_SIZE_4BPP },
+};
+
+static const struct SpriteTemplate sOverworldStatusIconSpriteTemplate =
+{
+    .tileTag = TAG_NONE,
+    .paletteTag = TAG_NONE,
+    .oam = &sOamData_OverworldStatusIcon,
+    .anims = sAnims_OverworldStatusIcon,
+    .images = sOverworldStatusIconFrameImages,
+    .affineAnims = gDummySpriteAffineAnimTable,
+    .callback = SpriteCB_OverworldStatusIcon,
+};
+
 // unused oam data
 static const struct OamData sOamData_Unused64x32 =
 {
@@ -939,6 +999,8 @@ u8 CreateBattlerHealthboxSprites(u8 battler)
     u8 healthbarSpriteId;
     struct Sprite *healthBarSpritePtr;
 
+    DestroyOverworldStatusIconSprite(battler);
+
     if (!IsDoubleBattle())
     {
         if (GetBattlerSide(battler) == B_SIDE_PLAYER)
@@ -1149,16 +1211,28 @@ void SetBattleBarStruct(u8 battler, u8 healthboxSpriteId, s32 maxVal, s32 oldVal
 
 void SetHealthboxSpriteInvisible(u8 healthboxSpriteId)
 {
+    u8 battler = gSprites[healthboxSpriteId].hMain_Battler;
+
     gSprites[healthboxSpriteId].invisible = TRUE;
     gSprites[gSprites[healthboxSpriteId].hMain_HealthBarSpriteId].invisible = TRUE;
     gSprites[gSprites[healthboxSpriteId].oam.affineParam].invisible = TRUE;
+    if (battler < MAX_BATTLERS_COUNT
+     && sOverworldStatusSpriteIds[battler] < MAX_SPRITES
+     && gSprites[sOverworldStatusSpriteIds[battler]].callback == SpriteCB_OverworldStatusIcon)
+        gSprites[sOverworldStatusSpriteIds[battler]].invisible = TRUE;
 }
 
 void SetHealthboxSpriteVisible(u8 healthboxSpriteId)
 {
+    u8 battler = gSprites[healthboxSpriteId].hMain_Battler;
+
     gSprites[healthboxSpriteId].invisible = FALSE;
     gSprites[gSprites[healthboxSpriteId].hMain_HealthBarSpriteId].invisible = FALSE;
     gSprites[gSprites[healthboxSpriteId].oam.affineParam].invisible = FALSE;
+    if (battler < MAX_BATTLERS_COUNT
+     && sOverworldStatusSpriteIds[battler] < MAX_SPRITES
+     && gSprites[sOverworldStatusSpriteIds[battler]].callback == SpriteCB_OverworldStatusIcon)
+        gSprites[sOverworldStatusSpriteIds[battler]].invisible = FALSE;
 }
 
 static void UpdateSpritePos(u8 spriteId, s16 x, s16 y)
@@ -1169,6 +1243,7 @@ static void UpdateSpritePos(u8 spriteId, s16 x, s16 y)
 
 void DestoryHealthboxSprite(u8 healthboxSpriteId)
 {
+    DestroyOverworldStatusIconSprite(gSprites[healthboxSpriteId].hMain_Battler);
     DestroySprite(&gSprites[gSprites[healthboxSpriteId].oam.affineParam]);
     DestroySprite(&gSprites[gSprites[healthboxSpriteId].hMain_HealthBarSpriteId]);
     DestroySprite(&gSprites[healthboxSpriteId]);
@@ -1192,6 +1267,9 @@ void UpdateOamPriorityInAllHealthboxes(u8 priority)
         gSprites[healthboxLeftSpriteId].oam.priority = priority;
         gSprites[healthboxRightSpriteId].oam.priority = priority;
         gSprites[healthbarSpriteId].oam.priority = priority;
+        if (sOverworldStatusSpriteIds[i] < MAX_SPRITES
+         && gSprites[sOverworldStatusSpriteIds[i]].callback == SpriteCB_OverworldStatusIcon)
+            gSprites[sOverworldStatusSpriteIds[i]].oam.priority = priority;
     }
 }
 
@@ -2109,7 +2187,16 @@ static void UpdateNickInHealthbox(u8 healthboxSpriteId, struct Pokemon *mon)
     RemoveWindowOnHealthbox(windowId);
 }
 
-static void TryAddPokeballIconToHealthbox(u8 healthboxSpriteId, bool8 noStatus)
+static void RestoreHpBarStatusTileInHealthbox(u8 healthboxSpriteId)
+{
+    u8 healthBarSpriteId = gSprites[healthboxSpriteId].hMain_HealthBarSpriteId;
+
+    CpuCopy32(gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN + NEW_HPBAR_TILES_PER_ROW],
+              (void *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
+              TILE_SIZE_4BPP);
+}
+
+static void TryAddPokeballIconToHealthbox(u8 healthboxSpriteId)
 {
     u8 battler, healthBarSpriteId;
 
@@ -2125,15 +2212,9 @@ static void TryAddPokeballIconToHealthbox(u8 healthboxSpriteId, bool8 noStatus)
         return;
 
     healthBarSpriteId = gSprites[healthboxSpriteId].hMain_HealthBarSpriteId;
-
-    if (noStatus)
-        CpuCopy32(gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE],
-                  (void *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
-                  TILE_SIZE_4BPP);
-    else
-        CpuCopy32(gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN + NEW_HPBAR_TILES_PER_ROW],
-                  (void *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
-                  TILE_SIZE_4BPP);
+    CpuCopy32(gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE],
+              (void *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
+              TILE_SIZE_4BPP);
 }
 
 static void UpdateStatusIconInHealthbox(u8 healthboxSpriteId)
@@ -2190,14 +2271,25 @@ static void UpdateStatusIconInHealthbox(u8 healthboxSpriteId)
         statusGfxPtr = GetHealthboxElementGfxPtr(HEALTHBOX_GFX_39);
 
         if (BattleOverworldScene_IsEnabled())
+        {
             FillHealthboxObject((void *)(OBJ_VRAM0 + (gSprites[healthboxSpriteId].oam.tileNum + tileNumAdder) * TILE_SIZE_4BPP), 0, 3);
+            DestroyOverworldStatusIconSprite(battler);
+        }
         else
         {
             for (i = 0; i < 3; i++)
                 CpuCopy32(statusGfxPtr, (void *)(OBJ_VRAM0 + (gSprites[healthboxSpriteId].oam.tileNum + tileNumAdder + i) * TILE_SIZE_4BPP), 32);
         }
 
-        TryAddPokeballIconToHealthbox(healthboxSpriteId, TRUE);
+        TryAddPokeballIconToHealthbox(healthboxSpriteId);
+        return;
+    }
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        FillHealthboxObject((void *)(OBJ_VRAM0 + (gSprites[healthboxSpriteId].oam.tileNum + tileNumAdder) * TILE_SIZE_4BPP), 0, 3);
+        UpdateOverworldStatusIconSprite(healthboxSpriteId, statusPalId);
+        TryAddPokeballIconToHealthbox(healthboxSpriteId);
         return;
     }
 
@@ -2207,7 +2299,7 @@ static void UpdateStatusIconInHealthbox(u8 healthboxSpriteId)
     FillPalette(sStatusIconColors[statusPalId], OBJ_PLTT_OFFSET + pltAdder, PLTT_SIZEOF(1));
     CpuCopy16(&gPlttBufferUnfaded[OBJ_PLTT_OFFSET + pltAdder], (u16 *)OBJ_PLTT + pltAdder, PLTT_SIZEOF(1));
     CopyStatusIconToHealthboxObject((void *)(OBJ_VRAM0 + (gSprites[healthboxSpriteId].oam.tileNum + tileNumAdder) * TILE_SIZE_4BPP), statusGfxPtr);
-    TryAddPokeballIconToHealthbox(healthboxSpriteId, FALSE);
+    RestoreHpBarStatusTileInHealthbox(healthboxSpriteId);
 }
 
 static u8 GetStatusIconForBattlerId(u8 statusElementId, u8 battler)
@@ -2422,7 +2514,8 @@ static void MoveBattleBarGraphically(u8 battler, u8 whichBar)
     {
     case HEALTH_BAR:
     {
-        u8 healthbarSpriteId = gSprites[gBattleSpritesDataPtr->battleBars[battler].healthboxSpriteId].hMain_HealthBarSpriteId;
+        u8 healthboxSpriteId = gBattleSpritesDataPtr->battleBars[battler].healthboxSpriteId;
+        u8 healthbarSpriteId = gSprites[healthboxSpriteId].hMain_HealthBarSpriteId;
         u16 baseTile = gSprites[healthbarSpriteId].oam.tileNum;
 
         CalcBarFilledPixels(gBattleSpritesDataPtr->battleBars[battler].maxValue,
@@ -2439,6 +2532,8 @@ static void MoveBattleBarGraphically(u8 battler, u8 whichBar)
                       (void *)(OBJ_VRAM0 + (baseTile + GetNewHpBarObjTileOffset(NEW_HPBAR_FILL_TILE_OFFSET + i, 0)) * TILE_SIZE_4BPP),
                       TILE_SIZE_4BPP);
         }
+        if (BattleOverworldScene_IsEnabled())
+            TryAddPokeballIconToHealthbox(healthboxSpriteId);
         break;
     }
     case EXP_BAR:
@@ -3049,6 +3144,111 @@ static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 
             }
         }
     }
+}
+
+static void SetOverworldStatusIconSpriteCoords(u8 spriteId)
+{
+    u8 healthboxSpriteId = gSprites[spriteId].data[0];
+    u8 battler = gSprites[healthboxSpriteId].hMain_Battler;
+    u8 tileNumAdder;
+    u8 tileX;
+    u8 tileY;
+    s8 xOffset = OW_STATUS_ICON_X_OFFSET;
+    s8 yOffset = OW_STATUS_ICON_Y_OFFSET;
+
+    if (GetBattlerSide(battler) == B_SIDE_PLAYER)
+    {
+        if (!IsDoubleBattle())
+            tileNumAdder = 0x1A;
+        else
+            tileNumAdder = 0x12;
+    }
+    else
+    {
+        tileNumAdder = 0x11;
+        xOffset += OW_STATUS_ICON_OPPONENT_X_OFFSET;
+        yOffset += OW_STATUS_ICON_OPPONENT_Y_OFFSET;
+    }
+
+    tileX = tileNumAdder % OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH;
+    tileY = tileNumAdder / OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH;
+
+    gSprites[spriteId].x = gSprites[healthboxSpriteId].x + tileX * TILE_SIZE_1BPP + TILE_SIZE_1BPP + xOffset;
+    gSprites[spriteId].y = gSprites[healthboxSpriteId].y + tileY * TILE_SIZE_1BPP + TILE_SIZE_1BPP + yOffset;
+    gSprites[spriteId].x2 = gSprites[healthboxSpriteId].x2;
+    gSprites[spriteId].y2 = gSprites[healthboxSpriteId].y2;
+    gSprites[spriteId].invisible = gSprites[healthboxSpriteId].invisible;
+}
+
+static void SpriteCB_OverworldStatusIcon(struct Sprite *sprite)
+{
+    SetOverworldStatusIconSpriteCoords(sprite - gSprites);
+}
+
+static void DestroyOverworldStatusIconSprite(u8 battler)
+{
+    u8 spriteId;
+
+    if (battler >= MAX_BATTLERS_COUNT)
+        return;
+
+    spriteId = sOverworldStatusSpriteIds[battler];
+    if (spriteId < MAX_SPRITES
+     && gSprites[spriteId].inUse
+     && gSprites[spriteId].callback == SpriteCB_OverworldStatusIcon)
+    {
+        DestroySprite(&gSprites[spriteId]);
+    }
+
+    FreeSpritePaletteByTag(TAG_OW_STATUS_ICON_PAL + battler);
+    sOverworldStatusSpriteIds[battler] = MAX_SPRITES;
+}
+
+static void UpdateOverworldStatusIconSprite(u8 healthboxSpriteId, u8 statusPalId)
+{
+    u8 battler = gSprites[healthboxSpriteId].hMain_Battler;
+    u8 spriteId;
+    u8 paletteNum;
+
+    if (battler >= MAX_BATTLERS_COUNT)
+        return;
+
+    spriteId = sOverworldStatusSpriteIds[battler];
+    if (spriteId >= MAX_SPRITES
+     || !gSprites[spriteId].inUse
+     || gSprites[spriteId].callback != SpriteCB_OverworldStatusIcon)
+    {
+        spriteId = CreateSpriteAtEnd(&sOverworldStatusIconSpriteTemplate, 0, 0, 0);
+        if (spriteId == MAX_SPRITES)
+            return;
+
+        paletteNum = AllocSpritePalette(TAG_OW_STATUS_ICON_PAL + battler);
+        if (paletteNum == 0xFF)
+        {
+            DestroySprite(&gSprites[spriteId]);
+            return;
+        }
+
+        gSprites[spriteId].oam.paletteNum = paletteNum;
+        gSprites[spriteId].data[0] = healthboxSpriteId;
+        sOverworldStatusSpriteIds[battler] = spriteId;
+    }
+    else
+    {
+        gSprites[spriteId].data[0] = healthboxSpriteId;
+    }
+
+    gSprites[spriteId].images = &sOverworldStatusIconFrameImages[statusPalId];
+    CpuCopy32(gBattleInterface_NewStatusGfx[statusPalId],
+              (void *)(OBJ_VRAM0 + gSprites[spriteId].oam.tileNum * TILE_SIZE_4BPP),
+              4 * TILE_SIZE_4BPP);
+    FillPalette(RGB_BLACK,
+                OBJ_PLTT_ID(gSprites[spriteId].oam.paletteNum),
+                PLTT_SIZE_4BPP);
+    LoadPalette(gBattleInterface_NewStatusPal[statusPalId],
+                OBJ_PLTT_ID(gSprites[spriteId].oam.paletteNum),
+                PLTT_SIZEOF(gBattleInterface_NewStatusPalCount[statusPalId]));
+    SetOverworldStatusIconSpriteCoords(spriteId);
 }
 
 static void CopyStatusIconToHealthboxObject(void *dest, const u8 *src)

@@ -370,6 +370,25 @@ const u8 gHealthboxElementsGfxTable[][32] = INCBIN_U8("graphics/battle_interface
                                                   "graphics/battle_interface/healthbox_doubles_frameend.4bpp",
                                                   "graphics/battle_interface/healthbox_doubles_frameend_bar.4bpp");
 const u8 gBattleInterface_NewHpBarGfx[][32] = INCBIN_U8("graphics/battle_interface/newhpbar_sheet.4bpp");
+const u8 gBattleInterface_NewStatusGfx[][4][32] = INCBIN_U8("graphics/battle_interface/newstatus_psn.4bpp",
+                                                            "graphics/battle_interface/newstatus_par.4bpp",
+                                                            "graphics/battle_interface/newstatus_slp.4bpp",
+                                                            "graphics/battle_interface/newstatus_frz.4bpp",
+                                                            "graphics/battle_interface/newstatus_brn.4bpp");
+const u16 gBattleInterface_NewStatusPal_Psn[] = INCBIN_U16("graphics/battle_interface/newstatus_psn.gbapal");
+const u16 gBattleInterface_NewStatusPal_Par[] = INCBIN_U16("graphics/battle_interface/newstatus_par.gbapal");
+const u16 gBattleInterface_NewStatusPal_Slp[] = INCBIN_U16("graphics/battle_interface/newstatus_slp.gbapal");
+const u16 gBattleInterface_NewStatusPal_Frz[] = INCBIN_U16("graphics/battle_interface/newstatus_frz.gbapal");
+const u16 gBattleInterface_NewStatusPal_Brn[] = INCBIN_U16("graphics/battle_interface/newstatus_brn.gbapal");
+const u16 *const gBattleInterface_NewStatusPal[] =
+{
+    gBattleInterface_NewStatusPal_Psn,
+    gBattleInterface_NewStatusPal_Par,
+    gBattleInterface_NewStatusPal_Slp,
+    gBattleInterface_NewStatusPal_Frz,
+    gBattleInterface_NewStatusPal_Brn,
+};
+const u8 gBattleInterface_NewStatusPalCount[] = {5, 5, 4, 6, 6};
 const u32 gBattleInterfaceGfx_UnusedWindow3[] = INCGFX_U32("graphics/battle_interface/unused_window3.png", ".4bpp.lz");
 const u32 gBattleInterfaceGfx_UnusedWindow4[] = INCGFX_U32("graphics/battle_interface/unused_window4.png", ".4bpp.lz");
 
