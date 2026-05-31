@@ -73,6 +73,7 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
         break;
     case 3:
         ResetSpriteData();
+        BattleOverworldScene_ResetSpriteReferences();
         break;
     case 4:
         FreeAllSpritePalettes();

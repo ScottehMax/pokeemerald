@@ -1904,15 +1904,12 @@ static void CB2_HandleStartMultiBattle(void)
 
 void BattleMainCB2(void)
 {
-    BattleOverworldScene_TraceBg3(1);
     AnimateSprites();
     BuildOamBuffer();
     RunTextPrinters();
     UpdatePaletteFade();
     RunTasks();
-    BattleOverworldScene_TraceBg3(2);
     BattleOverworldScene_KeepBaseBackgroundVisible();
-    BattleOverworldScene_TraceBg3(3);
 
     if (JOY_HELD(B_BUTTON) && gBattleTypeFlags & BATTLE_TYPE_RECORDED && RecordedBattle_CanStopPlayback())
     {
@@ -2133,7 +2130,6 @@ void VBlankCB_Battle(void)
     if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_FRONTIER | BATTLE_TYPE_RECORDED)))
         Random();
 
-    BattleOverworldScene_TraceBg3(10);
     SetGpuReg(REG_OFFSET_BG0HOFS, gBattle_BG0_X);
     SetGpuReg(REG_OFFSET_BG0VOFS, gBattle_BG0_Y);
     SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
@@ -2146,11 +2142,9 @@ void VBlankCB_Battle(void)
     SetGpuReg(REG_OFFSET_WIN0V, gBattle_WIN0V);
     SetGpuReg(REG_OFFSET_WIN1H, gBattle_WIN1H);
     SetGpuReg(REG_OFFSET_WIN1V, gBattle_WIN1V);
-    BattleOverworldScene_TraceBg3(11);
     LoadOam();
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();
-    BattleOverworldScene_TraceBg3(12);
     ScanlineEffect_InitHBlankDmaTransfer();
 }
 

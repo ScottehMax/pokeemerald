@@ -73,16 +73,16 @@ static const struct CompressedSpriteSheet sSpriteSheet_SafariHealthbox =
 
 static const struct CompressedSpriteSheet sSpriteSheets_HealthBar[MAX_BATTLERS_COUNT] =
 {
-    {gBlankGfxCompressed, 0x0100, TAG_HEALTHBAR_PLAYER1_TILE},
-    {gBlankGfxCompressed, 0x0120, TAG_HEALTHBAR_OPPONENT1_TILE},
-    {gBlankGfxCompressed, 0x0100, TAG_HEALTHBAR_PLAYER2_TILE},
-    {gBlankGfxCompressed, 0x0120, TAG_HEALTHBAR_OPPONENT2_TILE}
+    {gBlankGfxCompressed, 0x0340, TAG_HEALTHBAR_PLAYER1_TILE},
+    {gBlankGfxCompressed, 0x0340, TAG_HEALTHBAR_OPPONENT1_TILE},
+    {gBlankGfxCompressed, 0x0340, TAG_HEALTHBAR_PLAYER2_TILE},
+    {gBlankGfxCompressed, 0x0340, TAG_HEALTHBAR_OPPONENT2_TILE}
 };
 
 static const struct SpritePalette sSpritePalettes_HealthBoxHealthBar[2] =
 {
     {gBattleInterface_BallStatusBarPal, TAG_HEALTHBOX_PAL},
-    {gBattleInterface_BallDisplayPal, TAG_HEALTHBAR_PAL}
+    {gBattleInterface_NewHpBarPal, TAG_HEALTHBAR_PAL}
 };
 
 // code
