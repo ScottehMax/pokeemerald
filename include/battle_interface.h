@@ -65,6 +65,8 @@ enum
 
 u8 CreateBattlerHealthboxSprites(u8 battler);
 u8 CreateSafariPlayerHealthboxSprites(void);
+void FlushOverworldHealthboxTextTileCopies(void);
+void FreeOverworldHealthboxTextBuffers(void);
 void SetBattleBarStruct(u8 battler, u8 healthboxSpriteId, s32 maxVal, s32 oldVal, s32 receivedValue);
 void SetHealthboxSpriteInvisible(u8 healthboxSpriteId);
 void SetHealthboxSpriteVisible(u8 healthboxSpriteId);

@@ -100,6 +100,7 @@ void FreeBattleSpritesData(void)
     if (gBattleSpritesDataPtr == NULL)
         return;
 
+    FreeOverworldHealthboxTextBuffers();
     FREE_AND_SET_NULL(gBattleSpritesDataPtr->battleBars);
     FREE_AND_SET_NULL(gBattleSpritesDataPtr->animationData);
     FREE_AND_SET_NULL(gBattleSpritesDataPtr->healthBoxesData);

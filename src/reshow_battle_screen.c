@@ -332,5 +332,8 @@ static void CreateHealthboxSprite(u8 battler)
             if (GetMonData(&gPlayerParty[gBattlerPartyIndexes[battler]], MON_DATA_HP) == 0)
                 SetHealthboxSpriteInvisible(healthboxSpriteId);
         }
+
+        if (BattleOverworldScene_IsEnabled())
+            FlushOverworldHealthboxTextTileCopies();
     }
 }

@@ -21,6 +21,7 @@
 #include "safari_zone.h"
 #include "battle_anim.h"
 #include "data.h"
+#include "malloc.h"
 #include "pokemon_summary_screen.h"
 #include "strings.h"
 #include "constants/battle_anim.h"
@@ -172,7 +173,7 @@ enum
 #define OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH 8
 #define OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH (OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH * TILE_SIZE_1BPP)
 #define OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT (3 * TILE_SIZE_1BPP)
-#define OW_HEALTHBOX_TEXT_COPY_TILE_COUNT 16
+#define OW_HEALTHBOX_TEXT_COPY_TILE_COUNT 64
 
 static const u8 *GetHealthboxElementGfxPtr(u8);
 static void ClearHealthboxBackingTiles(u8 healthboxSpriteId);
@@ -209,7 +210,7 @@ static void Task_HidePartyStatusSummary_DuringBattle(u8);
 
 static EWRAM_DATA u8 sOverworldHealthboxTextSnapshot[OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH * OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT] = {};
 static EWRAM_DATA u8 sOverworldHealthboxTextTiles[(OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH + 2) * 4 * TILE_SIZE_4BPP] = {};
-static EWRAM_DATA u8 sOverworldHealthboxTextCopyTiles[OW_HEALTHBOX_TEXT_COPY_TILE_COUNT][TILE_SIZE_4BPP] = {};
+static EWRAM_DATA u8 (*sOverworldHealthboxTextCopyTiles)[TILE_SIZE_4BPP] = NULL;
 static EWRAM_DATA u8 sOverworldHealthboxTextCopyTileCursor = 0;
 
 static void SpriteCB_HealthBoxOther(struct Sprite *);
@@ -1039,6 +1040,19 @@ u8 CreateSafariPlayerHealthboxSprites(void)
     gSprites[healthboxRightSpriteId].callback = SpriteCB_HealthBoxOther;
 
     return healthboxLeftSpriteId;
+}
+
+void FreeOverworldHealthboxTextBuffers(void)
+{
+    TRY_FREE_AND_SET_NULL(sOverworldHealthboxTextCopyTiles);
+    sOverworldHealthboxTextCopyTileCursor = 0;
+}
+
+void FlushOverworldHealthboxTextTileCopies(void)
+{
+    BuildOamBuffer();
+    ProcessSpriteCopyRequests();
+    sOverworldHealthboxTextCopyTileCursor = 0;
 }
 
 static const u8 *GetHealthboxElementGfxPtr(u8 elementId)
@@ -2069,19 +2083,22 @@ static void UpdateNickInHealthbox(u8 healthboxSpriteId, struct Pokemon *mon)
         void *leftTextObj = (void *)(OBJ_VRAM0 + 0x40 + spriteTileNum);
         void *rightTextObj;
 
-        CopyTextIntoHealthboxObject(leftTextObj, windowTileData, 6);
         ptr = (void *)(OBJ_VRAM0);
         if (!IsDoubleBattle())
             ptr += spriteTileNum + 0x800;
         else
             ptr += spriteTileNum + 0x400;
         rightTextObj = ptr;
-        CopyTextIntoHealthboxObject(rightTextObj, windowTileData + 0xC0, 1);
 
         if (BattleOverworldScene_IsEnabled())
         {
-            OutlineOverworldHealthboxWindowText(leftTextObj, windowTileData, 6, 5, TILE_SIZE_1BPP + 3, 0, 0);
-            OutlineOverworldHealthboxWindowText(rightTextObj, windowTileData + 0xC0, 1, 5, TILE_SIZE_1BPP + 3, 0, 0);
+            DrawOverworldHealthboxWindowText(rightTextObj, windowTileData + 0xC0, 1, 5, TILE_SIZE_1BPP + 3, 0, 0);
+            DrawOverworldHealthboxWindowText(leftTextObj, windowTileData, 6, 5, TILE_SIZE_1BPP + 3, 0, 0);
+        }
+        else
+        {
+            CopyTextIntoHealthboxObject(leftTextObj, windowTileData, 6);
+            CopyTextIntoHealthboxObject(rightTextObj, windowTileData + 0xC0, 1);
         }
     }
     else
@@ -2922,8 +2939,14 @@ static bool8 ComposedHealthboxTextTileIsEmpty(const u8 *tileData, u8 tileWidth, 
 
 static void QueueOverworldHealthboxTextTileCopy(const u8 *src, u8 *dest)
 {
-    u8 *copySrc = sOverworldHealthboxTextCopyTiles[sOverworldHealthboxTextCopyTileCursor];
+    u8 *copySrc;
 
+    if (sOverworldHealthboxTextCopyTiles == NULL)
+        sOverworldHealthboxTextCopyTiles = AllocZeroed(OW_HEALTHBOX_TEXT_COPY_TILE_COUNT * TILE_SIZE_4BPP);
+    if (sOverworldHealthboxTextCopyTiles == NULL)
+        return;
+
+    copySrc = sOverworldHealthboxTextCopyTiles[sOverworldHealthboxTextCopyTileCursor];
     CpuCopy32(src, copySrc, TILE_SIZE_4BPP);
     RequestSpriteCopy(copySrc, dest, TILE_SIZE_4BPP);
 
@@ -3077,10 +3100,13 @@ static void CopyTextIntoHealthboxObject(void *dest, u8 *windowTileData, s32 wind
 
 static void TextIntoHealthboxObject(void *dest, u8 *windowTileData, s32 windowWidth)
 {
-    CopyTextIntoHealthboxObject(dest, windowTileData, windowWidth);
-
     if (BattleOverworldScene_IsEnabled())
-        OutlineOverworldHealthboxWindowText(dest, windowTileData, windowWidth, 5, TILE_SIZE_1BPP + 3, 0, 0);
+    {
+        DrawOverworldHealthboxWindowText(dest, windowTileData, windowWidth, 5, TILE_SIZE_1BPP + 3, 0, 0);
+        return;
+    }
+
+    CopyTextIntoHealthboxObject(dest, windowTileData, windowWidth);
 }
 
 static void SafariTextIntoHealthboxObject(void *dest, u8 *windowTileData, u32 windowWidth)
