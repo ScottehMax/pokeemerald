@@ -1330,7 +1330,8 @@ void StartHealthboxSlideIn(u8 battler)
     healthboxSprite->x2 = 0x73;
     healthboxSprite->y2 = 0;
     healthboxSprite->callback = SpriteCB_HealthboxSlideIn;
-    if (GetBattlerSide(battler) != B_SIDE_PLAYER)
+    if ((!BattleOverworldScene_IsEnabled() && GetBattlerSide(battler) != B_SIDE_PLAYER)
+     || (BattleOverworldScene_IsEnabled() && GetBattlerSide(battler) == B_SIDE_PLAYER))
     {
         healthboxSprite->sSpeedX = -healthboxSprite->sSpeedX;
         healthboxSprite->sSpeedY = -healthboxSprite->sSpeedY;
