@@ -1240,6 +1240,12 @@ void SpriteCB_EnemyShadow(struct Sprite *shadowSprite)
     u8 battler = shadowSprite->tBattlerId;
     struct Sprite *battlerSprite = &gSprites[gBattlerSpriteIds[battler]];
 
+    if (BattleOverworldScene_IsEnabled())
+    {
+        shadowSprite->callback = SpriteCB_SetInvisible;
+        return;
+    }
+
     if (!battlerSprite->inUse || !IsBattlerSpritePresent(battler))
     {
         shadowSprite->callback = SpriteCB_SetInvisible;
@@ -1271,6 +1277,12 @@ void SetBattlerShadowSpriteCallback(u8 battler, u16 species)
     // The player's shadow is never seen.
     if (GetBattlerSide(battler) == B_SIDE_PLAYER)
         return;
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        gSprites[gBattleSpritesDataPtr->healthBoxesData[battler].shadowSpriteId].callback = SpriteCB_SetInvisible;
+        return;
+    }
 
     if (gBattleSpritesDataPtr->battlerData[battler].transformSpecies != SPECIES_NONE)
         species = gBattleSpritesDataPtr->battlerData[battler].transformSpecies;

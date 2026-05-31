@@ -1118,6 +1118,18 @@ void BattleOverworldScene_CreateTrainerSprites(void)
     BattleOverworldScene_EnsureVisibilityTask();
 }
 
+bool8 BattleOverworldScene_GetPlayerTrainerSpriteCoords(s16 *x, s16 *y)
+{
+    if (!IsBattleOverworldSceneEnabled()
+     || sPlayerTrainerSpriteId >= MAX_SPRITES
+     || !gSprites[sPlayerTrainerSpriteId].inUse)
+        return FALSE;
+
+    *x = gSprites[sPlayerTrainerSpriteId].x;
+    *y = gSprites[sPlayerTrainerSpriteId].y;
+    return TRUE;
+}
+
 static s16 GetBattlerOwX(u8 battler)
 {
     switch (GetBattlerPosition(battler))
