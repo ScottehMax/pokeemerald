@@ -14,6 +14,8 @@ bool8 BattleOverworldScene_IsBattlerFacingRight(u8 battler);
 void BattleOverworldScene_LoadBackground(void);
 void BattleOverworldScene_RestoreBackground(void);
 void BattleOverworldScene_KeepBaseBackgroundVisible(void);
+void BattleOverworldScene_AddBg3BlendRef(void);
+void BattleOverworldScene_RemoveBg3BlendRef(void);
 void BattleOverworldScene_BeginReshowBlackout(void);
 void BattleOverworldScene_BeginSceneFadeIn(void);
 void BattleOverworldScene_CreateTrainerSprites(void);
