@@ -6,6 +6,7 @@ extern const u8 gFontNormalLatinGlyphWidths[];
 extern const u16 gFontNormalJapaneseGlyphs[];
 extern const u16 gFontSmallLatinGlyphs[];
 extern const u8 gFontSmallLatinGlyphWidths[];
+extern const u32 gFontSmallLatinGlyphs_OWOutline[];
 extern const u16 gFontSmallJapaneseGlyphs[];
 extern const u16 gFontShortLatinGlyphs[];
 extern const u8 gFontShortLatinGlyphWidths[];

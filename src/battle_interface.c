@@ -4,6 +4,7 @@
 #include "battle_controllers.h"
 #include "battle_interface.h"
 #include "battle_overworld_scene.h"
+#include "fonts.h"
 #include "graphics.h"
 #include "sprite.h"
 #include "window.h"
@@ -176,8 +177,8 @@ enum
 #define OW_HEALTHBOX_TEXT_OUTLINE_COLOR 1
 #define OW_HEALTHBOX_TEXT_FILL_COLOR 2
 #define OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH 8
-#define OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH (OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH * TILE_SIZE_1BPP)
 #define OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT (3 * TILE_SIZE_1BPP)
+#define OW_HEALTHBOX_TEXT_MASK_WORDS 3
 #define OW_HEALTHBOX_TEXT_COPY_TILE_COUNT 64
 
 static const u8 *GetHealthboxElementGfxPtr(u8);
@@ -205,22 +206,21 @@ static void SpriteCB_OverworldStatusIcon(struct Sprite *);
 static void CopyStatusIconToHealthboxObject(void *, const u8 *);
 static s16 DivFloorBy8(s16 value);
 static u8 ModFloorBy8(s16 value);
-static u8 GetHealthboxWindowPixel(const u8 *, s16, s16);
 static u8 *GetHealthboxObjectPixelAddress(u8 *, u8, s16, s16, u8 *);
-static void SetHealthboxObjectPixel(u8 *, u8, s16, s16, u8);
-static void OutlineOverworldHealthboxWindowText(void *, u8 *, u8, u8, u8, s8, s8);
 static u8 GetComposedHealthboxTextPixel(const u8 *, u8, u8, u8);
 static void SetComposedHealthboxTextPixel(u8 *, u8, u8, u8, u8);
+static void SetOverworldHealthboxTextPixelIfVisible(u8 *, u8, s16, s16, u8);
 static bool8 ComposedHealthboxTextTileIsEmpty(const u8 *, u8, u8, u8);
 static void QueueOverworldHealthboxTextTileCopy(const u8 *, u8 *);
 static void DrawOverworldHealthboxWindowText(void *, u8 *, u8, u8, u8, s8, s8);
+static void DrawOverworldHealthboxTextString(void *, const u8 *, u8, s16, s16, u8, u8, s8);
 
 static void Task_HidePartyStatusSummary_BattleStart_1(u8);
 static void Task_HidePartyStatusSummary_BattleStart_2(u8);
 static void Task_HidePartyStatusSummary_DuringBattle(u8);
 
-static EWRAM_DATA u8 sOverworldHealthboxTextSnapshot[OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH * OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT] = {};
 static EWRAM_DATA u8 sOverworldHealthboxTextTiles[(OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH + 2) * 4 * TILE_SIZE_4BPP] = {};
+static EWRAM_DATA u32 sOverworldHealthboxTextMasks[OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT][OW_HEALTHBOX_TEXT_MASK_WORDS] = {};
 static EWRAM_DATA u8 (*sOverworldHealthboxTextCopyTiles)[TILE_SIZE_4BPP] = NULL;
 static EWRAM_DATA u8 sOverworldHealthboxTextCopyTileCursor = 0;
 static EWRAM_DATA u8 sOverworldStatusSpriteIds[MAX_BATTLERS_COUNT] = {MAX_SPRITES, MAX_SPRITES, MAX_SPRITES, MAX_SPRITES};
@@ -2136,21 +2136,16 @@ static void UpdateNickInHealthbox(u8 healthboxSpriteId, struct Pokemon *mon)
     if ((species == SPECIES_NIDORAN_F || species == SPECIES_NIDORAN_M) && StringCompare(nickname, gSpeciesNames[species]) == 0)
         gender = 100;
 
-    // AddTextPrinterAndCreateWindowOnHealthbox's arguments are the same in all 3 cases.
-    // It's possible they may have been different in early development phases.
     switch (gender)
     {
     default:
         StringCopy(ptr, gText_HealthboxGender_None);
-        windowTileData = AddTextPrinterAndCreateWindowOnHealthbox(gDisplayedStringBattle, 0, 3, 2, &windowId);
         break;
     case MON_MALE:
         StringCopy(ptr, gText_HealthboxGender_Male);
-        windowTileData = AddTextPrinterAndCreateWindowOnHealthbox(gDisplayedStringBattle, 0, 3, 2, &windowId);
         break;
     case MON_FEMALE:
         StringCopy(ptr, gText_HealthboxGender_Female);
-        windowTileData = AddTextPrinterAndCreateWindowOnHealthbox(gDisplayedStringBattle, 0, 3, 2, &windowId);
         break;
     }
 
@@ -2170,18 +2165,29 @@ static void UpdateNickInHealthbox(u8 healthboxSpriteId, struct Pokemon *mon)
 
         if (BattleOverworldScene_IsEnabled())
         {
-            DrawOverworldHealthboxWindowText(rightTextObj, windowTileData + 0xC0, 1, 5, TILE_SIZE_1BPP + 3, 0, 0);
-            DrawOverworldHealthboxWindowText(leftTextObj, windowTileData, 6, 5, TILE_SIZE_1BPP + 3, 0, 0);
+            DrawOverworldHealthboxTextString(rightTextObj, gDisplayedStringBattle, 1, -48, 3, 5, TILE_SIZE_1BPP + 3, 0);
+            DrawOverworldHealthboxTextString(leftTextObj, gDisplayedStringBattle, 6, 0, 3, 5, TILE_SIZE_1BPP + 3, 0);
+            return;
         }
         else
         {
+            windowTileData = AddTextPrinterAndCreateWindowOnHealthbox(gDisplayedStringBattle, 0, 3, 2, &windowId);
             CopyTextIntoHealthboxObject(leftTextObj, windowTileData, 6);
             CopyTextIntoHealthboxObject(rightTextObj, windowTileData + 0xC0, 1);
         }
     }
     else
     {
-        TextIntoHealthboxObject((void *)(OBJ_VRAM0 + 0x20 + spriteTileNum), windowTileData, 7);
+        if (BattleOverworldScene_IsEnabled())
+        {
+            DrawOverworldHealthboxTextString((void *)(OBJ_VRAM0 + 0x20 + spriteTileNum), gDisplayedStringBattle, 7, 0, 3, 5, TILE_SIZE_1BPP + 3, 0);
+            return;
+        }
+        else
+        {
+            windowTileData = AddTextPrinterAndCreateWindowOnHealthbox(gDisplayedStringBattle, 0, 3, 2, &windowId);
+            TextIntoHealthboxObject((void *)(OBJ_VRAM0 + 0x20 + spriteTileNum), windowTileData, 7);
+        }
     }
 
     RemoveWindowOnHealthbox(windowId);
@@ -2825,29 +2831,6 @@ static u8 ModFloorBy8(s16 value)
     return value - DivFloorBy8(value) * TILE_SIZE_1BPP;
 }
 
-static u8 GetHealthboxWindowPixel(const u8 *tileData, s16 x, s16 y)
-{
-    u8 tileX;
-    u8 pixelX;
-    s32 offset;
-
-    if (x < 0 || x >= OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH)
-        return 0;
-    if (y < 0 || y >= 2 * TILE_SIZE_1BPP)
-        return 0;
-
-    tileX = x / TILE_SIZE_1BPP;
-    pixelX = ModFloorBy8(x);
-    offset = ((y / TILE_SIZE_1BPP) * OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH + tileX) * TILE_SIZE_4BPP
-           + (y % TILE_SIZE_1BPP) * 4
-           + pixelX / 2;
-
-    if (pixelX & 1)
-        return tileData[offset] >> 4;
-    else
-        return tileData[offset] & 0xF;
-}
-
 static u8 *GetHealthboxObjectPixelAddress(u8 *tileData, u8 tileWidth, s16 x, s16 y, u8 *shift)
 {
     u16 destTile = ((u32)tileData - OBJ_VRAM0) / TILE_SIZE_4BPP;
@@ -2927,73 +2910,6 @@ static u8 *GetHealthboxObjectPixelAddress(u8 *tileData, u8 tileWidth, s16 x, s16
     return NULL;
 }
 
-static void SetHealthboxObjectPixel(u8 *tileData, u8 tileWidth, s16 x, s16 y, u8 color)
-{
-    u8 shift;
-    u16 *halfword;
-    u16 value;
-    u8 *addr = GetHealthboxObjectPixelAddress(tileData, tileWidth, x, y, &shift);
-
-    if (addr == NULL)
-        return;
-
-    halfword = (u16 *)addr;
-    value = *halfword;
-    value &= ~(0xF << shift);
-    value |= color << shift;
-    *halfword = value;
-}
-
-static void OutlineOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 tileWidth, u8 firstRow, u8 rowCount, s8 srcYOffset, s8 destYOffset)
-{
-    s8 dx;
-    s8 dy;
-    s16 x;
-    s16 y;
-    s16 width = tileWidth * TILE_SIZE_1BPP;
-    s16 lastRow = firstRow + rowCount;
-    u8 *tileData = dest;
-
-    CpuFill32(0, sOverworldHealthboxTextSnapshot, sizeof(sOverworldHealthboxTextSnapshot));
-
-    for (y = firstRow; y < lastRow; y++)
-    {
-        for (x = 0; x < width; x++)
-        {
-            if (GetHealthboxWindowPixel(windowTileData, x, y + srcYOffset) != 0)
-                sOverworldHealthboxTextSnapshot[y * OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH + x] = TRUE;
-        }
-    }
-
-    for (y = firstRow; y < lastRow; y++)
-    {
-        for (x = 0; x < width; x++)
-        {
-            if (!sOverworldHealthboxTextSnapshot[y * OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH + x])
-                continue;
-
-            for (dy = -1; dy <= 1; dy++)
-            {
-                for (dx = -1; dx <= 1; dx++)
-                {
-                    s16 outlineX = x + dx;
-                    s16 outlineY = y + dy;
-
-                    if (dx == 0 && dy == 0)
-                        continue;
-                    if (outlineY < 0 || outlineY >= OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
-                        continue;
-                    if (outlineX >= 0 && outlineX < width
-                     && sOverworldHealthboxTextSnapshot[outlineY * OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH + outlineX])
-                        continue;
-
-                    SetHealthboxObjectPixel(tileData, tileWidth, outlineX, outlineY + destYOffset, OW_HEALTHBOX_TEXT_OUTLINE_COLOR);
-                }
-            }
-        }
-    }
-}
-
 static u8 GetComposedHealthboxTextPixel(const u8 *tileData, u8 tileWidth, u8 x, u8 y)
 {
     u16 offset = ((y / TILE_SIZE_1BPP) * tileWidth + (x / TILE_SIZE_1BPP)) * TILE_SIZE_4BPP
@@ -3016,6 +2932,14 @@ static void SetComposedHealthboxTextPixel(u8 *tileData, u8 tileWidth, u8 x, u8 y
         tileData[offset] = (tileData[offset] & 0x0F) | (color << 4);
     else
         tileData[offset] = (tileData[offset] & 0xF0) | color;
+}
+
+static void SetOverworldHealthboxTextPixelIfVisible(u8 *tileData, u8 tileWidth, s16 x, s16 y, u8 color)
+{
+    if (x < 0 || y < 0 || x >= tileWidth * TILE_SIZE_1BPP || y >= OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+        return;
+
+    SetComposedHealthboxTextPixel(tileData, tileWidth, x, y, color);
 }
 
 static bool8 ComposedHealthboxTextTileIsEmpty(const u8 *tileData, u8 tileWidth, u8 tileX, u8 tileY)
@@ -3050,10 +2974,28 @@ static void QueueOverworldHealthboxTextTileCopy(const u8 *src, u8 *dest)
         sOverworldHealthboxTextCopyTileCursor = 0;
 }
 
+static void SetOverworldHealthboxTextMaskBit(u32 *rowMask, u8 bit)
+{
+    rowMask[bit / 32] |= 1u << (bit & 31);
+}
+
+static u32 GetOverworldHealthboxTextValidMaskWord(u8 word, u8 lastBit)
+{
+    u8 firstBit = word * 32;
+    u8 bitCount;
+
+    if (lastBit < firstBit)
+        return 0;
+
+    bitCount = lastBit - firstBit + 1;
+    if (bitCount >= 32)
+        return 0xFFFFFFFF;
+
+    return (1u << bitCount) - 1;
+}
+
 static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 tileWidth, u8 firstRow, u8 rowCount, s8 srcYOffset, s8 destYOffset)
 {
-    s8 dx;
-    s8 dy;
     s16 x;
     s16 y;
     s16 width = tileWidth * TILE_SIZE_1BPP;
@@ -3070,54 +3012,108 @@ static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 
     u8 tileY;
     s16 objectTileX;
     bool8 isCoreTile;
+    u8 word;
+    u8 bit;
+    u8 bitInWord;
+    u8 lastBit = width + 1;
+    u8 pixelPair;
+    u8 colorPair;
+    u8 color;
+    u8 srcY;
+    const u8 *srcRow;
+    u32 combined[OW_HEALTHBOX_TEXT_MASK_WORDS];
+    u32 inflated[OW_HEALTHBOX_TEXT_MASK_WORDS];
+    u32 outline[OW_HEALTHBOX_TEXT_MASK_WORDS];
 
-    CpuFill32(0, sOverworldHealthboxTextSnapshot, sizeof(sOverworldHealthboxTextSnapshot));
     CpuFill32(0, sOverworldHealthboxTextTiles, sizeof(sOverworldHealthboxTextTiles));
+    CpuFill32(0, sOverworldHealthboxTextMasks, sizeof(sOverworldHealthboxTextMasks));
 
     for (y = firstRow; y < lastRow; y++)
     {
-        for (x = 0; x < width; x++)
+        srcY = y + srcYOffset;
+        if (srcY >= 2 * TILE_SIZE_1BPP)
+            continue;
+
+        for (tileX = 0; tileX < tileWidth; tileX++)
         {
-            if (GetHealthboxWindowPixel(windowTileData, x, y + srcYOffset) != 0)
+            srcRow = windowTileData
+                   + ((srcY / TILE_SIZE_1BPP) * OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH + tileX) * TILE_SIZE_4BPP
+                   + (srcY % TILE_SIZE_1BPP) * 4;
+
+            for (pixelPair = 0; pixelPair < 4; pixelPair++)
             {
-                sOverworldHealthboxTextSnapshot[y * OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH + x] = TRUE;
-                SetComposedHealthboxTextPixel(sOverworldHealthboxTextTiles,
-                                              tileCols,
-                                              x - firstTileX * TILE_SIZE_1BPP,
-                                              y + destYOffset - firstTileY * TILE_SIZE_1BPP,
-                                              GetHealthboxWindowPixel(windowTileData, x, y + srcYOffset));
+                colorPair = srcRow[pixelPair];
+                x = tileX * TILE_SIZE_1BPP + pixelPair * 2;
+
+                color = colorPair & 0xF;
+                if (color != 0)
+                {
+                    SetOverworldHealthboxTextMaskBit(sOverworldHealthboxTextMasks[y], x + 1);
+                    SetComposedHealthboxTextPixel(sOverworldHealthboxTextTiles,
+                                                  tileCols,
+                                                  x - firstTileX * TILE_SIZE_1BPP,
+                                                  y + destYOffset - firstTileY * TILE_SIZE_1BPP,
+                                                  color);
+                }
+
+                color = colorPair >> 4;
+                if (color != 0)
+                {
+                    SetOverworldHealthboxTextMaskBit(sOverworldHealthboxTextMasks[y], x + 2);
+                    SetComposedHealthboxTextPixel(sOverworldHealthboxTextTiles,
+                                                  tileCols,
+                                                  x + 1 - firstTileX * TILE_SIZE_1BPP,
+                                                  y + destYOffset - firstTileY * TILE_SIZE_1BPP,
+                                                  color);
+                }
             }
         }
     }
 
-    for (y = firstRow; y < lastRow; y++)
+    for (y = firstRow - 1; y <= lastRow; y++)
     {
-        for (x = 0; x < width; x++)
+        for (word = 0; word < OW_HEALTHBOX_TEXT_MASK_WORDS; word++)
         {
-            if (!sOverworldHealthboxTextSnapshot[y * OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH + x])
-                continue;
+            combined[word] = 0;
+            if (y > 0 && y - 1 < OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+                combined[word] |= sOverworldHealthboxTextMasks[y - 1][word];
+            if (y >= 0 && y < OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+                combined[word] |= sOverworldHealthboxTextMasks[y][word];
+            if (y + 1 >= 0 && y + 1 < OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+                combined[word] |= sOverworldHealthboxTextMasks[y + 1][word];
+        }
 
-            for (dy = -1; dy <= 1; dy++)
+        for (word = 0; word < OW_HEALTHBOX_TEXT_MASK_WORDS; word++)
+        {
+            inflated[word] = combined[word];
+            inflated[word] |= combined[word] << 1;
+            inflated[word] |= combined[word] >> 1;
+            if (word > 0)
+                inflated[word] |= combined[word - 1] >> 31;
+            if (word + 1 < OW_HEALTHBOX_TEXT_MASK_WORDS)
+                inflated[word] |= combined[word + 1] << 31;
+
+            outline[word] = inflated[word];
+            if (y >= 0 && y < OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+                outline[word] &= ~sOverworldHealthboxTextMasks[y][word];
+            outline[word] &= GetOverworldHealthboxTextValidMaskWord(word, lastBit);
+        }
+
+        for (word = 0; word < OW_HEALTHBOX_TEXT_MASK_WORDS; word++)
+        {
+            u32 wordBits = outline[word];
+
+            for (bitInWord = 0; wordBits != 0 && bitInWord < 32; bitInWord++, wordBits >>= 1)
             {
-                for (dx = -1; dx <= 1; dx++)
-                {
-                    s16 outlineX = x + dx;
-                    s16 outlineY = y + dy;
+                if (!(wordBits & 1))
+                    continue;
 
-                    if (dx == 0 && dy == 0)
-                        continue;
-                    if (outlineY < 0 || outlineY >= OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
-                        continue;
-                    if (outlineX >= 0 && outlineX < width
-                     && sOverworldHealthboxTextSnapshot[outlineY * OW_HEALTHBOX_TEXT_OBJ_MAX_WIDTH + outlineX])
-                        continue;
-
-                    SetComposedHealthboxTextPixel(sOverworldHealthboxTextTiles,
-                                                  tileCols,
-                                                  outlineX - firstTileX * TILE_SIZE_1BPP,
-                                                  outlineY + destYOffset - firstTileY * TILE_SIZE_1BPP,
-                                                  OW_HEALTHBOX_TEXT_OUTLINE_COLOR);
-                }
+                bit = word * 32 + bitInWord;
+                SetComposedHealthboxTextPixel(sOverworldHealthboxTextTiles,
+                                              tileCols,
+                                              bit - 1 - firstTileX * TILE_SIZE_1BPP,
+                                              y + destYOffset - firstTileY * TILE_SIZE_1BPP,
+                                              OW_HEALTHBOX_TEXT_OUTLINE_COLOR);
             }
         }
     }
@@ -3136,6 +3132,145 @@ static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 
                                                       objectTileX * TILE_SIZE_1BPP,
                                                       (firstTileY + tileY) * TILE_SIZE_1BPP,
                                                       &shift);
+
+            if (tileData != NULL)
+            {
+                QueueOverworldHealthboxTextTileCopy(sOverworldHealthboxTextTiles + (tileY * tileCols + tileX) * TILE_SIZE_4BPP,
+                                                    tileData);
+            }
+        }
+    }
+}
+
+static void DrawOverworldHealthboxTextString(void *dest, const u8 *str, u8 tileWidth, s16 textX, s16 textY, u8 firstRow, u8 rowCount, s8 destYOffset)
+{
+    s16 y;
+    s16 lastRow = firstRow + rowCount;
+    s16 firstTileX = -1;
+    s16 lastTileX = tileWidth;
+    s16 firstTileY = DivFloorBy8(firstRow + destYOffset - 1);
+    s16 lastTileY = DivFloorBy8(firstRow + destYOffset + rowCount);
+    u8 tileCols = lastTileX - firstTileX + 1;
+    u8 tileRows = lastTileY - firstTileY + 1;
+    u8 tileX;
+    u8 tileY;
+    u8 tileDataShift;
+    u8 glyphWidth;
+    u8 glyphX;
+    u8 glyphY;
+    s16 destX;
+    s16 destY;
+    s16 objectTileX;
+    bool8 isCoreTile;
+    u16 glyphId;
+    u8 fgColor = OW_HEALTHBOX_TEXT_FILL_COLOR;
+    const u8 *glyphPixels;
+    const u8 *text = str;
+    u8 *tileData;
+
+    CpuFill32(0, sOverworldHealthboxTextTiles, sizeof(sOverworldHealthboxTextTiles));
+
+    while ((glyphId = *text++) != EOS)
+    {
+        switch (glyphId)
+        {
+        case EXT_CTRL_CODE_BEGIN:
+            switch (*text++)
+            {
+            case EXT_CTRL_CODE_COLOR:
+                fgColor = *text++;
+                break;
+            case EXT_CTRL_CODE_HIGHLIGHT:
+                text++;
+                break;
+            case EXT_CTRL_CODE_SHADOW:
+                text++;
+                break;
+            case EXT_CTRL_CODE_COLOR_HIGHLIGHT_SHADOW:
+                fgColor = *text++;
+                text++;
+                text++;
+                break;
+            case EXT_CTRL_CODE_PALETTE:
+            case EXT_CTRL_CODE_PAUSE:
+            case EXT_CTRL_CODE_ESCAPE:
+            case EXT_CTRL_CODE_SHIFT_RIGHT:
+            case EXT_CTRL_CODE_SHIFT_DOWN:
+            case EXT_CTRL_CODE_CLEAR:
+            case EXT_CTRL_CODE_SKIP:
+            case EXT_CTRL_CODE_CLEAR_TO:
+            case EXT_CTRL_CODE_MIN_LETTER_SPACING:
+            case EXT_CTRL_CODE_FONT:
+                text++;
+                break;
+            case EXT_CTRL_CODE_PLAY_BGM:
+            case EXT_CTRL_CODE_PLAY_SE:
+                text += 2;
+                break;
+            default:
+                break;
+            }
+            continue;
+        case CHAR_EXTRA_SYMBOL:
+        case EXT_CTRL_CODE_ESCAPE:
+            glyphId = *text++ | 0x100;
+            break;
+        case CHAR_NEWLINE:
+        case PLACEHOLDER_BEGIN:
+        case CHAR_KEYPAD_ICON:
+            if (glyphId == PLACEHOLDER_BEGIN || glyphId == CHAR_KEYPAD_ICON)
+                text++;
+            continue;
+        }
+
+        glyphWidth = gFontSmallLatinGlyphWidths[glyphId];
+        if (textX + glyphWidth < -1 || textX > tileWidth * TILE_SIZE_1BPP)
+        {
+            textX += glyphWidth;
+            continue;
+        }
+
+        glyphPixels = (const u8 *)(gFontSmallLatinGlyphs_OWOutline + glyphId * 32);
+
+        for (glyphY = 0; glyphY < 16; glyphY++)
+        {
+            y = textY + glyphY - 1;
+            if (y < firstRow - 1 || y > lastRow)
+                continue;
+
+            for (glyphX = 0; glyphX < 16; glyphX++)
+            {
+                u8 glyphPixel = GetComposedHealthboxTextPixel(glyphPixels, 2, glyphX, glyphY);
+
+                if (glyphPixel == 0)
+                    continue;
+
+                destX = textX + glyphX - 1 - firstTileX * TILE_SIZE_1BPP;
+                destY = y + destYOffset - firstTileY * TILE_SIZE_1BPP;
+
+                if (glyphPixel == OW_HEALTHBOX_TEXT_FILL_COLOR)
+                    glyphPixel = fgColor;
+                SetOverworldHealthboxTextPixelIfVisible(sOverworldHealthboxTextTiles, tileCols, destX, destY, glyphPixel);
+            }
+        }
+
+        textX += glyphWidth;
+    }
+
+    for (tileY = 0; tileY < tileRows; tileY++)
+    {
+        for (tileX = 0; tileX < tileCols; tileX++)
+        {
+            objectTileX = firstTileX + tileX;
+            isCoreTile = objectTileX >= 0 && objectTileX < tileWidth;
+            if (!isCoreTile && ComposedHealthboxTextTileIsEmpty(sOverworldHealthboxTextTiles, tileCols, tileX, tileY))
+                continue;
+
+            tileData = GetHealthboxObjectPixelAddress(dest,
+                                                      tileWidth,
+                                                      objectTileX * TILE_SIZE_1BPP,
+                                                      (firstTileY + tileY) * TILE_SIZE_1BPP,
+                                                      &tileDataShift);
 
             if (tileData != NULL)
             {

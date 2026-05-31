@@ -314,11 +314,13 @@ static void Intro_TryShinyAnimShowHealthbox(void)
         {
             if (IsDoubleBattle() && !(gBattleTypeFlags & BATTLE_TYPE_MULTI))
             {
-                UpdateHealthboxAttribute(gHealthboxSpriteIds[BATTLE_PARTNER(gActiveBattler)], &gEnemyParty[gBattlerPartyIndexes[BATTLE_PARTNER(gActiveBattler)]], HEALTHBOX_ALL);
+                if (!BattleOverworldScene_IsEnabled())
+                    UpdateHealthboxAttribute(gHealthboxSpriteIds[BATTLE_PARTNER(gActiveBattler)], &gEnemyParty[gBattlerPartyIndexes[BATTLE_PARTNER(gActiveBattler)]], HEALTHBOX_ALL);
                 StartHealthboxSlideIn(BATTLE_PARTNER(gActiveBattler));
                 SetHealthboxSpriteVisible(gHealthboxSpriteIds[BATTLE_PARTNER(gActiveBattler)]);
             }
-            UpdateHealthboxAttribute(gHealthboxSpriteIds[gActiveBattler], &gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], HEALTHBOX_ALL);
+            if (!BattleOverworldScene_IsEnabled())
+                UpdateHealthboxAttribute(gHealthboxSpriteIds[gActiveBattler], &gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], HEALTHBOX_ALL);
             StartHealthboxSlideIn(gActiveBattler);
             SetHealthboxSpriteVisible(gHealthboxSpriteIds[gActiveBattler]);
         }
