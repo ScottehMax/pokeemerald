@@ -1423,8 +1423,16 @@ static void OpponentHandleFaintAnimation(void)
         {
             gBattleSpritesDataPtr->healthBoxesData[gActiveBattler].animationState = 0;
             PlaySE12WithPanning(SE_FAINT, SOUND_PAN_TARGET);
-            gSprites[gBattlerSpriteIds[gActiveBattler]].callback = SpriteCB_FaintOpponentMon;
-            gBattlerControllerFuncs[gActiveBattler] = HideHealthboxAfterMonFaint;
+            if (BattleOverworldScene_IsEnabled() && (gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+            {
+                InitAndLaunchSpecialAnimation(gActiveBattler, gActiveBattler, gActiveBattler, B_ANIM_SWITCH_OUT_OPPONENT_MON);
+                gBattlerControllerFuncs[gActiveBattler] = FreeMonSpriteAfterSwitchOutAnim;
+            }
+            else
+            {
+                gSprites[gBattlerSpriteIds[gActiveBattler]].callback = SpriteCB_FaintOpponentMon;
+                gBattlerControllerFuncs[gActiveBattler] = HideHealthboxAfterMonFaint;
+            }
         }
     }
 }
