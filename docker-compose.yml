@@ -1,0 +1,8 @@
+services:
+  builder:
+    build: .
+    image: pokeemerald-builder
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: make
