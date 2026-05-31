@@ -562,6 +562,8 @@ static void Task_InitUpdateMonBg(u8 taskId)
 
     if (!BattleOverworldScene_IsBattlerSprite(tBattlerId, battlerSpriteId))
         gSprites[battlerSpriteId].invisible = TRUE;
+    if (BattleOverworldScene_IsEnabled())
+        tInBg2 = FALSE;
 
     if (!tActive)
     {
@@ -591,6 +593,17 @@ static void Task_InitUpdateMonBg(u8 taskId)
     DestroyAnimVisualTask(taskId);
 }
 
+static bool8 ShouldMoveBattlerSpriteToBg2(u8 battler)
+{
+    u8 position;
+
+    if (BattleOverworldScene_IsEnabled())
+        return FALSE;
+
+    position = GetBattlerPosition(battler);
+    return (position != B_POSITION_OPPONENT_LEFT && position != B_POSITION_PLAYER_RIGHT && !IsContest());
+}
+
 static void Cmd_monbg(void)
 {
     bool8 toBG_2;
@@ -609,12 +622,7 @@ static void Cmd_monbg(void)
     // Move designated battler to background
     if (IsBattlerSpriteVisible(battler))
     {
-        u8 position = GetBattlerPosition(battler);
-        if (position == B_POSITION_OPPONENT_LEFT || position == B_POSITION_PLAYER_RIGHT || IsContest())
-            toBG_2 = FALSE;
-        else
-            toBG_2 = TRUE;
-
+        toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);
         taskId = CreateTask(Task_InitUpdateMonBg, 10);
         gAnimVisualTaskCount++;
@@ -629,12 +637,7 @@ static void Cmd_monbg(void)
     battler ^= BIT_FLANK;
     if (IsBattlerSpriteVisible(battler))
     {
-        u8 position = GetBattlerPosition(battler);
-        if (position == B_POSITION_OPPONENT_LEFT || position == B_POSITION_PLAYER_RIGHT || IsContest())
-            toBG_2 = FALSE;
-        else
-            toBG_2 = TRUE;
-
+        toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);
         taskId = CreateTask(Task_InitUpdateMonBg, 10);
         gAnimVisualTaskCount++;
@@ -672,6 +675,9 @@ void MoveBattlerSpriteToBG(u8 battler, bool8 toBG_2, bool8 setSpriteInvisible)
 {
     struct BattleAnimBgData animBg;
     u8 battlerSpriteId;
+
+    if (BattleOverworldScene_IsEnabled())
+        toBG_2 = FALSE;
 
     if (!toBG_2)
     {
@@ -799,6 +805,9 @@ void ResetBattleAnimBg(bool8 toBG2)
     struct BattleAnimBgData animBg;
     GetBattleAnimBg1Data(&animBg);
 
+    if (BattleOverworldScene_IsEnabled())
+        toBG2 = FALSE;
+
     if (!toBG2 || IsContest())
     {
         ClearBattleAnimBg(1);
@@ -892,11 +901,7 @@ static void Task_ClearMonBg(u8 taskId)
     if (gTasks[taskId].data[1] != 1)
     {
         u8 to_BG2;
-        u8 position = GetBattlerPosition(gTasks[taskId].data[2]);
-        if (position == B_POSITION_OPPONENT_LEFT || position == B_POSITION_PLAYER_RIGHT || IsContest())
-            to_BG2 = FALSE;
-        else
-            to_BG2 = TRUE;
+        to_BG2 = ShouldMoveBattlerSpriteToBg2(gTasks[taskId].data[2]);
 
         if (sMonAnimTaskIdArray[0] != TASK_NONE)
         {
@@ -937,24 +942,14 @@ static void Cmd_monbg_static(void)
 
     if (IsBattlerSpriteVisible(battler))
     {
-        u8 position = GetBattlerPosition(battler);
-        if (position == B_POSITION_OPPONENT_LEFT || position == B_POSITION_PLAYER_RIGHT || IsContest())
-            toBG_2 = FALSE;
-        else
-            toBG_2 = TRUE;
-
+        toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);
     }
 
     battler ^= BIT_FLANK;
     if (animBattlerId > 1 && IsBattlerSpriteVisible(battler))
     {
-        u8 position = GetBattlerPosition(battler);
-        if (position == B_POSITION_OPPONENT_LEFT || position == B_POSITION_PLAYER_RIGHT || IsContest())
-            toBG_2 = FALSE;
-        else
-            toBG_2 = TRUE;
-
+        toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);
     }
 
@@ -1002,11 +997,7 @@ static void Task_ClearMonBgStatic(u8 taskId)
     {
         bool8 toBG_2;
         u8 battler = gTasks[taskId].data[2];
-        u8 position = GetBattlerPosition(battler);
-        if (position == B_POSITION_OPPONENT_LEFT || position == B_POSITION_PLAYER_RIGHT || IsContest())
-            toBG_2 = FALSE;
-        else
-            toBG_2 = TRUE;
+        toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
 
         if (IsBattlerSpriteVisible(battler))
             ResetBattleAnimBg(toBG_2);
@@ -1714,7 +1705,8 @@ static void Cmd_splitbgprio(void)
     if (!IsContest() && (battlerPosition == B_POSITION_PLAYER_LEFT || battlerPosition == B_POSITION_OPPONENT_RIGHT))
     {
         SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 1);
-        SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
+        if (!BattleOverworldScene_IsEnabled())
+            SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
     }
 }
 
@@ -1724,7 +1716,8 @@ static void Cmd_splitbgprio_all(void)
     if (!IsContest())
     {
         SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 1);
-        SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
+        if (!BattleOverworldScene_IsEnabled())
+            SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
     }
 }
 
@@ -1750,7 +1743,8 @@ static void Cmd_splitbgprio_foes(void)
         if (!IsContest() && (battlerPosition == B_POSITION_PLAYER_LEFT || battlerPosition == B_POSITION_OPPONENT_RIGHT))
         {
             SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 1);
-            SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
+            if (!BattleOverworldScene_IsEnabled())
+                SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
         }
     }
 }

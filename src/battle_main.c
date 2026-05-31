@@ -683,9 +683,9 @@ static void CB2_InitBattleInternal(void)
         gBattleEnvironment = BATTLE_ENVIRONMENT_BUILDING;
 
     InitBattleBgsVideo();
-    LoadBattleTextboxAndBackground();
     ResetSpriteData();
     BattleOverworldScene_Reset();
+    LoadBattleTextboxAndBackground();
     BattleOverworldScene_BeginReshowBlackout();
     ResetTasks();
     DrawBattleEntryBackground();
@@ -1910,6 +1910,7 @@ void BattleMainCB2(void)
     UpdatePaletteFade();
     RunTasks();
     BattleOverworldScene_KeepBaseBackgroundVisible();
+    BattleOverworldScene_UpdateBackgroundAnimation();
 
     if (JOY_HELD(B_BUTTON) && gBattleTypeFlags & BATTLE_TYPE_RECORDED && RecordedBattle_CanStopPlayback())
     {
@@ -1923,6 +1924,7 @@ void BattleMainCB2(void)
 
 static void FreeRestoreBattleData(void)
 {
+    BattleOverworldScene_StopBackgroundAnimation();
     gMain.callback1 = gPreBattleCallback1;
     gScanlineEffect.state = 3;
     gMain.inBattle = FALSE;
@@ -2145,6 +2147,7 @@ void VBlankCB_Battle(void)
     LoadOam();
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();
+    BattleOverworldScene_TransferBackgroundAnimation();
     ScanlineEffect_InitHBlankDmaTransfer();
 }
 
@@ -5241,6 +5244,7 @@ static void FreeResetData_ReturnToOvOrDoEvolutions(void)
     }
 
     FreeAllWindowBuffers();
+    BattleOverworldScene_StopBackgroundAnimation();
     if (!(gBattleTypeFlags & BATTLE_TYPE_LINK))
     {
         FreeMonSpritesGfx();
@@ -5317,6 +5321,7 @@ static void ReturnFromBattleToOverworld(void)
     }
 
     m4aSongNumStop(SE_LOW_HEALTH);
+    BattleOverworldScene_StopBackgroundAnimation();
     SetMainCallback2(gMain.savedCallback);
 }
 

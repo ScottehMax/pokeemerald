@@ -16,9 +16,11 @@
 #include "scanline_effect.h"
 #include "sprite.h"
 #include "task.h"
+#include "tileset_anims.h"
 #include "constants/battle.h"
 #include "constants/battle_anim.h"
 #include "constants/global.h"
+#include "constants/layouts.h"
 #include "constants/rgb.h"
 #include "constants/species.h"
 #include "constants/trainers.h"
@@ -28,22 +30,18 @@
 #define OW_TRAINER_PLAYER_PAL_SLOT 12
 #define OW_TRAINER_OPPONENT_PAL_SLOT 13
 #define OW_SCENE_BASE_Y 56
-#define OW_BG_ROUTE101_X 3
-#define OW_BG_ROUTE101_Y 7
-#define OW_BG_ROUTE101_WIDTH 15
-#define OW_BG_ROUTE101_HEIGHT 10
+#define OW_BG_DEFAULT_MAP_X 3
+#define OW_BG_DEFAULT_MAP_Y 7
+#define OW_BG_MAP_WIDTH 15
+#define OW_BG_MAP_HEIGHT 10
 #define OW_BG_PAL_UNMAPPED 0xFF
 #define OW_BG_TILE_UNMAPPED 0xFFFF
-#define OW_BG_TILE_RANGE_1_START 0x0C0
-#define OW_BG_TILE_RANGE_1_END 0x100
-#define OW_BG_TILE_RANGE_2_START 0x100
-#define OW_BG_TILE_RANGE_2_END 0x100
-#define OW_BG_CHARBASE 3
+#define OW_BG_CHARBASE 2
 #define OW_BG_LOWER_SCREENBASE 26
+#define OW_BG_UPPER_SCREENBASE 27
 #define OW_BG_LOWER_ID 3
-#define OW_BG_COMPOSITE_TILE_CAPACITY 32
-#define OW_BG_COMPOSITE_PAL_CAPACITY 4
-#define OW_BG_COMPOSITE_PAL_START 12
+#define OW_BG_UPPER_ID 2
+#define OW_BG_BLANK_TILE 0x040
 
 struct BattleOwMonGfx
 {
@@ -53,6 +51,13 @@ struct BattleOwMonGfx
     const struct OamData *oam;
     const struct SpriteFrameImage *images;
     u16 frameSize;
+};
+
+struct BattleOwBgLayoutOffset
+{
+    u16 layoutId;
+    u16 x;
+    u16 y;
 };
 
 extern const struct MapLayout Route101_Layout;
@@ -259,8 +264,9 @@ static const union AnimCmd *const sAnimTable_BattleTrainerFaceEast[] =
 };
 
 static bool8 IsBattleOverworldSceneEnabled(void);
-static void BattleOverworldScene_ApplyBg3Config(void);
+static void BattleOverworldScene_ApplyBgConfig(void);
 static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerPic, u8 trainerClass);
+static bool8 SetBattleOwMonSpriteTemplate(u16 species, u8 battlerPosition);
 static void Task_BattleOverworldScene_WildShinyAnimations(u8 taskId);
 
 static u8 sPlayerTrainerSpriteId;
@@ -273,18 +279,56 @@ static bool8 sReshowTransitionAllowsBg3Blend;
 static bool8 sBg3BlendFadeStarted;
 static bool8 sSceneVisible;
 static u8 sBg3BlendRefCount;
-static u16 sCompositeLowerTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
-static u16 sCompositeUpperTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
-static u16 sCompositeDestTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
-static u8 sCompositeCount;
-static u8 sCompositePalLower[OW_BG_COMPOSITE_PAL_CAPACITY];
-static u8 sCompositePalUpper[OW_BG_COMPOSITE_PAL_CAPACITY];
-static u16 sCompositePalettes[OW_BG_COMPOSITE_PAL_CAPACITY][16];
-static u8 sCompositePalColorCounts[OW_BG_COMPOSITE_PAL_CAPACITY];
-static u8 sCompositePalCount;
 static EWRAM_DATA u16 sBattleOwBgTileMap[NUM_TILES_TOTAL] = {0};
 static EWRAM_DATA u32 sBattleOwBgPaletteMask = 0;
-static const u8 sBattleOwBgFreePalSlots[] = {2, 3, 4, 6, 7, 10, 11};
+// BG palettes 8 and 9 are used as battle-animation scratch palettes for battler BG masks.
+static const u8 sBattleOwBgFreePalSlots[] = {2, 3, 4, 7, 10, 11, 12, 13, 14, 15};
+static EWRAM_DATA const struct MapLayout *sBattleOwBgLayout = 0;
+static EWRAM_DATA u16 sBattleOwBgMapX = 0;
+static EWRAM_DATA u16 sBattleOwBgMapY = 0;
+static EWRAM_DATA bool8 sBattleOwBgTilesetAnimsActive = FALSE;
+static EWRAM_DATA u8 sPreparedHealthboxPartyIds[MAX_BATTLERS_COUNT] = {0};
+
+static const u16 sBattleOwBgTileRanges[][2] =
+{
+    {0x040, 0x200},
+};
+
+static const struct BattleOwBgLayoutOffset sBattleOwBgLayoutOffsets[] =
+{
+    {LAYOUT_PETALBURG_CITY, 1, 7},
+    {LAYOUT_SLATEPORT_CITY, 20, 10},
+    {LAYOUT_MAUVILLE_CITY, 1, 5},
+
+    {LAYOUT_ROUTE101, OW_BG_DEFAULT_MAP_X, OW_BG_DEFAULT_MAP_Y},
+    {LAYOUT_ROUTE102, 7, 1},
+    {LAYOUT_ROUTE103, 3, 7},
+    {LAYOUT_ROUTE104, 15, 21},
+    {LAYOUT_ROUTE109, 15, 16},
+    {LAYOUT_ROUTE110, 14, 36},
+    {LAYOUT_ROUTE111, 0, 66},
+    {LAYOUT_ROUTE112, 11, 35},
+    {LAYOUT_ROUTE113, 30, 3},
+    {LAYOUT_ROUTE114, 11, 31},
+    {LAYOUT_ROUTE115, 6, 11},
+    {LAYOUT_ROUTE116, 35, 7},
+    {LAYOUT_ROUTE117, 39, 3},
+    {LAYOUT_ROUTE118, 2, 4},
+    {LAYOUT_ROUTE119, 11, 30},
+    {LAYOUT_ROUTE120, 12, 12},
+    {LAYOUT_ROUTE121, 53, 2},
+    // {LAYOUT_ROUTE122, 3, 3}, // water route
+    {LAYOUT_ROUTE123, 11, 6},
+    {LAYOUT_ROUTE127, 6, 3},
+
+    {LAYOUT_ROUTE130_MIRAGE_ISLAND, 36, 1},
+
+    {LAYOUT_ROUTE132, 43, 19},
+    {LAYOUT_ROUTE133, 40, 19},
+    {LAYOUT_ROUTE134, 42, 12},
+
+    {LAYOUT_DEWFORD_TOWN_GYM, 2, 18},
+};
 
 static bool8 IsPlayerBattlerPosition(u8 battlerPosition)
 {
@@ -297,126 +341,19 @@ static u16 RemapBgTile(u16 tile, const u8 *palMap)
     u16 tileNum;
 
     if (tile == 0)
-        return 0;
+        return OW_BG_BLANK_TILE;
 
     pal = palMap[tile >> 12];
     tileNum = sBattleOwBgTileMap[tile & 0x3FF];
     if (pal == OW_BG_PAL_UNMAPPED)
         pal = 0;
     if (tileNum == OW_BG_TILE_UNMAPPED)
-        tileNum = 0;
+        tileNum = OW_BG_BLANK_TILE;
 
     return (tile & 0x0C00) | tileNum | (pal << 12);
 }
 
-static u8 GetTilePixel(const u8 *tiles, u16 tile, u8 x, u8 y)
-{
-    u8 srcX = (tile & 0x0400) ? 7 - x : x;
-    u8 srcY = (tile & 0x0800) ? 7 - y : y;
-    const u8 *src = tiles + (tile & 0x03FF) * TILE_SIZE_4BPP;
-    u8 pixel = src[srcY * 4 + srcX / 2];
-
-    if (srcX & 1)
-        return pixel >> 4;
-    else
-        return pixel & 0x0F;
-}
-
-static void SetTilePixel(u8 *tile, u8 x, u8 y, u8 pixel)
-{
-    if (x & 1)
-        tile[y * 4 + x / 2] = (tile[y * 4 + x / 2] & 0x0F) | (pixel << 4);
-    else
-        tile[y * 4 + x / 2] = (tile[y * 4 + x / 2] & 0xF0) | pixel;
-}
-
-static u8 GetCompositePalette(u8 lowerPal, u8 upperPal)
-{
-    u8 i;
-
-    for (i = 0; i < sCompositePalCount; i++)
-    {
-        if (sCompositePalLower[i] == lowerPal && sCompositePalUpper[i] == upperPal)
-            return i;
-    }
-
-    if (sCompositePalCount >= OW_BG_COMPOSITE_PAL_CAPACITY)
-        return 0;
-
-    i = sCompositePalCount++;
-    sCompositePalLower[i] = lowerPal;
-    sCompositePalUpper[i] = upperPal;
-    sCompositePalettes[i][0] = Route101_Layout.primaryTileset->palettes[lowerPal][0];
-    sCompositePalColorCounts[i] = 1;
-    return i;
-}
-
-static u8 AddCompositeColor(u8 palId, u16 color)
-{
-    u8 i;
-
-    for (i = 0; i < sCompositePalColorCounts[palId]; i++)
-    {
-        if (sCompositePalettes[palId][i] == color)
-            return i;
-    }
-
-    if (sCompositePalColorCounts[palId] >= 16)
-        return 0;
-
-    i = sCompositePalColorCounts[palId]++;
-    sCompositePalettes[palId][i] = color;
-    return i;
-}
-
-static u8 FindCompositeColor(u8 palId, u16 color)
-{
-    u8 i;
-
-    for (i = 0; i < sCompositePalColorCounts[palId]; i++)
-    {
-        if (sCompositePalettes[palId][i] == color)
-            return i;
-    }
-
-    return AddCompositeColor(palId, color);
-}
-
-static void RegisterCompositePaletteColors(const u8 *tiles, u16 lowerTile, u16 upperTile)
-{
-    u8 x;
-    u8 y;
-    u8 lowerPixel;
-    u8 upperPixel;
-    u8 lowerPal = lowerTile >> 12;
-    u8 upperPal = upperTile >> 12;
-    u8 palId = GetCompositePalette(lowerPal, upperPal);
-    u16 color;
-
-    for (y = 0; y < 8; y++)
-    {
-        for (x = 0; x < 8; x++)
-        {
-            lowerPixel = GetTilePixel(tiles, lowerTile, x, y);
-            upperPixel = GetTilePixel(tiles, upperTile, x, y);
-            if (upperPixel != 0)
-                color = Route101_Layout.primaryTileset->palettes[upperPal][upperPixel];
-            else
-                color = Route101_Layout.primaryTileset->palettes[lowerPal][lowerPixel];
-            AddCompositeColor(palId, color);
-        }
-    }
-}
-
-static void LoadCompositePalettes(void)
-{
-    u8 i;
-
-    for (i = 0; i < sCompositePalCount; i++)
-        LoadPalette(sCompositePalettes[i], BG_PLTT_ID(OW_BG_COMPOSITE_PAL_START + i), PLTT_SIZE_4BPP);
-}
-
-static void UpdateRoute101PaletteMask(const u8 *palMap)
+static void UpdateMapPaletteMask(const u8 *palMap)
 {
     u8 i;
 
@@ -427,58 +364,70 @@ static void UpdateRoute101PaletteMask(const u8 *palMap)
         if (palMap[i] != OW_BG_PAL_UNMAPPED)
             sBattleOwBgPaletteMask |= 1 << palMap[i];
     }
-
-    for (i = 0; i < sCompositePalCount; i++)
-        sBattleOwBgPaletteMask |= 1 << (OW_BG_COMPOSITE_PAL_START + i);
 }
 
-static u16 GetCompositeTile(u16 lowerTile, u16 upperTile)
+static u16 GetNextMapTile(u16 tile)
 {
     u8 i;
 
-    for (i = 0; i < sCompositeCount; i++)
+    for (i = 0; i < ARRAY_COUNT(sBattleOwBgTileRanges); i++)
     {
-        if (sCompositeLowerTiles[i] == lowerTile && sCompositeUpperTiles[i] == upperTile)
-            return sCompositeDestTiles[i];
+        if (tile < sBattleOwBgTileRanges[i][0])
+            return sBattleOwBgTileRanges[i][0];
+        if (tile + 1 < sBattleOwBgTileRanges[i][1])
+            return tile + 1;
     }
 
     return 0;
 }
 
-static u16 RemapCompositeTile(u16 lowerTile, u16 upperTile)
-{
-    u8 palId = GetCompositePalette(lowerTile >> 12, upperTile >> 12);
-    return GetCompositeTile(lowerTile, upperTile) | ((OW_BG_COMPOSITE_PAL_START + palId) << 12);
-}
-
-static const u16 *GetRoute101Metatile(u16 metatileId)
+static const u16 *GetMapMetatile(u16 metatileId)
 {
     if (metatileId < NUM_METATILES_IN_PRIMARY)
-        return Route101_Layout.primaryTileset->metatiles + metatileId * NUM_TILES_PER_METATILE;
+        return sBattleOwBgLayout->primaryTileset->metatiles + metatileId * NUM_TILES_PER_METATILE;
 
-    return Route101_Layout.secondaryTileset->metatiles + (metatileId - NUM_METATILES_IN_PRIMARY) * NUM_TILES_PER_METATILE;
+    return sBattleOwBgLayout->secondaryTileset->metatiles + (metatileId - NUM_METATILES_IN_PRIMARY) * NUM_TILES_PER_METATILE;
 }
 
-static void DrawRoute101Metatile(u16 *lowerBg, u8 x, u8 y, const u16 *metatile, const u8 *palMap)
+static u16 GetMapMetatileIdAt(u8 x, u8 y)
+{
+    u16 mapX = sBattleOwBgMapX + x;
+    u16 mapY = sBattleOwBgMapY + y;
+    u16 metatileId;
+
+    if (mapX >= sBattleOwBgLayout->width || mapY >= sBattleOwBgLayout->height)
+        return 0;
+
+    metatileId = sBattleOwBgLayout->map[mapY * sBattleOwBgLayout->width + mapX] & MAPGRID_METATILE_ID_MASK;
+    if (metatileId >= NUM_METATILES_TOTAL)
+        return 0;
+
+    return metatileId;
+}
+
+static void DrawMapMetatile(u16 *lowerBg, u16 *upperBg, u8 x, u8 y, const u16 *metatile, const u8 *palMap)
 {
     u16 offset = y * 2 * 32 + x * 2;
 
-    lowerBg[offset] = (metatile[4] != 0) ? RemapCompositeTile(metatile[0], metatile[4]) : RemapBgTile(metatile[0], palMap);
-    lowerBg[offset + 1] = (metatile[5] != 0) ? RemapCompositeTile(metatile[1], metatile[5]) : RemapBgTile(metatile[1], palMap);
-    lowerBg[offset + 32] = (metatile[6] != 0) ? RemapCompositeTile(metatile[2], metatile[6]) : RemapBgTile(metatile[2], palMap);
-    lowerBg[offset + 33] = (metatile[7] != 0) ? RemapCompositeTile(metatile[3], metatile[7]) : RemapBgTile(metatile[3], palMap);
-
+    lowerBg[offset] = RemapBgTile(metatile[0], palMap);
+    lowerBg[offset + 1] = RemapBgTile(metatile[1], palMap);
+    lowerBg[offset + 32] = RemapBgTile(metatile[2], palMap);
+    lowerBg[offset + 33] = RemapBgTile(metatile[3], palMap);
+    upperBg[offset] = RemapBgTile(metatile[4], palMap);
+    upperBg[offset + 1] = RemapBgTile(metatile[5], palMap);
+    upperBg[offset + 32] = RemapBgTile(metatile[6], palMap);
+    upperBg[offset + 33] = RemapBgTile(metatile[7], palMap);
 }
 
-static void LoadRoute101Palette(u8 srcPal, u8 destPal)
+static void LoadMapPalette(u8 srcPal, u8 destPal)
 {
     if (srcPal < NUM_PALS_IN_PRIMARY)
-        LoadPalette(Route101_Layout.primaryTileset->palettes[srcPal], BG_PLTT_ID(destPal), PLTT_SIZE_4BPP);
+        LoadPalette(sBattleOwBgLayout->primaryTileset->palettes[srcPal], BG_PLTT_ID(destPal), PLTT_SIZE_4BPP);
     else
-        LoadPalette(Route101_Layout.secondaryTileset->palettes[srcPal], BG_PLTT_ID(destPal), PLTT_SIZE_4BPP);
+        LoadPalette(sBattleOwBgLayout->secondaryTileset->palettes[srcPal], BG_PLTT_ID(destPal), PLTT_SIZE_4BPP);
 }
 
-static void TryAssignRoute101Palette(const u16 *metatile, u8 *palMap, u8 *nextPalSlot)
+static void TryAssignMapPalette(const u16 *metatile, u8 *palMap, u8 *nextPalSlot)
 {
     u8 i;
     u8 srcPal;
@@ -496,19 +445,19 @@ static void TryAssignRoute101Palette(const u16 *metatile, u8 *palMap, u8 *nextPa
             else
             {
                 palMap[srcPal] = sBattleOwBgFreePalSlots[*nextPalSlot];
-                LoadRoute101Palette(srcPal, palMap[srcPal]);
+                LoadMapPalette(srcPal, palMap[srcPal]);
                 (*nextPalSlot)++;
             }
         }
     }
 }
 
-static void TryAssignRoute101Tile(const u16 *metatile, u16 *nextTile)
+static void TryAssignMapTile(const u16 *metatile, u16 *nextTile)
 {
     u8 i;
     u16 srcTile;
 
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < NUM_TILES_PER_METATILE; i++)
     {
         if (metatile[i] == 0)
             continue;
@@ -516,78 +465,43 @@ static void TryAssignRoute101Tile(const u16 *metatile, u16 *nextTile)
         srcTile = metatile[i] & 0x3FF;
         if (sBattleOwBgTileMap[srcTile] == OW_BG_TILE_UNMAPPED)
         {
-            if (*nextTile >= OW_BG_TILE_RANGE_1_END && *nextTile < OW_BG_TILE_RANGE_2_START)
-                *nextTile = OW_BG_TILE_RANGE_2_START;
-
-            if (*nextTile >= OW_BG_TILE_RANGE_2_END)
+            if (*nextTile == 0)
                 sBattleOwBgTileMap[srcTile] = 0;
             else
             {
-                sBattleOwBgTileMap[srcTile] = (*nextTile)++;
+                sBattleOwBgTileMap[srcTile] = *nextTile;
+                *nextTile = GetNextMapTile(*nextTile);
             }
         }
     }
 }
 
-static void TryAssignCompositeTile(const u16 *metatile, u16 *nextTile)
-{
-    u8 i;
-
-    for (i = 0; i < 4; i++)
-    {
-        if (metatile[i + 4] == 0)
-            continue;
-        if (GetCompositeTile(metatile[i], metatile[i + 4]) != 0)
-            continue;
-
-        if (*nextTile >= OW_BG_TILE_RANGE_1_END && *nextTile < OW_BG_TILE_RANGE_2_START)
-            *nextTile = OW_BG_TILE_RANGE_2_START;
-        if (*nextTile >= OW_BG_TILE_RANGE_2_END || sCompositeCount >= OW_BG_COMPOSITE_TILE_CAPACITY)
-            continue;
-
-        sCompositeLowerTiles[sCompositeCount] = metatile[i];
-        sCompositeUpperTiles[sCompositeCount] = metatile[i + 4];
-        sCompositeDestTiles[sCompositeCount] = (*nextTile)++;
-        sCompositeCount++;
-    }
-}
-
-static void BuildRoute101TileAndPaletteMaps(u8 *palMap)
+static void BuildMapTileAndPaletteMaps(u8 *palMap)
 {
     u8 i;
     u8 x;
     u8 y;
     u8 nextPalSlot = 0;
     u16 metatileId;
-    u16 nextTile = OW_BG_TILE_RANGE_1_START;
+    u16 nextTile = GetNextMapTile(OW_BG_BLANK_TILE);
 
     for (i = 0; i < 16; i++)
         palMap[i] = OW_BG_PAL_UNMAPPED;
     for (metatileId = 0; metatileId < NUM_TILES_TOTAL; metatileId++)
         sBattleOwBgTileMap[metatileId] = OW_BG_TILE_UNMAPPED;
-    for (i = 0; i < OW_BG_COMPOSITE_TILE_CAPACITY; i++)
-    {
-        sCompositeLowerTiles[i] = 0;
-        sCompositeUpperTiles[i] = 0;
-        sCompositeDestTiles[i] = 0;
-    }
-    sCompositeCount = 0;
 
-    for (y = 0; y < OW_BG_ROUTE101_HEIGHT; y++)
+    for (y = 0; y < OW_BG_MAP_HEIGHT; y++)
     {
-        for (x = 0; x < OW_BG_ROUTE101_WIDTH; x++)
+        for (x = 0; x < OW_BG_MAP_WIDTH; x++)
         {
-            metatileId = Route101_Layout.map[(OW_BG_ROUTE101_Y + y) * Route101_Layout.width + OW_BG_ROUTE101_X + x] & MAPGRID_METATILE_ID_MASK;
-            if (metatileId >= NUM_METATILES_TOTAL)
-                metatileId = 0;
-            TryAssignRoute101Palette(GetRoute101Metatile(metatileId), palMap, &nextPalSlot);
-            TryAssignRoute101Tile(GetRoute101Metatile(metatileId), &nextTile);
-            TryAssignCompositeTile(GetRoute101Metatile(metatileId), &nextTile);
+            metatileId = GetMapMetatileIdAt(x, y);
+            TryAssignMapPalette(GetMapMetatile(metatileId), palMap, &nextPalSlot);
+            TryAssignMapTile(GetMapMetatile(metatileId), &nextTile);
         }
     }
 }
 
-static void CopyMappedRoute101Tiles(const u8 *tiles, u16 firstTile, u16 numTiles)
+static void CopyMappedMapTiles(const u8 *tiles, u16 firstTile, u16 numTiles)
 {
     u16 i;
     u16 destTile;
@@ -602,101 +516,141 @@ static void CopyMappedRoute101Tiles(const u8 *tiles, u16 firstTile, u16 numTiles
     }
 }
 
-static void ComposeRoute101Tile(const u8 *tiles, u16 lowerTile, u16 upperTile, u8 *dest)
+static void LoadMappedMapTiles(void)
 {
-    u8 x;
-    u8 y;
-    u8 lowerPixel;
-    u8 upperPixel;
-    u8 lowerPal = lowerTile >> 12;
-    u8 upperPal = upperTile >> 12;
-    u8 palId = GetCompositePalette(lowerPal, upperPal);
-    u16 color;
+    CpuFill32(0, (void *)(BG_CHAR_ADDR(OW_BG_CHARBASE) + TILE_OFFSET_4BPP(OW_BG_BLANK_TILE)), TILE_SIZE_4BPP);
 
-    CpuFill32(0, dest, TILE_SIZE_4BPP);
-    for (y = 0; y < 8; y++)
-    {
-        for (x = 0; x < 8; x++)
-        {
-            lowerPixel = GetTilePixel(tiles, lowerTile, x, y);
-            upperPixel = GetTilePixel(tiles, upperTile, x, y);
-            if (upperPixel != 0)
-                color = Route101_Layout.primaryTileset->palettes[upperPal][upperPixel];
-            else
-                color = Route101_Layout.primaryTileset->palettes[lowerPal][lowerPixel];
-            SetTilePixel(dest, x, y, FindCompositeColor(palId, color));
-        }
-    }
-}
-
-static void LoadCompositeRoute101Tiles(const u8 *tiles)
-{
-    u8 x;
-    u8 y;
-    u8 i;
-    u8 tileGfx[TILE_SIZE_4BPP];
-    u16 metatileId;
-    const u16 *metatile;
-
-    sCompositePalCount = 0;
-    for (i = 0; i < OW_BG_COMPOSITE_PAL_CAPACITY; i++)
-    {
-        sCompositePalLower[i] = 0xFF;
-        sCompositePalUpper[i] = 0xFF;
-        sCompositePalColorCounts[i] = 0;
-    }
-
-    for (y = 0; y < OW_BG_ROUTE101_HEIGHT; y++)
-    {
-        for (x = 0; x < OW_BG_ROUTE101_WIDTH; x++)
-        {
-            metatileId = Route101_Layout.map[(OW_BG_ROUTE101_Y + y) * Route101_Layout.width + OW_BG_ROUTE101_X + x] & MAPGRID_METATILE_ID_MASK;
-            if (metatileId >= NUM_METATILES_IN_PRIMARY)
-                continue;
-
-            metatile = GetRoute101Metatile(metatileId);
-            for (i = 0; i < 4; i++)
-            {
-                if (metatile[i + 4] != 0)
-                    RegisterCompositePaletteColors(tiles, metatile[i], metatile[i + 4]);
-            }
-        }
-    }
-
-    LoadCompositePalettes();
-
-    for (i = 0; i < sCompositeCount; i++)
-    {
-        ComposeRoute101Tile(tiles, sCompositeLowerTiles[i], sCompositeUpperTiles[i], tileGfx);
-        CpuCopy32(tileGfx,
-                  (void *)(BG_CHAR_ADDR(OW_BG_CHARBASE) + TILE_OFFSET_4BPP(sCompositeDestTiles[i])),
-                  TILE_SIZE_4BPP);
-    }
-}
-
-static void LoadMappedRoute101Tiles(void)
-{
-    if (Route101_Layout.primaryTileset->isCompressed)
-        LZDecompressWram(Route101_Layout.primaryTileset->tiles, gDecompressionBuffer);
+    if (sBattleOwBgLayout->primaryTileset->isCompressed)
+        LZDecompressWram(sBattleOwBgLayout->primaryTileset->tiles, gDecompressionBuffer);
     else
-        CpuCopy32(Route101_Layout.primaryTileset->tiles, gDecompressionBuffer, NUM_TILES_IN_PRIMARY * TILE_SIZE_4BPP);
-    CopyMappedRoute101Tiles(gDecompressionBuffer, 0, NUM_TILES_IN_PRIMARY);
-    LoadCompositeRoute101Tiles(gDecompressionBuffer);
+        CpuCopy32(sBattleOwBgLayout->primaryTileset->tiles, gDecompressionBuffer, NUM_TILES_IN_PRIMARY * TILE_SIZE_4BPP);
+    CopyMappedMapTiles(gDecompressionBuffer, 0, NUM_TILES_IN_PRIMARY);
 
-    if (Route101_Layout.secondaryTileset->isCompressed)
-        LZDecompressWram(Route101_Layout.secondaryTileset->tiles, gDecompressionBuffer);
+    if (sBattleOwBgLayout->secondaryTileset->isCompressed)
+        LZDecompressWram(sBattleOwBgLayout->secondaryTileset->tiles, gDecompressionBuffer);
     else
-        CpuCopy32(Route101_Layout.secondaryTileset->tiles, gDecompressionBuffer, (NUM_TILES_TOTAL - NUM_TILES_IN_PRIMARY) * TILE_SIZE_4BPP);
-    CopyMappedRoute101Tiles(gDecompressionBuffer, NUM_TILES_IN_PRIMARY, NUM_TILES_TOTAL - NUM_TILES_IN_PRIMARY);
+        CpuCopy32(sBattleOwBgLayout->secondaryTileset->tiles, gDecompressionBuffer, (NUM_TILES_TOTAL - NUM_TILES_IN_PRIMARY) * TILE_SIZE_4BPP);
+    CopyMappedMapTiles(gDecompressionBuffer, NUM_TILES_IN_PRIMARY, NUM_TILES_TOTAL - NUM_TILES_IN_PRIMARY);
 }
 
-static void BattleOverworldScene_ApplyBg3Config(void)
+static void BattleOverworldScene_ApplyBgConfig(void)
 {
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_CHARBASEINDEX, OW_BG_CHARBASE);
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_MAPBASEINDEX, OW_BG_LOWER_SCREENBASE);
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_SCREENSIZE, 0);
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_PALETTEMODE, 0);
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_PRIORITY, 3);
+    SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_CHARBASEINDEX, OW_BG_CHARBASE);
+    SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_MAPBASEINDEX, OW_BG_UPPER_SCREENBASE);
+    SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_SCREENSIZE, 0);
+    SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_PALETTEMODE, 0);
+    SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_PRIORITY, 2);
+}
+
+void BattleOverworldScene_SetBackgroundLayout(const struct MapLayout *layout, u16 x, u16 y)
+{
+    if (layout == NULL)
+        layout = &Route101_Layout;
+
+    sBattleOwBgLayout = layout;
+    if (layout->width <= OW_BG_MAP_WIDTH)
+        x = 0;
+    else if (x > layout->width - OW_BG_MAP_WIDTH)
+        x = layout->width - OW_BG_MAP_WIDTH;
+    if (layout->height <= OW_BG_MAP_HEIGHT)
+        y = 0;
+    else if (y > layout->height - OW_BG_MAP_HEIGHT)
+        y = layout->height - OW_BG_MAP_HEIGHT;
+    sBattleOwBgMapX = x;
+    sBattleOwBgMapY = y;
+}
+
+static void BattleOverworldScene_InitBackgroundAnimation(void)
+{
+    InitTilesetAnimationsForLayout(sBattleOwBgLayout);
+    sBattleOwBgTilesetAnimsActive = TRUE;
+}
+
+bool8 BattleOverworldScene_GetBackgroundOffsetForLayout(u16 layoutId, u16 *x, u16 *y)
+{
+    u8 i;
+
+    for (i = 0; i < ARRAY_COUNT(sBattleOwBgLayoutOffsets); i++)
+    {
+        if (sBattleOwBgLayoutOffsets[i].layoutId == layoutId)
+        {
+            *x = sBattleOwBgLayoutOffsets[i].x;
+            *y = sBattleOwBgLayoutOffsets[i].y;
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static void BattleOverworldScene_SetCurrentMapBackgroundLayout(void)
+{
+    u16 layoutId = gMapHeader.mapLayoutId;
+    u16 x = 0;
+    u16 y = 0;
+
+    if (gSaveBlock1Ptr != NULL && gSaveBlock1Ptr->mapLayoutId != 0)
+        layoutId = gSaveBlock1Ptr->mapLayoutId;
+
+    BattleOverworldScene_GetBackgroundOffsetForLayout(layoutId, &x, &y);
+    BattleOverworldScene_SetBackgroundLayout(gMapHeader.mapLayout, x, y);
+}
+
+static s16 GetTrainerBaselineAlignedY(const struct ObjectEventGraphicsInfo *graphicsInfo)
+{
+    return OW_SCENE_BASE_Y + ((32 - graphicsInfo->height) / 2);
+}
+
+static void BattleOverworldScene_DrawBackground(bool8 visible)
+{
+    u8 palMap[16];
+    u8 x;
+    u8 y;
+    u16 metatileId;
+    u16 *lowerBg = (u16 *)BG_SCREEN_ADDR(OW_BG_LOWER_SCREENBASE);
+    u16 *upperBg = (u16 *)BG_SCREEN_ADDR(OW_BG_UPPER_SCREENBASE);
+
+    BuildMapTileAndPaletteMaps(palMap);
+    UpdateMapPaletteMask(palMap);
+
+    CpuFill16(0, lowerBg, BG_SCREEN_SIZE);
+    CpuFill16(0, upperBg, BG_SCREEN_SIZE);
+
+    for (y = 0; y < OW_BG_MAP_HEIGHT; y++)
+    {
+        for (x = 0; x < OW_BG_MAP_WIDTH; x++)
+        {
+            metatileId = GetMapMetatileIdAt(x, y);
+            DrawMapMetatile(lowerBg, upperBg, x, y, GetMapMetatile(metatileId), palMap);
+        }
+    }
+
+    gBattle_BG2_X = 0;
+    gBattle_BG2_Y = 0;
+    gBattle_BG3_X = 0;
+    gBattle_BG3_Y = 0;
+    BattleOverworldScene_ApplyBgConfig();
+    if (visible)
+    {
+        ShowBg(OW_BG_UPPER_ID);
+        ShowBg(OW_BG_LOWER_ID);
+    }
+    else
+    {
+        HideBg(OW_BG_UPPER_ID);
+        HideBg(OW_BG_LOWER_ID);
+    }
+    SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(2) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_UPPER_SCREENBASE) | BGCNT_TXT256x256);
+    SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
+    SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
+    SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
+    SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
+    SetGpuReg(REG_OFFSET_BG3VOFS, gBattle_BG3_Y);
 }
 
 void BattleOverworldScene_LoadBackground(void)
@@ -706,49 +660,67 @@ void BattleOverworldScene_LoadBackground(void)
     if (!IsBattleOverworldSceneEnabled())
         return;
 
-    BuildRoute101TileAndPaletteMaps(palMap);
-    LoadMappedRoute101Tiles();
-    UpdateRoute101PaletteMask(palMap);
-    BattleOverworldScene_RestoreBackground();
+    BattleOverworldScene_SetCurrentMapBackgroundLayout();
+    BuildMapTileAndPaletteMaps(palMap);
+    LoadMappedMapTiles();
+    BattleOverworldScene_InitBackgroundAnimation();
+    BattleOverworldScene_DrawBackground(sSceneVisible);
 }
 
 void BattleOverworldScene_RestoreBackground(void)
 {
-    u8 x;
-    u8 y;
-    u8 palMap[16];
-    u16 metatileId;
-    u16 *lowerBg = (u16 *)BG_SCREEN_ADDR(OW_BG_LOWER_SCREENBASE);
-
     if (!IsBattleOverworldSceneEnabled())
         return;
 
-    BuildRoute101TileAndPaletteMaps(palMap);
-    UpdateRoute101PaletteMask(palMap);
+    BattleOverworldScene_DrawBackground(sSceneVisible);
+}
 
-    CpuFill16(0, lowerBg, BG_SCREEN_SIZE);
+void BattleOverworldScene_LoadDebugBackground(const struct MapLayout *layout, u16 x, u16 y)
+{
+    u8 palMap[16];
 
-    for (y = 0; y < OW_BG_ROUTE101_HEIGHT; y++)
-    {
-        for (x = 0; x < OW_BG_ROUTE101_WIDTH; x++)
-        {
-            metatileId = Route101_Layout.map[(OW_BG_ROUTE101_Y + y) * Route101_Layout.width + OW_BG_ROUTE101_X + x] & MAPGRID_METATILE_ID_MASK;
-            if (metatileId >= NUM_METATILES_TOTAL)
-                metatileId = 0;
-            DrawRoute101Metatile(lowerBg, x, y, GetRoute101Metatile(metatileId), palMap);
-        }
-    }
+    BattleOverworldScene_SetBackgroundLayout(layout, x, y);
+    BuildMapTileAndPaletteMaps(palMap);
+    LoadMappedMapTiles();
+    BattleOverworldScene_InitBackgroundAnimation();
+    BattleOverworldScene_DrawBackground(TRUE);
+}
 
-    gBattle_BG3_X = 0;
-    gBattle_BG3_Y = 0;
-    BattleOverworldScene_ApplyBg3Config();
-    if (sSceneVisible)
-        ShowBg(OW_BG_LOWER_ID);
-    else
-        HideBg(OW_BG_LOWER_ID);
-    SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
-    SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
-    SetGpuReg(REG_OFFSET_BG3VOFS, gBattle_BG3_Y);
+void BattleOverworldScene_StopBackgroundAnimation(void)
+{
+    sBattleOwBgTilesetAnimsActive = FALSE;
+}
+
+void BattleOverworldScene_UpdateBackgroundAnimation(void)
+{
+    if (sBattleOwBgTilesetAnimsActive)
+        UpdateTilesetAnimations();
+}
+
+void BattleOverworldScene_TransferBackgroundAnimation(void)
+{
+    if (sBattleOwBgTilesetAnimsActive)
+        TransferTilesetAnimsBuffer();
+}
+
+bool8 BattleOverworldScene_IsTilesetAnimActive(void)
+{
+    return sBattleOwBgTilesetAnimsActive;
+}
+
+bool8 BattleOverworldScene_GetTilesetAnimDestination(u16 sourceTile, u16 **dest)
+{
+    u16 mappedTile;
+
+    if (!sBattleOwBgTilesetAnimsActive || sourceTile >= NUM_TILES_TOTAL)
+        return FALSE;
+
+    mappedTile = sBattleOwBgTileMap[sourceTile];
+    if (mappedTile == OW_BG_TILE_UNMAPPED || mappedTile == 0)
+        return FALSE;
+
+    *dest = (u16 *)(BG_CHAR_ADDR(OW_BG_CHARBASE) + TILE_OFFSET_4BPP(mappedTile));
+    return TRUE;
 }
 
 void BattleOverworldScene_KeepBaseBackgroundVisible(void)
@@ -760,21 +732,32 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
     if (!IsBattleOverworldSceneEnabled())
         return;
 
+    gBattle_BG2_X = 0;
+    gBattle_BG2_Y = 0;
     gBattle_BG3_X = 0;
     gBattle_BG3_Y = 0;
-    BattleOverworldScene_ApplyBg3Config();
+    BattleOverworldScene_ApplyBgConfig();
     if (sSceneVisible)
+    {
+        ShowBg(OW_BG_UPPER_ID);
         ShowBg(OW_BG_LOWER_ID);
+    }
     else
+    {
+        HideBg(OW_BG_UPPER_ID);
         HideBg(OW_BG_LOWER_ID);
+    }
+    SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(2) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_UPPER_SCREENBASE) | BGCNT_TXT256x256);
     SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
+    SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
+    SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
     SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
     SetGpuReg(REG_OFFSET_BG3VOFS, gBattle_BG3_Y);
 
     winIn = GetGpuReg(REG_OFFSET_WININ);
     winOut = GetGpuReg(REG_OFFSET_WINOUT);
-    SetGpuReg(REG_OFFSET_WININ, winIn | WININ_WIN0_BG3 | WININ_WIN1_BG3);
-    SetGpuReg(REG_OFFSET_WINOUT, winOut | WINOUT_WIN01_BG3 | WINOUT_WINOBJ_BG3);
+    SetGpuReg(REG_OFFSET_WININ, winIn | WININ_WIN0_BG2 | WININ_WIN1_BG2 | WININ_WIN0_BG3 | WININ_WIN1_BG3);
+    SetGpuReg(REG_OFFSET_WINOUT, winOut | WINOUT_WIN01_BG2 | WINOUT_WINOBJ_BG2 | WINOUT_WIN01_BG3 | WINOUT_WINOBJ_BG3);
 
     if (sReshowTransitionAllowsBg3Blend && sBg3BlendFadeStarted && !gPaletteFade.active)
     {
@@ -785,9 +768,14 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
     if (!sReshowTransitionAllowsBg3Blend && sBg3BlendRefCount == 0)
     {
         bldCnt = GetGpuReg(REG_OFFSET_BLDCNT);
-        if (bldCnt & (BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3))
-            SetGpuReg(REG_OFFSET_BLDCNT, bldCnt & ~(BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3));
+        if (bldCnt & (BLDCNT_TGT1_BG2 | BLDCNT_TGT2_BG2 | BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3))
+            SetGpuReg(REG_OFFSET_BLDCNT, bldCnt & ~(BLDCNT_TGT1_BG2 | BLDCNT_TGT2_BG2 | BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3));
     }
+}
+
+bool8 BattleOverworldScene_IsProtectedBg(u8 bgId)
+{
+    return IsBattleOverworldSceneEnabled() && (bgId == OW_BG_UPPER_ID || bgId == OW_BG_LOWER_ID);
 }
 
 void BattleOverworldScene_AddBg3BlendRef(void)
@@ -976,14 +964,18 @@ static const struct BattleOwMonGfx *GetBattleOwMonGfx(u16 species)
 
 void BattleOverworldScene_Reset(void)
 {
+    u8 battler;
+
     BattleOverworldScene_ResetSpriteReferences();
     sSceneSuspended = FALSE;
     sReshowTransitionAllowsBg3Blend = FALSE;
     sBg3BlendFadeStarted = FALSE;
     sSceneVisible = FALSE;
     sBg3BlendRefCount = 0;
-    sCompositeCount = 0;
-    sCompositePalCount = 0;
+    sBattleOwBgTilesetAnimsActive = FALSE;
+    for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
+        sPreparedHealthboxPartyIds[battler] = PARTY_SIZE;
+    BattleOverworldScene_SetBackgroundLayout(&Route101_Layout, OW_BG_DEFAULT_MAP_X, OW_BG_DEFAULT_MAP_Y);
 }
 
 void BattleOverworldScene_ResetSpriteReferences(void)
@@ -998,6 +990,32 @@ void BattleOverworldScene_ResetSpriteReferences(void)
         sOwBattlerHiddenByBall[battler] = FALSE;
     }
     sCreatedTrainerSprites = FALSE;
+}
+
+void BattleOverworldScene_PrepareHealthbox(u8 battler, struct Pokemon *mon, u8 partyId)
+{
+    if (!IsBattleOverworldSceneEnabled() || battler >= MAX_BATTLERS_COUNT || partyId >= PARTY_SIZE)
+        return;
+    if (gHealthboxSpriteIds[battler] >= MAX_SPRITES)
+        return;
+
+    UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], mon, HEALTHBOX_ALL);
+    SetHealthboxSpriteInvisible(gHealthboxSpriteIds[battler]);
+    sPreparedHealthboxPartyIds[battler] = partyId;
+}
+
+bool8 BattleOverworldScene_IsHealthboxPrepared(u8 battler, u8 partyId)
+{
+    return IsBattleOverworldSceneEnabled()
+        && battler < MAX_BATTLERS_COUNT
+        && partyId < PARTY_SIZE
+        && sPreparedHealthboxPartyIds[battler] == partyId;
+}
+
+void BattleOverworldScene_ClearPreparedHealthbox(u8 battler)
+{
+    if (battler < MAX_BATTLERS_COUNT)
+        sPreparedHealthboxPartyIds[battler] = PARTY_SIZE;
 }
 
 static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerPic, u8 trainerClass)
@@ -1331,7 +1349,7 @@ void BattleOverworldScene_CreateTrainerSprites(void)
         template.images = opponentGraphicsInfo->images;
         template.anims = sAnimTable_BattleTrainerFaceWest;
         PatchObjectPalette(opponentGraphicsInfo->paletteTag, OW_TRAINER_OPPONENT_PAL_SLOT);
-        sOpponentTrainerSpriteId = CreateSprite(&template, 212, OW_SCENE_BASE_Y, 0);
+        sOpponentTrainerSpriteId = CreateSprite(&template, 212, GetTrainerBaselineAlignedY(opponentGraphicsInfo), 0);
         if (sOpponentTrainerSpriteId != MAX_SPRITES)
         {
             gSprites[sOpponentTrainerSpriteId].oam.paletteNum = OW_TRAINER_OPPONENT_PAL_SLOT;
@@ -1591,23 +1609,31 @@ bool8 BattleOverworldScene_LoadMonSpriteGfx(struct Pokemon *mon, u8 battler)
     palette = IsShinyOtIdPersonality(GetMonData(mon, MON_DATA_OT_ID), personality) ? info->shinyPal : info->pal;
 
     LoadPalette(palette, OBJ_PLTT_ID(battler), PLTT_SIZE_4BPP);
-    LoadPalette(palette, BG_PLTT_ID(8) + BG_PLTT_ID(battler), PLTT_SIZE_4BPP);
 
     return TRUE;
 }
 
 bool8 BattleOverworldScene_SetMonSpriteTemplate(u16 species, u8 battlerPosition)
 {
-    const struct BattleOwMonGfx *info;
-
     if (!IsBattleOverworldSceneEnabled())
         return FALSE;
+
+    return SetBattleOwMonSpriteTemplate(species, battlerPosition);
+}
+
+static bool8 SetBattleOwMonSpriteTemplate(u16 species, u8 battlerPosition)
+{
+    const struct BattleOwMonGfx *info;
 
     info = GetBattleOwMonGfx(species);
     if (info == NULL)
         return FALSE;
 
-    gMultiuseSpriteTemplate = gMonSpritesGfxPtr->templates[battlerPosition];
+    if (gMonSpritesGfxPtr != NULL)
+        gMultiuseSpriteTemplate = gMonSpritesGfxPtr->templates[battlerPosition];
+    else
+        gMultiuseSpriteTemplate = gBattlerSpriteTemplates[battlerPosition];
+
     gMultiuseSpriteTemplate.oam = info->oam;
     gMultiuseSpriteTemplate.anims = IsPlayerBattlerPosition(battlerPosition)
                                   ? sAnimTable_BattleOwMonFaceEast
@@ -1619,4 +1645,32 @@ bool8 BattleOverworldScene_SetMonSpriteTemplate(u16 species, u8 battlerPosition)
     gMultiuseSpriteTemplate.paletteTag = species;
 
     return TRUE;
+}
+
+u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, s16 x, s16 y, u8 subpriority)
+{
+    u8 paletteNum;
+    u8 spriteId;
+    const struct BattleOwMonGfx *info = GetBattleOwMonGfx(species);
+
+    if (info == NULL || !SetBattleOwMonSpriteTemplate(species, battlerPosition))
+        return MAX_SPRITES;
+
+    paletteNum = AllocSpritePalette(species);
+    if (paletteNum == 0xFF)
+        return MAX_SPRITES;
+
+    LoadPalette(info->pal, OBJ_PLTT_ID(paletteNum), PLTT_SIZE_4BPP);
+    spriteId = CreateSprite(&gMultiuseSpriteTemplate, x, y, subpriority);
+    if (spriteId == MAX_SPRITES)
+    {
+        FreeSpritePaletteByTag(species);
+        return MAX_SPRITES;
+    }
+
+    gSprites[spriteId].coordOffsetEnabled = FALSE;
+    gSprites[spriteId].oam.priority = 0;
+    gSprites[spriteId].callback = SpriteCallbackDummy;
+    StartSpriteAnim(&gSprites[spriteId], 0);
+    return spriteId;
 }

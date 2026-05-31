@@ -1110,7 +1110,9 @@ static void SwitchIn_TryShinyAnimShowHealthbox(void)
      && !gBattleSpritesDataPtr->healthBoxesData[gActiveBattler].ballAnimActive)
     {
         DestroySprite(&gSprites[gBattleControllerData[gActiveBattler]]);
-        UpdateHealthboxAttribute(gHealthboxSpriteIds[gActiveBattler], &gPlayerParty[gBattlerPartyIndexes[gActiveBattler]], HEALTHBOX_ALL);
+        if (!BattleOverworldScene_IsHealthboxPrepared(gActiveBattler, gBattlerPartyIndexes[gActiveBattler]))
+            UpdateHealthboxAttribute(gHealthboxSpriteIds[gActiveBattler], &gPlayerParty[gBattlerPartyIndexes[gActiveBattler]], HEALTHBOX_ALL);
+        BattleOverworldScene_ClearPreparedHealthbox(gActiveBattler);
         StartHealthboxSlideIn(gActiveBattler);
         SetHealthboxSpriteVisible(gHealthboxSpriteIds[gActiveBattler]);
         gBattlerControllerFuncs[gActiveBattler] = SwitchIn_CleanShinyAnimShowSubstitute;
@@ -2190,6 +2192,7 @@ static void PlayerHandleSwitchInAnim(void)
     ClearTemporarySpeciesSpriteData(gActiveBattler, gBattleBufferA[gActiveBattler][2]);
     gBattlerPartyIndexes[gActiveBattler] = gBattleBufferA[gActiveBattler][1];
     BattleLoadPlayerMonSpriteGfx(&gPlayerParty[gBattlerPartyIndexes[gActiveBattler]], gActiveBattler);
+    BattleOverworldScene_PrepareHealthbox(gActiveBattler, &gPlayerParty[gBattlerPartyIndexes[gActiveBattler]], gBattlerPartyIndexes[gActiveBattler]);
     gActionSelectionCursor[gActiveBattler] = 0;
     gMoveSelectionCursor[gActiveBattler] = 0;
     StartSendOutAnim(gActiveBattler, gBattleBufferA[gActiveBattler][2]);

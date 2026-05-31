@@ -42,7 +42,7 @@ static const TaskFunc sBattleIntroSlideFuncs[] =
 
 void SetAnimBgAttribute(u8 bgId, u8 attributeId, u8 value)
 {
-    if (BattleOverworldScene_IsEnabled() && bgId == 3)
+    if (BattleOverworldScene_IsProtectedBg(bgId))
     {
         BattleOverworldScene_KeepBaseBackgroundVisible();
         return;

@@ -594,6 +594,8 @@ static const struct WindowTemplate sBattleArenaWindowTemplates[] =
     DUMMY_WIN_TEMPLATE
 };
 
+static EWRAM_DATA struct WindowTemplate sOverworldBattleWindowTemplates[ARRAY_COUNT(sStandardBattleWindowTemplates)] = {0};
+
 const struct WindowTemplate *const gBattleWindowTemplates[] =
 {
     [B_WIN_TYPE_NORMAL] = sStandardBattleWindowTemplates,
@@ -726,13 +728,19 @@ void BattleInitBgsAndWindows(void)
     {
         gBattleScripting.windowsType = B_WIN_TYPE_NORMAL;
         if (BattleOverworldScene_IsEnabled())
-        {
             SetBgTilemapBuffer(1, gBattleAnimBgTilemapBuffer);
-            SetBgTilemapBuffer(2, gBattleAnimBgTilemapBuffer);
-        }
     }
 
-    InitWindows(gBattleWindowTemplates[gBattleScripting.windowsType]);
+    if (BattleOverworldScene_IsEnabled() && gBattleScripting.windowsType == B_WIN_TYPE_NORMAL)
+    {
+        CpuCopy16(sStandardBattleWindowTemplates, sOverworldBattleWindowTemplates, sizeof(sOverworldBattleWindowTemplates));
+        sOverworldBattleWindowTemplates[B_WIN_LEVEL_UP_BANNER].bg = 1;
+        InitWindows(sOverworldBattleWindowTemplates);
+    }
+    else
+    {
+        InitWindows(gBattleWindowTemplates[gBattleScripting.windowsType]);
+    }
     DeactivateAllTextPrinters();
 }
 
@@ -1137,6 +1145,9 @@ void InitLinkBattleVsScreen(u8 taskId)
 
 void DrawBattleEntryBackground(void)
 {
+    if (BattleOverworldScene_IsEnabled())
+        return;
+
     if (gBattleTypeFlags & BATTLE_TYPE_LINK)
     {
         LZDecompressVram(gBattleVSFrame_Gfx, (void *)(BG_CHAR_ADDR(1)));
