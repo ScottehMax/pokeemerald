@@ -655,7 +655,6 @@ void AnimTask_SwitchOutShrinkMon(u8 taskId)
 {
     u8 spriteId;
     bool8 isOwSprite;
-    s16 xScale;
 
     spriteId = gBattlerSpriteIds[gBattleAnimAttacker];
     isOwSprite = BattleOverworldScene_IsBattlerSprite(gBattleAnimAttacker, spriteId);
@@ -687,20 +686,14 @@ void AnimTask_SwitchOutShrinkMon(u8 taskId)
             PrepareBattlerSpriteForRotScale(spriteId, ST_OAM_OBJ_NORMAL);
         }
         gTasks[taskId].data[10] = 0x100;
-        xScale = gTasks[taskId].data[10];
-        if (isOwSprite && BattleOverworldScene_IsBattlerFacingRight(gBattleAnimAttacker))
-            xScale = -xScale;
-        SetSpriteRotScale(spriteId, xScale, gTasks[taskId].data[10], 0);
+        SetSpriteRotScale(spriteId, gTasks[taskId].data[10], gTasks[taskId].data[10], 0);
         if (isOwSprite)
             gSprites[spriteId].y2 = 0;
         gTasks[taskId].data[0]++;
         break;
     case 1:
         gTasks[taskId].data[10] += 0x30;
-        xScale = gTasks[taskId].data[10];
-        if (isOwSprite && BattleOverworldScene_IsBattlerFacingRight(gBattleAnimAttacker))
-            xScale = -xScale;
-        SetSpriteRotScale(spriteId, xScale, gTasks[taskId].data[10], 0);
+        SetSpriteRotScale(spriteId, gTasks[taskId].data[10], gTasks[taskId].data[10], 0);
         if (isOwSprite)
             gSprites[spriteId].y2 = 0;
         else
@@ -1112,21 +1105,14 @@ static void SpriteCB_Ball_MonShrink_Step(struct Sprite *sprite)
         gTasks[taskId].tState++; // MON_SHRINK_STEP
         break;
     case MON_SHRINK_STEP:
-    {
-        s16 xScale;
-
         gTasks[taskId].data[10] += 32;
-        xScale = gTasks[taskId].data[10];
-        if (BattleOverworldScene_IsBattlerFacingRight(gBattleAnimTarget))
-            xScale = -xScale;
         if (!IsBattleAnimTargetOverworldSprite() || gTasks[taskId].tMatrix != 0xFF)
-            SetSpriteRotScale(spriteId, xScale, gTasks[taskId].data[10], 0);
+            SetSpriteRotScale(spriteId, gTasks[taskId].data[10], gTasks[taskId].data[10], 0);
         gTasks[taskId].data[3] += gTasks[taskId].data[2];
         gSprites[spriteId].y2 = -gTasks[taskId].data[3] >> 8;
         if (gTasks[taskId].data[10] >= 1152)
             gTasks[taskId].tState++; // MON_SHRINK_INVISIBLE
         break;
-    }
     case MON_SHRINK_INVISIBLE:
         if (BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, spriteId))
         {

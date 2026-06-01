@@ -4,12 +4,15 @@
 #include "global.h"
 #include "pokemon.h"
 
+#define BATTLE_OW_MOVE_BG_PAL_SLOT 9
+
 void BattleOverworldScene_Reset(void);
 void BattleOverworldScene_ResetSpriteReferences(void);
 bool8 BattleOverworldScene_IsEnabled(void);
 void BattleOverworldScene_SetSuspended(bool8 suspended);
 u32 BattleOverworldScene_GetBgPaletteMask(void);
 u32 BattleOverworldScene_ApplyBgPaletteMask(u32 selectedPalettes);
+void BattleOverworldScene_SetMoveBgActive(bool8 active);
 bool8 BattleOverworldScene_IsBattlerFacingRight(u8 battler);
 void BattleOverworldScene_LoadBackground(void);
 void BattleOverworldScene_RestoreBackground(void);
@@ -34,6 +37,7 @@ bool8 BattleOverworldScene_GetPlayerTrainerSpriteCoords(s16 *x, s16 *y);
 bool8 BattleOverworldScene_CreateBattlerSprite(u8 battler);
 void BattleOverworldScene_RegisterBattlerSprite(u8 battler, u8 spriteId);
 bool8 BattleOverworldScene_IsBattlerSprite(u8 battler, u8 spriteId);
+void BattleOverworldScene_StartBattlerSpriteAnim(u8 battler, u8 spriteId, u8 animNum);
 void BattleOverworldScene_SetBattlerHiddenByBall(u8 battler, bool8 hidden);
 void BattleOverworldScene_PrepareHealthbox(u8 battler, struct Pokemon *mon, u8 partyId);
 bool8 BattleOverworldScene_IsHealthboxPrepared(u8 battler, u8 partyId);

@@ -10,7 +10,6 @@
 #include "event_object_movement.h"
 #include "fieldmap.h"
 #include "gpu_regs.h"
-#include "gba/isagbprint.h"
 #include "main.h"
 #include "palette.h"
 #include "scanline_effect.h"
@@ -278,6 +277,7 @@ static bool8 sSceneSuspended;
 static bool8 sReshowTransitionAllowsBg3Blend;
 static bool8 sBg3BlendFadeStarted;
 static bool8 sSceneVisible;
+static bool8 sMoveBgActive;
 static u8 sBg3BlendRefCount;
 static EWRAM_DATA u16 sBattleOwBgTileMap[NUM_TILES_TOTAL] = {0};
 static EWRAM_DATA u32 sBattleOwBgPaletteMask = 0;
@@ -815,6 +815,8 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
 
     if (!IsBattleOverworldSceneEnabled())
         return;
+    if (sMoveBgActive)
+        return;
 
     gBattle_BG2_X = 0;
     gBattle_BG2_Y = 0;
@@ -928,8 +930,7 @@ void BattleOverworldScene_RestoreBattlerSpriteAnim(u8 battler)
     sprite->animPaused = FALSE;
     sprite->affineAnimPaused = FALSE;
     CalcCenterToCornerVec(sprite, sprite->oam.shape, sprite->oam.size, sprite->oam.affineMode);
-    StartSpriteAnim(sprite, gBattleMonForms[battler]);
-    AnimateSprite(sprite);
+    BattleOverworldScene_StartBattlerSpriteAnim(battler, sOwBattlerSpriteIds[battler], gBattleMonForms[battler]);
 }
 
 bool8 BattleOverworldScene_IsBattlerFacingRight(u8 battler)
@@ -954,6 +955,24 @@ bool8 BattleOverworldScene_IsBattlerSprite(u8 battler, u8 spriteId)
         return FALSE;
 
     return sOwBattlerSpriteIds[battler] == spriteId && spriteId < MAX_SPRITES;
+}
+
+void BattleOverworldScene_StartBattlerSpriteAnim(u8 battler, u8 spriteId, u8 animNum)
+{
+    struct Sprite *sprite;
+
+    if (spriteId >= MAX_SPRITES)
+        return;
+
+    sprite = &gSprites[spriteId];
+    StartSpriteAnim(sprite, animNum);
+
+    if (!BattleOverworldScene_IsBattlerSprite(battler, spriteId))
+        return;
+    if (sprite->oam.affineMode & ST_OAM_AFFINE_ON_MASK)
+        return;
+
+    AnimateSprite(sprite);
 }
 
 void BattleOverworldScene_SetBattlerHiddenByBall(u8 battler, bool8 hidden)
@@ -1021,6 +1040,8 @@ u32 BattleOverworldScene_GetBgPaletteMask(void)
 {
     if (!IsBattleOverworldSceneEnabled())
         return 0;
+    if (sMoveBgActive)
+        return 1 << BATTLE_OW_MOVE_BG_PAL_SLOT;
 
     return sBattleOwBgPaletteMask;
 }
@@ -1033,9 +1054,17 @@ u32 BattleOverworldScene_ApplyBgPaletteMask(u32 selectedPalettes)
         return selectedPalettes;
 
     if (selectedPalettes & vanillaBattleBgMask)
-        selectedPalettes = (selectedPalettes & ~vanillaBattleBgMask) | sBattleOwBgPaletteMask;
+        selectedPalettes = (selectedPalettes & ~vanillaBattleBgMask) | BattleOverworldScene_GetBgPaletteMask();
 
     return selectedPalettes;
+}
+
+void BattleOverworldScene_SetMoveBgActive(bool8 active)
+{
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+
+    sMoveBgActive = active;
 }
 
 static const struct BattleOwMonGfx *GetBattleOwMonGfx(u16 species)
@@ -1055,6 +1084,7 @@ void BattleOverworldScene_Reset(void)
     sReshowTransitionAllowsBg3Blend = FALSE;
     sBg3BlendFadeStarted = FALSE;
     sSceneVisible = FALSE;
+    sMoveBgActive = FALSE;
     sBg3BlendRefCount = 0;
     sBattleOwBgTilesetAnimsActive = FALSE;
     for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
@@ -1723,9 +1753,7 @@ static bool8 SetBattleOwMonSpriteTemplate(u16 species, u8 battlerPosition)
                                   ? sAnimTable_BattleOwMonFaceEast
                                   : sAnimTable_BattleOwMonFaceWest;
     gMultiuseSpriteTemplate.images = info->images;
-    gMultiuseSpriteTemplate.affineAnims = IsPlayerBattlerPosition(battlerPosition)
-                                        ? gAffineAnims_BattleSpritePlayerSide
-                                        : gAffineAnims_BattleSpriteOpponentSide;
+    gMultiuseSpriteTemplate.affineAnims = gDummySpriteAffineAnimTable;
     gMultiuseSpriteTemplate.paletteTag = species;
 
     return TRUE;

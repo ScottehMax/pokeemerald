@@ -960,7 +960,7 @@ void HandleSpeciesGfxDataChange(u8 battlerAtk, u8 battlerDef, bool8 castform)
 
     if (castform)
     {
-        StartSpriteAnim(&gSprites[gBattlerSpriteIds[battlerAtk]], gBattleSpritesDataPtr->animationData->animArg);
+        BattleOverworldScene_StartBattlerSpriteAnim(battlerAtk, gBattlerSpriteIds[battlerAtk], gBattleSpritesDataPtr->animationData->animArg);
         paletteOffset = OBJ_PLTT_ID(battlerAtk);
         LoadPalette(gBattleStruct->castformPalette[gBattleSpritesDataPtr->animationData->animArg], paletteOffset, PLTT_SIZE_4BPP);
         gBattleMonForms[battlerAtk] = gBattleSpritesDataPtr->animationData->animArg;
@@ -1045,7 +1045,7 @@ void HandleSpeciesGfxDataChange(u8 battlerAtk, u8 battlerDef, bool8 castform)
         }
 
         gSprites[gBattlerSpriteIds[battlerAtk]].y = GetBattlerSpriteDefault_Y(battlerAtk);
-        StartSpriteAnim(&gSprites[gBattlerSpriteIds[battlerAtk]], gBattleMonForms[battlerAtk]);
+        BattleOverworldScene_StartBattlerSpriteAnim(battlerAtk, gBattlerSpriteIds[battlerAtk], gBattleMonForms[battlerAtk]);
     }
 }
 
@@ -1090,7 +1090,7 @@ void BattleLoadSubstituteOrMonSpriteGfx(u8 battler, bool8 loadMonSprite)
 void LoadBattleMonGfxAndAnimate(u8 battler, bool8 loadMonSprite, u8 spriteId)
 {
     BattleLoadSubstituteOrMonSpriteGfx(battler, loadMonSprite);
-    StartSpriteAnim(&gSprites[spriteId], gBattleMonForms[battler]);
+    BattleOverworldScene_StartBattlerSpriteAnim(battler, spriteId, gBattleMonForms[battler]);
 
     if (!loadMonSprite)
         gSprites[spriteId].y = GetSubstituteSpriteDefault_Y(battler);
@@ -1184,20 +1184,31 @@ void SetBattlerSpriteAffineMode(u8 affineMode)
     {
         if (IsBattlerSpritePresent(i))
         {
-            if (overworldScene)
-                affineMode = ST_OAM_AFFINE_OFF;
+            u8 battlerSpriteId = gBattlerSpriteIds[i];
+            u8 battlerAffineMode = affineMode;
 
-            gSprites[gBattlerSpriteIds[i]].oam.affineMode = affineMode;
-            if (affineMode == ST_OAM_AFFINE_OFF)
+            if (BattleOverworldScene_IsBattlerSprite(i, battlerSpriteId))
             {
-                gBattleSpritesDataPtr->healthBoxesData[i].matrixNum = gSprites[gBattlerSpriteIds[i]].oam.matrixNum;
-                gSprites[gBattlerSpriteIds[i]].oam.matrixNum = 0;
+                gSprites[battlerSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
+                gSprites[battlerSpriteId].oam.objMode = ST_OAM_OBJ_NORMAL;
+                gSprites[battlerSpriteId].affineAnimPaused = FALSE;
+                BattleOverworldScene_RestoreBattlerSpriteAnim(i);
+                continue;
+            }
+
+            if (overworldScene)
+                battlerAffineMode = ST_OAM_AFFINE_OFF;
+
+            gSprites[battlerSpriteId].oam.affineMode = battlerAffineMode;
+            if (battlerAffineMode == ST_OAM_AFFINE_OFF)
+            {
+                gBattleSpritesDataPtr->healthBoxesData[i].matrixNum = gSprites[battlerSpriteId].oam.matrixNum;
+                gSprites[battlerSpriteId].oam.matrixNum = 0;
             }
             else
             {
-                gSprites[gBattlerSpriteIds[i]].oam.matrixNum = gBattleSpritesDataPtr->healthBoxesData[i].matrixNum;
+                gSprites[battlerSpriteId].oam.matrixNum = gBattleSpritesDataPtr->healthBoxesData[i].matrixNum;
             }
-            BattleOverworldScene_RestoreBattlerSpriteAnim(i);
         }
     }
 

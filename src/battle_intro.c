@@ -63,6 +63,7 @@ void SetAnimBgAttribute(u8 bgId, u8 attributeId, u8 value)
             ((struct BgCnt *)&sBgCnt)->mosaic = value;
             break;
         case BG_ANIM_CHAR_BASE_BLOCK:
+            SetBgAttribute(bgId, BG_ATTR_CHARBASEINDEX, value);
             ((struct BgCnt *)&sBgCnt)->charBaseBlock = value;
             break;
         case BG_ANIM_PRIORITY:

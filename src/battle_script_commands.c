@@ -5807,6 +5807,13 @@ static void Cmd_chosenstatusanimation(void)
     }
 }
 
+static void ClearBattleYesNoWindow(void)
+{
+    ClearWindowTilemap(B_WIN_YESNO);
+    HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
+    CopyBgTilemapBufferToVram(0);
+}
+
 static void Cmd_yesnobox(void)
 {
     switch (gBattleCommunication[0])
@@ -5837,15 +5844,19 @@ static void Cmd_yesnobox(void)
         {
             gBattleCommunication[CURSOR_POSITION] = 1;
             PlaySE(SE_SELECT);
-            HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
-            gBattlescriptCurrInstr++;
+            ClearBattleYesNoWindow();
+            gBattleCommunication[0]++;
         }
         else if (JOY_NEW(A_BUTTON))
         {
             PlaySE(SE_SELECT);
-            HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
-            gBattlescriptCurrInstr++;
+            ClearBattleYesNoWindow();
+            gBattleCommunication[0]++;
         }
+        break;
+    case 2:
+        if (!IsDma3ManagerBusyWithBgCopy())
+            gBattlescriptCurrInstr++;
         break;
     }
 }

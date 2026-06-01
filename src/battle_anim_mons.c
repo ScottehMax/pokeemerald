@@ -27,6 +27,7 @@ static void AnimThrowProjectile_Step(struct Sprite *sprite);
 static void AnimBattlerTrace(struct Sprite *sprite);
 static void AnimWeatherBallUp_Step(struct Sprite *sprite);
 static u16 GetBattlerYDeltaFromSpriteId(u8 spriteId);
+static bool8 ShouldFlipBattlerRotScaleX(u8 spriteId);
 static void AnimTask_BlendPalInAndOutSetup(struct Task *task);
 static void AnimTask_AlphaFadeIn_Step(u8 taskId);
 static void AnimTask_AttackerPunchWithTrace_Step(u8 taskId);
@@ -941,7 +942,10 @@ void GetBattleAnimBg1Data(struct BattleAnimBgData *out)
         out->bgTilemap = (u16 *)gBattleAnimBgTilemapBuffer;
         out->paletteId = BG_ANIM_PAL_1;
         out->bgId = 1;
-        out->tilesOffset = 0x200;
+        if (BattleOverworldScene_IsEnabled())
+            out->tilesOffset = 0x100;
+        else
+            out->tilesOffset = 0x200;
         out->unused = 0;
     }
 }
@@ -1032,8 +1036,8 @@ void AnimLoadCompressedBgTilemap(u32 bgId, const void *src)
 void AnimLoadCompressedBgTilemapHandleContest(struct BattleAnimBgData *data, const void *src, bool32 largeScreen)
 {
     InitAnimBgTilemapBuffer(data->bgId, src);
-    if (IsContest() == TRUE)
-        RelocateBattleBgPal(data->paletteId, data->bgTilemap, 0, largeScreen);
+    if (IsContest() == TRUE || BattleOverworldScene_IsEnabled())
+        RelocateBattleBgPal(data->paletteId, data->bgTilemap, data->tilesOffset, largeScreen);
     CopyBgTilemapBufferToVram(data->bgId);
 }
 
@@ -1290,6 +1294,8 @@ void SetSpriteRotScale(u8 spriteId, s16 xScale, s16 yScale, u16 rotation)
     src.rotation = rotation;
     if (ShouldRotScaleSpeciesBeFlipped())
         src.xScale = -src.xScale;
+    if (ShouldFlipBattlerRotScaleX(spriteId))
+        src.xScale = -src.xScale;
     i = gSprites[spriteId].oam.matrixNum;
     ObjAffineSet(&src, &matrix, 1, 2);
     gOamMatrices[i].a = matrix.a;
@@ -1314,22 +1320,60 @@ static bool8 ShouldRotScaleSpeciesBeFlipped(void)
     }
 }
 
-void PrepareBattlerSpriteForRotScale(u8 spriteId, u8 objMode)
+static bool8 ShouldFlipBattlerRotScaleX(u8 spriteId)
 {
     u8 battler = gSprites[spriteId].data[0];
 
+    return BattleOverworldScene_IsBattlerSprite(battler, spriteId)
+        && BattleOverworldScene_IsBattlerFacingRight(battler);
+}
+
+void PrepareBattlerSpriteForRotScale(u8 spriteId, u8 objMode)
+{
+    u8 battler = gSprites[spriteId].data[0];
+    bool8 overworldBattler = BattleOverworldScene_IsBattlerSprite(battler, spriteId);
+    bool8 wasAffine = gSprites[spriteId].oam.affineMode;
+
+    if (overworldBattler && !wasAffine)
+        BattleOverworldScene_RestoreBattlerSpriteAnim(battler);
     if (IsContest() || IsBattlerSpriteVisible(battler))
         gSprites[spriteId].invisible = FALSE;
     gSprites[spriteId].oam.objMode = objMode;
     gSprites[spriteId].affineAnimPaused = TRUE;
-    if (!IsContest() && !gSprites[spriteId].oam.affineMode)
+    if (overworldBattler && !gSprites[spriteId].oam.affineMode)
+    {
+        u8 matrixNum = AllocOamMatrix();
+
+        if (matrixNum == 0xFF)
+            return;
+
+        gSprites[spriteId].oam.matrixNum = matrixNum;
+    }
+    else if (!IsContest() && !gSprites[spriteId].oam.affineMode)
+    {
         gSprites[spriteId].oam.matrixNum = gBattleSpritesDataPtr->healthBoxesData[battler].matrixNum;
+    }
     gSprites[spriteId].oam.affineMode = ST_OAM_AFFINE_DOUBLE;
+    if (overworldBattler)
+        SetSpriteRotScale(spriteId, 0x100, 0x100, 0);
     CalcCenterToCornerVec(&gSprites[spriteId], gSprites[spriteId].oam.shape, gSprites[spriteId].oam.size, gSprites[spriteId].oam.affineMode);
 }
 
 void ResetSpriteRotScale(u8 spriteId)
 {
+    if (BattleOverworldScene_IsBattlerSprite(gSprites[spriteId].data[0], spriteId))
+    {
+        u8 matrixNum = gSprites[spriteId].oam.matrixNum;
+
+        SetSpriteRotScale(spriteId, 0x100, 0x100, 0);
+        gSprites[spriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
+        gSprites[spriteId].oam.objMode = ST_OAM_OBJ_NORMAL;
+        gSprites[spriteId].affineAnimPaused = FALSE;
+        FreeOamMatrix(matrixNum);
+        BattleOverworldScene_RestoreBattlerSpriteAnim(gSprites[spriteId].data[0]);
+        return;
+    }
+
     SetSpriteRotScale(spriteId, 0x100, 0x100, 0);
     gSprites[spriteId].oam.affineMode = ST_OAM_AFFINE_NORMAL;
     gSprites[spriteId].oam.objMode = ST_OAM_OBJ_NORMAL;
@@ -1365,6 +1409,8 @@ void TrySetSpriteRotScale(struct Sprite *sprite, bool8 recalcCenterVector, s16 x
         src.yScale = yScale;
         src.rotation = rotation;
         if (ShouldRotScaleSpeciesBeFlipped())
+            src.xScale = -src.xScale;
+        if (sprite >= gSprites && sprite < gSprites + MAX_SPRITES && ShouldFlipBattlerRotScaleX(sprite - gSprites))
             src.xScale = -src.xScale;
         i = sprite->oam.matrixNum;
         ObjAffineSet(&src, &matrix, 1, 2);

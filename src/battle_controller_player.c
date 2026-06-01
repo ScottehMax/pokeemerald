@@ -56,6 +56,7 @@ static void PlayerHandlePrintString(void);
 static void PlayerHandlePrintSelectionString(void);
 static void PlayerHandleChooseAction(void);
 static void PlayerHandleYesNoBox(void);
+static void ClearYesNoBox(void);
 static void PlayerHandleChooseMove(void);
 static void PlayerHandleChooseItem(void);
 static void PlayerHandleChoosePokemon(void);
@@ -1440,7 +1441,7 @@ static void PlayerHandleYesNoInput(void)
     }
     if (JOY_NEW(A_BUTTON))
     {
-        HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
+        ClearYesNoBox();
         PlaySE(SE_SELECT);
 
         if (gMultiUsePlayerCursor != 0)
@@ -1452,10 +1453,17 @@ static void PlayerHandleYesNoInput(void)
     }
     if (JOY_NEW(B_BUTTON))
     {
-        HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
+        ClearYesNoBox();
         PlaySE(SE_SELECT);
         PlayerBufferExecCompleted();
     }
+}
+
+static void ClearYesNoBox(void)
+{
+    ClearWindowTilemap(B_WIN_YESNO);
+    HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
+    CopyBgTilemapBufferToVram(0);
 }
 
 static void MoveSelectionDisplayMoveNames(void)
