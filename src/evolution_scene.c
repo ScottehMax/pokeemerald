@@ -2,6 +2,7 @@
 #include "malloc.h"
 #include "battle.h"
 #include "battle_message.h"
+#include "battle_overworld_scene.h"
 #include "bg.h"
 #include "data.h"
 #include "decompress.h"
@@ -65,7 +66,10 @@ static bool32 EvoScene_IsMonAnimFinished(u8 monSpriteId);
 static void StartBgAnimation(bool8 isLink);
 static void StopBgAnimation(void);
 static void Task_AnimateBg(u8 taskId);
+static void PrepareBgForAnim(u8 bgId);
+static void HideBgAnimLayers(bool8 isLink);
 static void RestoreBgAfterAnim(void);
+static u32 GetEvolutionBgPaletteFadeMask(u32 selectedPalettes);
 
 static const u16 sUnusedPal1[] = INCGFX_U16("graphics/evolution_scene/unused_1.pal", ".gbapal");
 static const u32 sBgAnim_Gfx[] = INCGFX_U32("graphics/evolution_scene/bg.png", ".4bpp.lz");
@@ -632,6 +636,7 @@ enum {
 static void Task_EvolutionScene(u8 taskId)
 {
     u32 var;
+    u32 bgPalettes;
     struct Pokemon *mon = &gPlayerParty[gTasks[taskId].tPartyId];
 
     // check if B Button was held, so the evolution gets stopped
@@ -685,7 +690,7 @@ static void Task_EvolutionScene(u8 taskId)
             // Start music, fade background to black
             PlayNewMapMusic(MUS_EVOLUTION);
             gTasks[taskId].tState++;
-            BeginNormalPaletteFade(0x1C, 4, 0, 0x10, RGB_BLACK);
+            BeginNormalPaletteFade(GetEvolutionBgPaletteFadeMask(0x1C), 4, 0, 0x10, RGB_BLACK);
         }
         break;
     case EVOSTATE_START_BG_AND_SPARKLE_SPIRAL:
@@ -743,7 +748,10 @@ static void Task_EvolutionScene(u8 taskId)
             m4aMPlayAllStop();
             memcpy(&gPlttBufferUnfaded[BG_PLTT_ID(2)], sEvoStructPtr->savedPalette, sizeof(sEvoStructPtr->savedPalette));
             RestoreBgAfterAnim();
-            BeginNormalPaletteFade(0x1C, 0, 0x10, 0, RGB_BLACK);
+            bgPalettes = GetEvolutionBgPaletteFadeMask(0x1C);
+            BeginNormalPaletteFade(bgPalettes, 0, 0x10, 0, RGB_BLACK);
+            if (BattleOverworldScene_IsEnabled())
+                BlendPalettes(bgPalettes, 16, RGB_BLACK);
             gTasks[taskId].tState++;
         }
         break;
@@ -824,7 +832,7 @@ static void Task_EvolutionScene(u8 taskId)
         if (!gTasks[sEvoGraphicsTaskId].isActive)
         {
             m4aMPlayAllStop();
-            BeginNormalPaletteFade(0x6001C, 0, 0x10, 0, RGB_WHITE);
+            BeginNormalPaletteFade(GetEvolutionBgPaletteFadeMask(0x6001C), 0, 0x10, 0, RGB_WHITE);
             gTasks[taskId].tState++;
         }
         break;
@@ -1109,7 +1117,7 @@ static void Task_TradeEvolutionScene(u8 taskId)
         {
             PlayBGM(MUS_EVOLUTION);
             gTasks[taskId].tState++;
-            BeginNormalPaletteFade(0x1C, 4, 0, 0x10, RGB_BLACK);
+            BeginNormalPaletteFade(GetEvolutionBgPaletteFadeMask(0x1C), 4, 0, 0x10, RGB_BLACK);
         }
         break;
     case T_EVOSTATE_START_BG_AND_SPARKLE_SPIRAL:
@@ -1229,7 +1237,7 @@ static void Task_TradeEvolutionScene(u8 taskId)
         if (!gTasks[sEvoGraphicsTaskId].isActive)
         {
             m4aMPlayAllStop();
-            BeginNormalPaletteFade((1 << (gSprites[sEvoStructPtr->preEvoSpriteId].oam.paletteNum + 16)) | (0x4001C), 0, 0x10, 0, RGB_WHITE);
+            BeginNormalPaletteFade(GetEvolutionBgPaletteFadeMask((1 << (gSprites[sEvoStructPtr->preEvoSpriteId].oam.paletteNum + 16)) | (0x4001C)), 0, 0x10, 0, RGB_WHITE);
             gTasks[taskId].tState++;
         }
         break;
@@ -1566,6 +1574,7 @@ static void Task_AnimateBg(u8 taskId)
 
     if (!FuncIsActiveTask(Task_UpdateBgPalette))
     {
+        HideBgAnimLayers(gTasks[taskId].tIsLink);
         DestroyTask(taskId);
 
         *inner_X = 0;
@@ -1605,6 +1614,8 @@ static void StartBgAnimation(bool8 isLink)
 
     LoadPalette(sBgAnim_Intro_Pal, BG_PLTT_ID(10), PLTT_SIZE_4BPP);
 
+    PrepareBgForAnim(innerBgId);
+    PrepareBgForAnim(outerBgId);
     DecompressAndLoadBgGfxUsingHeap(1, sBgAnim_Gfx, FALSE, 0, 0);
     CopyToBgTilemapBuffer(innerBgId, sBgAnim_Inner_Tilemap, 0, 0);
     CopyToBgTilemapBuffer(outerBgId, sBgAnim_Outer_Tilemap, 0, 0);
@@ -1659,15 +1670,52 @@ static void StopBgAnimation(void)
     RestoreBgAfterAnim();
 }
 
+static void PrepareBgForAnim(u8 bgId)
+{
+    if (!BattleOverworldScene_IsEnabled())
+        return;
+    if (bgId != 2)
+        return;
+
+    SetBgTilemapBuffer(bgId, gBattleAnimBgTilemapBuffer);
+    SetBgAttribute(bgId, BG_ATTR_CHARBASEINDEX, GetBattleBgTemplateData(bgId, 1));
+    SetBgAttribute(bgId, BG_ATTR_MAPBASEINDEX, GetBattleBgTemplateData(bgId, 2));
+    SetBgAttribute(bgId, BG_ATTR_SCREENSIZE, GetBattleBgTemplateData(bgId, 3));
+    SetBgAttribute(bgId, BG_ATTR_PALETTEMODE, GetBattleBgTemplateData(bgId, 4));
+}
+
+static void HideBgAnimLayers(bool8 isLink)
+{
+    if (!BattleOverworldScene_IsEnabled())
+        return;
+
+    if (!isLink)
+        SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_ON | DISPCNT_BG0_ON | DISPCNT_OBJ_1D_MAP);
+}
+
+static u32 GetEvolutionBgPaletteFadeMask(u32 selectedPalettes)
+{
+    return BattleOverworldScene_ApplyBgPaletteMask(selectedPalettes);
+}
+
 static void RestoreBgAfterAnim(void)
 {
     SetGpuReg(REG_OFFSET_BLDCNT, 0);
     gBattle_BG1_X = 0;
     gBattle_BG1_Y = 0;
     gBattle_BG2_X = 0;
+    gBattle_BG2_Y = 0;
     SetBgAttribute(1, BG_ATTR_PRIORITY, GetBattleBgTemplateData(1, 5));
     SetBgAttribute(2, BG_ATTR_PRIORITY, GetBattleBgTemplateData(2, 5));
-    SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_ON | DISPCNT_BG3_ON | DISPCNT_BG0_ON | DISPCNT_OBJ_1D_MAP);
+    if (BattleOverworldScene_IsEnabled())
+    {
+        BattleOverworldScene_RestoreBackground();
+        SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_ON | DISPCNT_BG3_ON | DISPCNT_BG2_ON | DISPCNT_BG0_ON | DISPCNT_OBJ_1D_MAP);
+    }
+    else
+    {
+        SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_ON | DISPCNT_BG3_ON | DISPCNT_BG0_ON | DISPCNT_OBJ_1D_MAP);
+    }
     Free(sBgAnimPal);
 }
 

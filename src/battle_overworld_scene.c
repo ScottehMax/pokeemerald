@@ -304,6 +304,7 @@ static const struct BattleOwBgLayoutOffset sBattleOwBgLayoutOffsets[] =
     {LAYOUT_ROUTE102, 7, 1},
     {LAYOUT_ROUTE103, 3, 7},
     {LAYOUT_ROUTE104, 15, 21},
+    {LAYOUT_ROUTE106, 51, 10},
     {LAYOUT_ROUTE109, 15, 16},
     {LAYOUT_ROUTE110, 14, 36},
     {LAYOUT_ROUTE111, 0, 66},
@@ -328,6 +329,16 @@ static const struct BattleOwBgLayoutOffset sBattleOwBgLayoutOffsets[] =
     {LAYOUT_ROUTE134, 42, 12},
 
     {LAYOUT_DEWFORD_TOWN_GYM, 2, 18},
+
+    {LAYOUT_METEOR_FALLS_1F_1R, 14, 14},
+
+    {LAYOUT_GRANITE_CAVE_1F, 16, 3},
+    {LAYOUT_GRANITE_CAVE_B1F, 4, 9},
+    {LAYOUT_GRANITE_CAVE_B2F, 8, 11},
+
+    {LAYOUT_PETALBURG_WOODS, 8, 14},
+
+    {LAYOUT_MT_CHIMNEY, 9, 13},
 };
 
 static bool8 IsPlayerBattlerPosition(u8 battlerPosition)
