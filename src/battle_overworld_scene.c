@@ -767,6 +767,7 @@ void BattleOverworldScene_LoadDebugBackground(const struct MapLayout *layout, u1
     BuildMapTileAndPaletteMaps(palMap);
     LoadMappedMapTiles();
     BattleOverworldScene_InitBackgroundAnimation();
+    sSceneVisible = TRUE;
     BattleOverworldScene_DrawBackground(TRUE);
 }
 
