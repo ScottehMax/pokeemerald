@@ -37,9 +37,10 @@ extern const struct MapLayout *const gMapLayouts[];
 #define OW_BATTLE_PREVIEW_MAP_WIDTH 15
 #define OW_BATTLE_PREVIEW_MAP_HEIGHT 10
 #define OW_BATTLE_PREVIEW_BASE_Y 56
+#define OW_BATTLE_DEBUG_FONT FONT_SMALL_NARROW
+#define OW_BATTLE_DEBUG_PALETTE 1
+#define OW_BATTLE_DEBUG_ROW_HEIGHT 9
 #define OW_BATTLE_ANIM_BASE_Y OW_BATTLE_PREVIEW_BASE_Y
-#define OW_BATTLE_ANIM_FONT FONT_SMALL_NARROW
-#define OW_BATTLE_ANIM_ROW_HEIGHT 9
 
 enum
 {
@@ -57,7 +58,7 @@ static void InitOwBattlePreview(void);
 static void InitOwBattleAnimPreview(void);
 static void DrawOwBattlePreviewText(void);
 static void DrawOwBattleAnimText(void);
-static void PrintOwBattleAnimText(const u8 *str, u8 x, u8 y);
+static void PrintOwBattleDebugText(const u8 *str, u8 x, u8 y);
 static void RefreshOwBattlePreview(void);
 static void ClampOwBattlePreviewOffset(void);
 static const struct MapLayout *GetOwBattlePreviewLayout(void);
@@ -173,7 +174,7 @@ static const struct WindowTemplate sDebugMenuWindowTemplates[] =
         .tilemapTop = 2,
         .width = 26,
         .height = 8,
-        .paletteNum = 1,
+        .paletteNum = OW_BATTLE_DEBUG_PALETTE,
         .baseBlock = 1
     },
     [WIN_DEBUG_PREVIEW] = {
@@ -182,7 +183,7 @@ static const struct WindowTemplate sDebugMenuWindowTemplates[] =
         .tilemapTop = 0,
         .width = 30,
         .height = 10,
-        .paletteNum = 1,
+        .paletteNum = OW_BATTLE_DEBUG_PALETTE,
         .baseBlock = 1
     },
     DUMMY_WIN_TEMPLATE
@@ -223,11 +224,10 @@ void CB2_InitDebugMenu(void)
 {
     SetVBlankCallback(NULL);
     InitDebugMenuBgsAndWindows();
-    FillWindowPixelBuffer(WIN_DEBUG_MENU, PIXEL_FILL(1));
+    DrawStdWindowFrame(WIN_DEBUG_MENU, FALSE);
     AddTextPrinterParameterized(WIN_DEBUG_MENU, FONT_NORMAL, sText_Debug, 8, 1, TEXT_SKIP_DRAW, NULL);
     PrintMenuTable(WIN_DEBUG_MENU, ARRAY_COUNT(sDebugMenuActions), sDebugMenuActions);
     InitMenuInUpperLeftCornerNormal(WIN_DEBUG_MENU, ARRAY_COUNT(sDebugMenuActions), 0);
-    PutWindowTilemap(WIN_DEBUG_MENU);
     CopyWindowToVram(WIN_DEBUG_MENU, COPYWIN_FULL);
     CreateTask(Task_DebugMenuInput, 0);
     BeginNormalPaletteFade(PALETTES_ALL, 0, 16, 0, RGB_BLACK);
@@ -243,6 +243,9 @@ static void InitDebugMenuBgsAndWindows(void)
     DmaClearLarge16(3, (void *)VRAM, VRAM_SIZE, 0x1000);
     DmaClear32(3, OAM, OAM_SIZE);
     DmaClear16(3, PLTT, PLTT_SIZE);
+    SetGpuReg(REG_OFFSET_BLDCNT, 0);
+    SetGpuReg(REG_OFFSET_BLDALPHA, 0);
+    SetGpuReg(REG_OFFSET_BLDY, 0);
     ResetPaletteFade();
     ResetTasks();
     ResetSpriteData();
@@ -250,7 +253,8 @@ static void InitDebugMenuBgsAndWindows(void)
     ScanlineEffect_Stop();
     InitWindows(sDebugMenuWindowTemplates);
     DeactivateAllTextPrinters();
-    Menu_LoadStdPalAt(BG_PLTT_ID(1));
+    LoadMessageBoxAndBorderGfx();
+    Menu_LoadStdPalAt(BG_PLTT_ID(OW_BATTLE_DEBUG_PALETTE));
     SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_ON | DISPCNT_OBJ_1D_MAP);
     ShowBg(0);
     HideBg(3);
@@ -289,7 +293,7 @@ static void Task_DebugMenuInput(u8 taskId)
 static void InitOwBattlePreview(void)
 {
     FillBgTilemapBufferRect(0, 0, 0, 0, 32, 32, 0);
-    ClearWindowTilemap(WIN_DEBUG_MENU);
+    ClearStdWindowAndFrame(WIN_DEBUG_MENU, FALSE);
     HideBg(0);
     ShowBg(3);
     sOwBattlePreviewInitialized = FALSE;
@@ -393,10 +397,11 @@ static void DrawOwBattlePreviewText(void)
 {
     const struct MapLayout *layout = GetOwBattlePreviewLayout();
     u8 text[4];
+    u8 y;
 
     if (!sOwBattlePreviewHelpVisible)
     {
-        FillWindowPixelBuffer(WIN_DEBUG_PREVIEW, PIXEL_FILL(1));
+        FillWindowPixelBuffer(WIN_DEBUG_PREVIEW, PIXEL_FILL(0));
         ClearWindowTilemap(WIN_DEBUG_PREVIEW);
         CopyWindowToVram(WIN_DEBUG_PREVIEW, COPYWIN_GFX);
         CopyBgTilemapBufferToVram(0);
@@ -404,28 +409,35 @@ static void DrawOwBattlePreviewText(void)
     }
 
     PutWindowTilemap(WIN_DEBUG_PREVIEW);
-    FillWindowPixelBuffer(WIN_DEBUG_PREVIEW, PIXEL_FILL(1));
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, sText_Id, 0, 0, TEXT_SKIP_DRAW, NULL);
+    FillWindowPixelBuffer(WIN_DEBUG_PREVIEW, PIXEL_FILL(0));
+
+    y = 0;
+    PrintOwBattleDebugText(sText_Id, 0, y);
     ConvertIntToDecimalStringN(text, sOwBattlePreviewLayoutId, STR_CONV_MODE_LEADING_ZEROS, 3);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, text, 16, 0, TEXT_SKIP_DRAW, NULL);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, sText_Slash, 40, 0, TEXT_SKIP_DRAW, NULL);
+    PrintOwBattleDebugText(text, 16, y);
+    PrintOwBattleDebugText(sText_Slash, 40, y);
     ConvertIntToDecimalStringN(text, OW_BATTLE_PREVIEW_LAYOUT_COUNT, STR_CONV_MODE_LEADING_ZEROS, 3);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, text, 48, 0, TEXT_SKIP_DRAW, NULL);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, GetOwBattlePreviewLayoutName(sOwBattlePreviewLayoutId), 80, 0, TEXT_SKIP_DRAW, NULL);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, sText_X, 0, 16, TEXT_SKIP_DRAW, NULL);
+    PrintOwBattleDebugText(text, 48, y);
+    PrintOwBattleDebugText(GetOwBattlePreviewLayoutName(sOwBattlePreviewLayoutId), 80, y);
+
+    y += OW_BATTLE_DEBUG_ROW_HEIGHT;
+    PrintOwBattleDebugText(sText_X, 0, y);
     ConvertIntToDecimalStringN(text, sOwBattlePreviewX, STR_CONV_MODE_LEFT_ALIGN, 3);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, text, 16, 16, TEXT_SKIP_DRAW, NULL);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, sText_Y, 48, 16, TEXT_SKIP_DRAW, NULL);
+    PrintOwBattleDebugText(text, 16, y);
+    PrintOwBattleDebugText(sText_Y, 48, y);
     ConvertIntToDecimalStringN(text, sOwBattlePreviewY, STR_CONV_MODE_LEFT_ALIGN, 3);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, text, 64, 16, TEXT_SKIP_DRAW, NULL);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, sText_Size, 96, 16, TEXT_SKIP_DRAW, NULL);
+    PrintOwBattleDebugText(text, 64, y);
+    PrintOwBattleDebugText(sText_Size, 96, y);
     ConvertIntToDecimalStringN(text, layout->width, STR_CONV_MODE_LEFT_ALIGN, 3);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, text, 136, 16, TEXT_SKIP_DRAW, NULL);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, sText_Times, 160, 16, TEXT_SKIP_DRAW, NULL);
+    PrintOwBattleDebugText(text, 136, y);
+    PrintOwBattleDebugText(sText_Times, 160, y);
     ConvertIntToDecimalStringN(text, layout->height, STR_CONV_MODE_LEFT_ALIGN, 3);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, text, 168, 16, TEXT_SKIP_DRAW, NULL);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, sText_PreviewHelp1, 0, 32, TEXT_SKIP_DRAW, NULL);
-    AddTextPrinterParameterized(WIN_DEBUG_PREVIEW, FONT_NORMAL, sText_PreviewHelp2, 0, 48, TEXT_SKIP_DRAW, NULL);
+    PrintOwBattleDebugText(text, 168, y);
+
+    y += OW_BATTLE_DEBUG_ROW_HEIGHT;
+    PrintOwBattleDebugText(sText_PreviewHelp1, 0, y);
+    y += OW_BATTLE_DEBUG_ROW_HEIGHT;
+    PrintOwBattleDebugText(sText_PreviewHelp2, 0, y);
     CopyWindowToVram(WIN_DEBUG_PREVIEW, sOwBattlePreviewInitialized ? COPYWIN_GFX : COPYWIN_FULL);
     CopyBgTilemapBufferToVram(0);
 }
@@ -485,7 +497,7 @@ enum
 static void InitOwBattleAnimPreview(void)
 {
     FillBgTilemapBufferRect(0, 0, 0, 0, 32, 32, 0);
-    ClearWindowTilemap(WIN_DEBUG_MENU);
+    ClearStdWindowAndFrame(WIN_DEBUG_MENU, FALSE);
     HideBg(0);
     ShowBg(2);
     ShowBg(3);
@@ -741,52 +753,52 @@ static void DrawOwBattleAnimText(void)
     FillWindowPixelBuffer(WIN_DEBUG_PREVIEW, PIXEL_FILL(0));
 
     y = 0;
-    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_PLAYER_MON ? gText_SelectorArrow2 : gText_Space, 0, y);
-    PrintOwBattleAnimText(sText_PlayerMon, 8, y);
+    PrintOwBattleDebugText(sOwBattleAnimCursor == OW_ANIM_ROW_PLAYER_MON ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleDebugText(sText_PlayerMon, 8, y);
     ConvertIntToDecimalStringN(text, sOwBattleAnimPlayerSpecies, STR_CONV_MODE_LEFT_ALIGN, 3);
-    PrintOwBattleAnimText(text, 56, y);
-    PrintOwBattleAnimText(gSpeciesNames[sOwBattleAnimPlayerSpecies], 88, y);
+    PrintOwBattleDebugText(text, 56, y);
+    PrintOwBattleDebugText(gSpeciesNames[sOwBattleAnimPlayerSpecies], 88, y);
 
-    y += OW_BATTLE_ANIM_ROW_HEIGHT;
-    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_OPPONENT_MON ? gText_SelectorArrow2 : gText_Space, 0, y);
-    PrintOwBattleAnimText(sText_OpponentMon, 8, y);
+    y += OW_BATTLE_DEBUG_ROW_HEIGHT;
+    PrintOwBattleDebugText(sOwBattleAnimCursor == OW_ANIM_ROW_OPPONENT_MON ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleDebugText(sText_OpponentMon, 8, y);
     ConvertIntToDecimalStringN(text, sOwBattleAnimOpponentSpecies, STR_CONV_MODE_LEFT_ALIGN, 3);
-    PrintOwBattleAnimText(text, 56, y);
-    PrintOwBattleAnimText(gSpeciesNames[sOwBattleAnimOpponentSpecies], 88, y);
+    PrintOwBattleDebugText(text, 56, y);
+    PrintOwBattleDebugText(gSpeciesNames[sOwBattleAnimOpponentSpecies], 88, y);
 
-    y += OW_BATTLE_ANIM_ROW_HEIGHT;
-    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_PLAYER_TRAINER ? gText_SelectorArrow2 : gText_Space, 0, y);
-    PrintOwBattleAnimText(sText_PlayerTrainer, 8, y);
+    y += OW_BATTLE_DEBUG_ROW_HEIGHT;
+    PrintOwBattleDebugText(sOwBattleAnimCursor == OW_ANIM_ROW_PLAYER_TRAINER ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleDebugText(sText_PlayerTrainer, 8, y);
     ConvertIntToDecimalStringN(text, sOwBattleAnimPlayerTrainerGfx, STR_CONV_MODE_LEFT_ALIGN, 3);
-    PrintOwBattleAnimText(text, 64, y);
+    PrintOwBattleDebugText(text, 64, y);
 
-    y += OW_BATTLE_ANIM_ROW_HEIGHT;
-    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_OPPONENT_TRAINER ? gText_SelectorArrow2 : gText_Space, 0, y);
-    PrintOwBattleAnimText(sText_OpponentTrainer, 8, y);
+    y += OW_BATTLE_DEBUG_ROW_HEIGHT;
+    PrintOwBattleDebugText(sOwBattleAnimCursor == OW_ANIM_ROW_OPPONENT_TRAINER ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleDebugText(sText_OpponentTrainer, 8, y);
     ConvertIntToDecimalStringN(text, sOwBattleAnimOpponentTrainerGfx, STR_CONV_MODE_LEFT_ALIGN, 3);
-    PrintOwBattleAnimText(text, 64, y);
+    PrintOwBattleDebugText(text, 64, y);
 
-    y += OW_BATTLE_ANIM_ROW_HEIGHT;
-    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_MOVE ? gText_SelectorArrow2 : gText_Space, 0, y);
-    PrintOwBattleAnimText(sText_Move, 8, y);
+    y += OW_BATTLE_DEBUG_ROW_HEIGHT;
+    PrintOwBattleDebugText(sOwBattleAnimCursor == OW_ANIM_ROW_MOVE ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleDebugText(sText_Move, 8, y);
     ConvertIntToDecimalStringN(text, sOwBattleAnimMove, STR_CONV_MODE_LEFT_ALIGN, 3);
-    PrintOwBattleAnimText(text, 56, y);
-    PrintOwBattleAnimText(gMoveNames[sOwBattleAnimMove], 88, y);
+    PrintOwBattleDebugText(text, 56, y);
+    PrintOwBattleDebugText(gMoveNames[sOwBattleAnimMove], 88, y);
 
-    y += OW_BATTLE_ANIM_ROW_HEIGHT;
-    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_SIDE ? gText_SelectorArrow2 : gText_Space, 0, y);
-    PrintOwBattleAnimText(sText_Side, 8, y);
-    PrintOwBattleAnimText(sOwBattleAnimAttacker == B_POSITION_PLAYER_LEFT ? sText_Player : sText_Opponent, 56, y);
+    y += OW_BATTLE_DEBUG_ROW_HEIGHT;
+    PrintOwBattleDebugText(sOwBattleAnimCursor == OW_ANIM_ROW_SIDE ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleDebugText(sText_Side, 8, y);
+    PrintOwBattleDebugText(sOwBattleAnimAttacker == B_POSITION_PLAYER_LEFT ? sText_Player : sText_Opponent, 56, y);
 
-    PrintOwBattleAnimText(sText_AnimHelp1, 128, 32);
-    PrintOwBattleAnimText(sText_AnimHelp2, 128, 44);
+    PrintOwBattleDebugText(sText_AnimHelp1, 128, 32);
+    PrintOwBattleDebugText(sText_AnimHelp2, 128, 44);
     CopyWindowToVram(WIN_DEBUG_PREVIEW, sOwBattleAnimInitialized ? COPYWIN_GFX : COPYWIN_FULL);
     CopyBgTilemapBufferToVram(0);
 }
 
-static void PrintOwBattleAnimText(const u8 *str, u8 x, u8 y)
+static void PrintOwBattleDebugText(const u8 *str, u8 x, u8 y)
 {
-    AddTextPrinterParameterized4(WIN_DEBUG_PREVIEW, OW_BATTLE_ANIM_FONT, x, y, 0, 0, sTextColor_TransparentBg, TEXT_SKIP_DRAW, str);
+    AddTextPrinterParameterized4(WIN_DEBUG_PREVIEW, OW_BATTLE_DEBUG_FONT, x, y, 0, 0, sTextColor_TransparentBg, TEXT_SKIP_DRAW, str);
 }
 
 static void ChangeOwBattleAnimSelection(s16 delta)
