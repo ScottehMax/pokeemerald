@@ -274,11 +274,8 @@ static u8 sOwBattlerSpriteIds[MAX_BATTLERS_COUNT];
 static bool8 sOwBattlerHiddenByBall[MAX_BATTLERS_COUNT];
 static bool8 sCreatedTrainerSprites;
 static bool8 sSceneSuspended;
-static bool8 sReshowTransitionAllowsBg3Blend;
-static bool8 sBg3BlendFadeStarted;
 static bool8 sSceneVisible;
 static bool8 sMoveBgActive;
-static u8 sBg3BlendRefCount;
 static EWRAM_DATA u16 sBattleOwBgTileMap[NUM_TILES_TOTAL] = {0};
 static EWRAM_DATA u32 sBattleOwBgPaletteMask = 0;
 // BG palettes 8 and 9 are used as battle-animation scratch palettes for battler BG masks.
@@ -810,7 +807,6 @@ bool8 BattleOverworldScene_GetTilesetAnimDestination(u16 sourceTile, u16 **dest)
 
 void BattleOverworldScene_KeepBaseBackgroundVisible(void)
 {
-    u16 bldCnt;
     u16 winIn;
     u16 winOut;
 
@@ -846,18 +842,6 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
     SetGpuReg(REG_OFFSET_WININ, winIn | WININ_WIN0_BG2 | WININ_WIN1_BG2 | WININ_WIN0_BG3 | WININ_WIN1_BG3);
     SetGpuReg(REG_OFFSET_WINOUT, winOut | WINOUT_WIN01_BG2 | WINOUT_WINOBJ_BG2 | WINOUT_WIN01_BG3 | WINOUT_WINOBJ_BG3);
 
-    if (sReshowTransitionAllowsBg3Blend && sBg3BlendFadeStarted && !gPaletteFade.active)
-    {
-        sReshowTransitionAllowsBg3Blend = FALSE;
-        sBg3BlendFadeStarted = FALSE;
-    }
-
-    if (!sReshowTransitionAllowsBg3Blend && sBg3BlendRefCount == 0)
-    {
-        bldCnt = GetGpuReg(REG_OFFSET_BLDCNT);
-        if (bldCnt & (BLDCNT_TGT1_BG2 | BLDCNT_TGT2_BG2 | BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3))
-            SetGpuReg(REG_OFFSET_BLDCNT, bldCnt & ~(BLDCNT_TGT1_BG2 | BLDCNT_TGT2_BG2 | BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3));
-    }
 }
 
 bool8 BattleOverworldScene_IsProtectedBg(u8 bgId)
@@ -865,31 +849,11 @@ bool8 BattleOverworldScene_IsProtectedBg(u8 bgId)
     return IsBattleOverworldSceneEnabled() && (bgId == OW_BG_UPPER_ID || bgId == OW_BG_LOWER_ID);
 }
 
-void BattleOverworldScene_AddBg3BlendRef(void)
-{
-    if (!IsBattleOverworldSceneEnabled())
-        return;
-
-    if (sBg3BlendRefCount != 0xFF)
-        sBg3BlendRefCount++;
-}
-
-void BattleOverworldScene_RemoveBg3BlendRef(void)
-{
-    if (!IsBattleOverworldSceneEnabled())
-        return;
-
-    if (sBg3BlendRefCount != 0)
-        sBg3BlendRefCount--;
-}
-
 void BattleOverworldScene_BeginReshowBlackout(void)
 {
     if (!IsBattleOverworldSceneEnabled())
         return;
 
-    sReshowTransitionAllowsBg3Blend = TRUE;
-    sBg3BlendFadeStarted = FALSE;
     sSceneVisible = FALSE;
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_ALL | BLDCNT_EFFECT_DARKEN);
     SetGpuReg(REG_OFFSET_BLDY, 16);
@@ -900,8 +864,6 @@ void BattleOverworldScene_BeginSceneFadeIn(void)
     if (!IsBattleOverworldSceneEnabled())
         return;
 
-    sReshowTransitionAllowsBg3Blend = TRUE;
-    sBg3BlendFadeStarted = TRUE;
     sSceneVisible = TRUE;
     ShowBg(0);
     ShowBg(1);
@@ -1068,6 +1030,11 @@ void BattleOverworldScene_SetMoveBgActive(bool8 active)
     sMoveBgActive = active;
 }
 
+bool8 BattleOverworldScene_IsMoveBgActive(void)
+{
+    return IsBattleOverworldSceneEnabled() && sMoveBgActive;
+}
+
 static const struct BattleOwMonGfx *GetBattleOwMonGfx(u16 species)
 {
     if (species >= NUM_SPECIES || sBattleOwMonGfx[species].gfx == NULL)
@@ -1082,11 +1049,8 @@ void BattleOverworldScene_Reset(void)
 
     BattleOverworldScene_ResetSpriteReferences();
     sSceneSuspended = FALSE;
-    sReshowTransitionAllowsBg3Blend = FALSE;
-    sBg3BlendFadeStarted = FALSE;
     sSceneVisible = FALSE;
     sMoveBgActive = FALSE;
-    sBg3BlendRefCount = 0;
     sBattleOwBgTilesetAnimsActive = FALSE;
     for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
         sPreparedHealthboxPartyIds[battler] = PARTY_SIZE;

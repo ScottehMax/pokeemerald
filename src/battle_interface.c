@@ -1907,7 +1907,6 @@ void Task_HidePartyStatusSummary(u8 taskId)
 
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT2_ALL | BLDCNT_EFFECT_BLEND);
     SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(16, 0));
-    BattleOverworldScene_AddBg3BlendRef();
 
     gTasks[taskId].tBlend = 16;
 
@@ -1995,7 +1994,6 @@ static void Task_HidePartyStatusSummary_BattleStart_2(u8 taskId)
         gBattleSpritesDataPtr->healthBoxesData[battler].partyStatusSummaryShown = 0;
         SetGpuReg(REG_OFFSET_BLDCNT, 0);
         SetGpuReg(REG_OFFSET_BLDALPHA, 0);
-        BattleOverworldScene_RemoveBg3BlendRef();
         DestroyTask(taskId);
     }
 }
@@ -2028,7 +2026,6 @@ static void Task_HidePartyStatusSummary_DuringBattle(u8 taskId)
         gBattleSpritesDataPtr->healthBoxesData[battler].partyStatusSummaryShown = 0;
         SetGpuReg(REG_OFFSET_BLDCNT, 0);
         SetGpuReg(REG_OFFSET_BLDALPHA, 0);
-        BattleOverworldScene_RemoveBg3BlendRef();
         DestroyTask(taskId);
     }
 }

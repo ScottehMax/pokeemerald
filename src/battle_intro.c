@@ -54,12 +54,15 @@ void SetAnimBgAttribute(u8 bgId, u8 attributeId, u8 value)
         switch (attributeId)
         {
         case BG_ANIM_SCREEN_SIZE:
+            SetBgAttribute(bgId, BG_ATTR_SCREENSIZE, value);
             ((struct BgCnt *)&sBgCnt)->screenSize = value;
             break;
         case BG_ANIM_AREA_OVERFLOW_MODE:
+            SetBgAttribute(bgId, BG_ATTR_WRAPAROUND, value);
             ((struct BgCnt *)&sBgCnt)->areaOverflowMode = value;
             break;
         case BG_ANIM_MOSAIC:
+            SetBgAttribute(bgId, BG_ATTR_MOSAIC, value);
             ((struct BgCnt *)&sBgCnt)->mosaic = value;
             break;
         case BG_ANIM_CHAR_BASE_BLOCK:
@@ -67,12 +70,15 @@ void SetAnimBgAttribute(u8 bgId, u8 attributeId, u8 value)
             ((struct BgCnt *)&sBgCnt)->charBaseBlock = value;
             break;
         case BG_ANIM_PRIORITY:
+            SetBgAttribute(bgId, BG_ATTR_PRIORITY, value);
             ((struct BgCnt *)&sBgCnt)->priority = value;
             break;
         case BG_ANIM_PALETTES_MODE:
+            SetBgAttribute(bgId, BG_ATTR_PALETTEMODE, value);
             ((struct BgCnt *)&sBgCnt)->palettes = value;
             break;
         case BG_ANIM_SCREEN_BASE_BLOCK:
+            SetBgAttribute(bgId, BG_ATTR_MAPBASEINDEX, value);
             ((struct BgCnt *)&sBgCnt)->screenBaseBlock = value;
             break;
         }

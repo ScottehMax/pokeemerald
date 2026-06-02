@@ -33,6 +33,8 @@ static void AnimTask_AlphaFadeIn_Step(u8 taskId);
 static void AnimTask_AttackerPunchWithTrace_Step(u8 taskId);
 static void AnimTask_BlendMonInAndOut_Step(u8 taskId);
 static bool8 ShouldRotScaleSpeciesBeFlipped(void);
+static bool32 IsAnimBgLargeScreen(u8 bgId);
+static void KeepAnimBgVisibleInOverworldBattle(u8 bgId);
 static void CreateBattlerTrace(struct Task *task, u8 taskId);
 
 EWRAM_DATA static union AffineAnimCmd *sAnimTaskAffineAnim = NULL;
@@ -1027,10 +1029,65 @@ static void InitAnimBgTilemapBuffer(u32 bgId, const void *src)
     CopyToBgTilemapBuffer(bgId, src, 0, 0);
 }
 
+static bool32 IsAnimBgLargeScreen(u8 bgId)
+{
+    return GetAnimBgAttribute(bgId, BG_ANIM_SCREEN_SIZE) != 0;
+}
+
+static void KeepAnimBgVisibleInOverworldBattle(u8 bgId)
+{
+    u16 winIn;
+    u16 winOut;
+    u16 winInMask = 0;
+    u16 winOutMask = 0;
+
+    if (!BattleOverworldScene_IsEnabled())
+        return;
+
+    ShowBg(bgId);
+
+    switch (bgId)
+    {
+    case 1:
+        winInMask = WININ_WIN0_BG1 | WININ_WIN1_BG1 | WININ_WIN0_CLR | WININ_WIN1_CLR;
+        winOutMask = WINOUT_WIN01_BG1 | WINOUT_WINOBJ_BG1 | WINOUT_WIN01_CLR | WINOUT_WINOBJ_CLR;
+        break;
+    case 2:
+        winInMask = WININ_WIN0_BG2 | WININ_WIN1_BG2 | WININ_WIN0_CLR | WININ_WIN1_CLR;
+        winOutMask = WINOUT_WIN01_BG2 | WINOUT_WINOBJ_BG2 | WINOUT_WIN01_CLR | WINOUT_WINOBJ_CLR;
+        break;
+    case 3:
+        winInMask = WININ_WIN0_BG3 | WININ_WIN1_BG3 | WININ_WIN0_CLR | WININ_WIN1_CLR;
+        winOutMask = WINOUT_WIN01_BG3 | WINOUT_WINOBJ_BG3 | WINOUT_WIN01_CLR | WINOUT_WINOBJ_CLR;
+        break;
+    default:
+        return;
+    }
+
+    winIn = GetGpuReg(REG_OFFSET_WININ);
+    winOut = GetGpuReg(REG_OFFSET_WINOUT);
+    SetGpuReg(REG_OFFSET_WININ, winIn | winInMask);
+    SetGpuReg(REG_OFFSET_WINOUT, winOut | winOutMask);
+}
+
 void AnimLoadCompressedBgTilemap(u32 bgId, const void *src)
 {
-    InitAnimBgTilemapBuffer(bgId, src);
-    CopyBgTilemapBufferToVram(bgId);
+    struct BattleAnimBgData data;
+    u32 destBgId = bgId;
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        GetBattleAnimBgData(&data, bgId);
+        destBgId = data.bgId;
+    }
+
+    InitAnimBgTilemapBuffer(destBgId, src);
+    if (BattleOverworldScene_IsEnabled())
+    {
+        RelocateBattleBgPal(data.paletteId, data.bgTilemap, data.tilesOffset, IsAnimBgLargeScreen(data.bgId));
+        KeepAnimBgVisibleInOverworldBattle(data.bgId);
+    }
+    CopyBgTilemapBufferToVram(destBgId);
 }
 
 void AnimLoadCompressedBgTilemapHandleContest(struct BattleAnimBgData *data, const void *src, bool32 largeScreen)
@@ -1038,6 +1095,7 @@ void AnimLoadCompressedBgTilemapHandleContest(struct BattleAnimBgData *data, con
     InitAnimBgTilemapBuffer(data->bgId, src);
     if (IsContest() == TRUE || BattleOverworldScene_IsEnabled())
         RelocateBattleBgPal(data->paletteId, data->bgTilemap, data->tilesOffset, largeScreen);
+    KeepAnimBgVisibleInOverworldBattle(data->bgId);
     CopyBgTilemapBufferToVram(data->bgId);
 }
 
@@ -1051,7 +1109,7 @@ u8 GetBattleBgPaletteNum(void)
 
 void UpdateAnimBg3ScreenSize(bool8 largeScreenSize)
 {
-    if (BattleOverworldScene_IsEnabled())
+    if (BattleOverworldScene_IsEnabled() && !BattleOverworldScene_IsMoveBgActive())
     {
         BattleOverworldScene_KeepBaseBackgroundVisible();
         return;

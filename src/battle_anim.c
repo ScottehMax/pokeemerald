@@ -799,19 +799,16 @@ static void FlipBattlerBgTiles(void)
 
 void RelocateBattleBgPal(u16 paletteNum, u16 *dest, u32 offset, bool8 largeScreen)
 {
-    s32 i, j;
-    s32 size;
+    u32 i;
+    u32 numEntries;
 
     if (!largeScreen)
-        size = 32;
+        numEntries = 0x400;
     else
-        size = 64;
+        numEntries = 0x800;
     paletteNum <<= 12;
-    for (i = 0; i < size; i++)
-    {
-        for (j = 0; j < 32; j++)
-            dest[j + i * 32] = ((dest[j + i * 32] & 0xFFF) | paletteNum) + offset;
-    }
+    for (i = 0; i < numEntries; i++)
+        dest[i] = ((dest[i] & 0xFFF) | paletteNum) + offset;
 }
 
 void ResetBattleAnimBg(bool8 toBG2)
@@ -1161,7 +1158,6 @@ static void Task_FadeToBg(u8 taskId)
 {
     if (gTasks[taskId].tState == 0)
     {
-        BattleOverworldScene_AddBg3BlendRef();
         BeginHardwarePaletteFade(GetFadeToBgBlendCnt(), 0, 0, 16, 0);
         gTasks[taskId].tState++;
         return;
@@ -1190,7 +1186,6 @@ static void Task_FadeToBg(u8 taskId)
         return;
     if (gTasks[taskId].tState == 3)
     {
-        BattleOverworldScene_RemoveBg3BlendRef();
         DestroyTask(taskId);
         sAnimBackgroundFadeState = 0;
     }

@@ -747,12 +747,6 @@ void AnimTask_StartSlidingBg(u8 taskId)
 {
     u8 newTaskId;
 
-    if (BattleOverworldScene_IsEnabled())
-    {
-        DestroyAnimVisualTask(taskId);
-        return;
-    }
-
     UpdateAnimBg3ScreenSize(FALSE);
     newTaskId = CreateTask(AnimTask_UpdateSlidingBg, 5);
     if (gBattleAnimArgs[2] && GetBattlerSide(gBattleAnimAttacker) != B_SIDE_PLAYER)

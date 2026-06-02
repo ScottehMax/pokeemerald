@@ -204,6 +204,7 @@ static void VBlankCB_DebugMenu(void)
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();
     BattleOverworldScene_TransferBackgroundAnimation();
+    ScanlineEffect_InitHBlankDmaTransfer();
     SetGpuReg(REG_OFFSET_BG0HOFS, gBattle_BG0_X);
     SetGpuReg(REG_OFFSET_BG0VOFS, gBattle_BG0_Y);
     SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
