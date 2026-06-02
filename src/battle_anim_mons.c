@@ -315,6 +315,9 @@ u8 GetBattlerSpriteCoord2(u8 battler, u8 coordType)
     u16 species;
     struct BattleSpriteInfo *spriteInfo;
 
+    if (BattleOverworldScene_IsEnabled())
+        return GetBattlerSpriteCoord(battler, coordType);
+
     if (coordType == BATTLER_COORD_Y_PIC_OFFSET || coordType == BATTLER_COORD_Y_PIC_OFFSET_DEFAULT)
     {
         if (IsContest())
@@ -851,7 +854,12 @@ void InitSpritePosToAnimTarget(struct Sprite *sprite, bool8 respectMonPicOffsets
 
 void InitSpritePosToAnimAttacker(struct Sprite *sprite, bool8 respectMonPicOffsets)
 {
-    if (!respectMonPicOffsets)
+    if (BattleOverworldScene_IsEnabled())
+    {
+        sprite->x = GetBattlerSpriteCoord2(gBattleAnimAttacker, BATTLER_COORD_X_2);
+        sprite->y = GetBattlerSpriteCoord2(gBattleAnimAttacker, BATTLER_COORD_Y_PIC_OFFSET);
+    }
+    else if (!respectMonPicOffsets)
     {
         sprite->x = GetBattlerSpriteCoord2(gBattleAnimAttacker, BATTLER_COORD_X);
         sprite->y = GetBattlerSpriteCoord2(gBattleAnimAttacker, BATTLER_COORD_Y);
@@ -1050,7 +1058,11 @@ static void KeepAnimBgVisibleInOverworldBattle(u8 bgId)
     {
     case 1:
         winInMask = WININ_WIN0_BG1 | WININ_WIN1_BG1 | WININ_WIN0_CLR | WININ_WIN1_CLR;
-        winOutMask = WINOUT_WIN01_BG1 | WINOUT_WINOBJ_BG1 | WINOUT_WIN01_CLR | WINOUT_WINOBJ_CLR;
+        winOutMask = WINOUT_WINOBJ_BG1 | WINOUT_WIN01_CLR | WINOUT_WINOBJ_CLR;
+        if ((GetGpuReg(REG_OFFSET_DISPCNT) & DISPCNT_OBJWIN_ON) == 0
+         || (GetGpuReg(REG_OFFSET_WINOUT) & WINOUT_WINOBJ_BG1) == 0
+         || (GetGpuReg(REG_OFFSET_WINOUT) & WINOUT_WIN01_BG1) != 0)
+            winOutMask |= WINOUT_WIN01_BG1;
         break;
     case 2:
         winInMask = WININ_WIN0_BG2 | WININ_WIN1_BG2 | WININ_WIN0_CLR | WININ_WIN1_CLR;
@@ -1101,6 +1113,8 @@ void AnimLoadCompressedBgTilemapHandleContest(struct BattleAnimBgData *data, con
 
 u8 GetBattleBgPaletteNum(void)
 {
+    if (BattleOverworldScene_IsEnabled() && BattleOverworldScene_IsMoveBgActive())
+        return BATTLE_OW_MOVE_BG_PAL_SLOT;
     if (IsContest())
         return 1;
     else
@@ -1378,12 +1392,47 @@ static bool8 ShouldRotScaleSpeciesBeFlipped(void)
     }
 }
 
+static u8 GetOverworldBattlerForRotScaleSprite(u8 spriteId)
+{
+    u8 battler;
+    struct Sprite *sprite;
+
+    if (!BattleOverworldScene_IsEnabled() || spriteId >= MAX_SPRITES || !gSprites[spriteId].inUse)
+        return MAX_BATTLERS_COUNT;
+
+    battler = gSprites[spriteId].data[0];
+    if (battler < gBattlersCount && BattleOverworldScene_IsBattlerSprite(battler, spriteId))
+        return battler;
+
+    sprite = &gSprites[spriteId];
+    for (battler = 0; battler < gBattlersCount; battler++)
+    {
+        u8 battlerSpriteId = gBattlerSpriteIds[battler];
+        struct Sprite *battlerSprite;
+
+        if (battlerSpriteId >= MAX_SPRITES
+         || !BattleOverworldScene_IsBattlerSprite(battler, battlerSpriteId)
+         || !gSprites[battlerSpriteId].inUse)
+            continue;
+
+        battlerSprite = &gSprites[battlerSpriteId];
+        if (sprite->template == battlerSprite->template
+         && sprite->images == battlerSprite->images
+         && sprite->anims == battlerSprite->anims
+         && sprite->oam.shape == battlerSprite->oam.shape
+         && sprite->oam.size == battlerSprite->oam.size
+         && sprite->oam.paletteNum == battlerSprite->oam.paletteNum)
+            return battler;
+    }
+
+    return MAX_BATTLERS_COUNT;
+}
+
 static bool8 ShouldFlipBattlerRotScaleX(u8 spriteId)
 {
-    u8 battler = gSprites[spriteId].data[0];
+    u8 battler = GetOverworldBattlerForRotScaleSprite(spriteId);
 
-    return BattleOverworldScene_IsBattlerSprite(battler, spriteId)
-        && BattleOverworldScene_IsBattlerFacingRight(battler);
+    return battler < gBattlersCount && BattleOverworldScene_IsBattlerFacingRight(battler);
 }
 
 void PrepareBattlerSpriteForRotScale(u8 spriteId, u8 objMode)
@@ -2293,6 +2342,33 @@ s16 GetBattlerSpriteCoordAttr(u8 battler, u8 attr)
     int ret;
     const struct MonCoords *coords;
     struct BattleSpriteInfo *spriteInfo;
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        s16 x = BattleOverworldScene_GetBattlerSpriteX(battler);
+        s16 y = BattleOverworldScene_GetBattlerSpriteY(battler);
+        s16 width = BattleOverworldScene_GetBattlerSpriteWidth(battler);
+        s16 height = BattleOverworldScene_GetBattlerSpriteHeight(battler);
+
+        switch (attr)
+        {
+        case BATTLER_COORD_ATTR_HEIGHT:
+            return height;
+        case BATTLER_COORD_ATTR_WIDTH:
+            return width;
+        case BATTLER_COORD_ATTR_LEFT:
+            return x - width / 2;
+        case BATTLER_COORD_ATTR_RIGHT:
+            return x + width / 2;
+        case BATTLER_COORD_ATTR_TOP:
+            return y - height / 2;
+        case BATTLER_COORD_ATTR_BOTTOM:
+        case BATTLER_COORD_ATTR_RAW_BOTTOM:
+            return y + height / 2;
+        default:
+            return 0;
+        }
+    }
 
     if (IsContest())
     {

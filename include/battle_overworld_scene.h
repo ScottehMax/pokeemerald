@@ -43,6 +43,8 @@ bool8 BattleOverworldScene_IsHealthboxPrepared(u8 battler, u8 partyId);
 void BattleOverworldScene_ClearPreparedHealthbox(u8 battler);
 s16 BattleOverworldScene_GetBattlerSpriteX(u8 battler);
 s16 BattleOverworldScene_GetBattlerSpriteY(u8 battler);
+s16 BattleOverworldScene_GetBattlerSpriteWidth(u8 battler);
+s16 BattleOverworldScene_GetBattlerSpriteHeight(u8 battler);
 bool8 BattleOverworldScene_LoadMonSpriteGfx(struct Pokemon *mon, u8 battler);
 bool8 BattleOverworldScene_SetMonSpriteTemplate(u16 species, u8 battlerPosition);
 u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, s16 x, s16 y, u8 subpriority);

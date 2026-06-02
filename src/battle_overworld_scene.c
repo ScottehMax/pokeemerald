@@ -1481,6 +1481,36 @@ static s16 GetBattlerOwY(u8 battler)
     }
 }
 
+static s16 GetOamWidth(u8 shape, u8 size)
+{
+    static const u8 widths[3][4] =
+    {
+        [ST_OAM_SQUARE]      = {  8, 16, 32, 64 },
+        [ST_OAM_H_RECTANGLE] = { 16, 32, 32, 64 },
+        [ST_OAM_V_RECTANGLE] = {  8,  8, 16, 32 },
+    };
+
+    if (shape >= ARRAY_COUNT(widths) || size >= ARRAY_COUNT(widths[0]))
+        return 32;
+
+    return widths[shape][size];
+}
+
+static s16 GetOamHeight(u8 shape, u8 size)
+{
+    static const u8 heights[3][4] =
+    {
+        [ST_OAM_SQUARE]      = {  8, 16, 32, 64 },
+        [ST_OAM_H_RECTANGLE] = {  8,  8, 16, 32 },
+        [ST_OAM_V_RECTANGLE] = { 16, 32, 32, 64 },
+    };
+
+    if (shape >= ARRAY_COUNT(heights) || size >= ARRAY_COUNT(heights[0]))
+        return 32;
+
+    return heights[shape][size];
+}
+
 s16 BattleOverworldScene_GetBattlerSpriteX(u8 battler)
 {
     return GetBattlerOwX(battler);
@@ -1489,6 +1519,38 @@ s16 BattleOverworldScene_GetBattlerSpriteX(u8 battler)
 s16 BattleOverworldScene_GetBattlerSpriteY(u8 battler)
 {
     return GetBattlerOwY(battler);
+}
+
+s16 BattleOverworldScene_GetBattlerSpriteWidth(u8 battler)
+{
+    struct Sprite *sprite;
+
+    if (!IsBattleOverworldSceneEnabled()
+     || battler >= MAX_BATTLERS_COUNT
+     || sOwBattlerSpriteIds[battler] >= MAX_SPRITES)
+        return 32;
+
+    sprite = &gSprites[sOwBattlerSpriteIds[battler]];
+    if (!sprite->inUse)
+        return 32;
+
+    return GetOamWidth(sprite->oam.shape, sprite->oam.size);
+}
+
+s16 BattleOverworldScene_GetBattlerSpriteHeight(u8 battler)
+{
+    struct Sprite *sprite;
+
+    if (!IsBattleOverworldSceneEnabled()
+     || battler >= MAX_BATTLERS_COUNT
+     || sOwBattlerSpriteIds[battler] >= MAX_SPRITES)
+        return 32;
+
+    sprite = &gSprites[sOwBattlerSpriteIds[battler]];
+    if (!sprite->inUse)
+        return 32;
+
+    return GetOamHeight(sprite->oam.shape, sprite->oam.size);
 }
 
 static struct Pokemon *GetBattlerMon(u8 battler)
