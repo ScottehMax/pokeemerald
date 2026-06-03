@@ -1192,7 +1192,7 @@ void SetBattlerSpriteAffineMode(u8 affineMode)
                 gSprites[battlerSpriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
                 gSprites[battlerSpriteId].oam.objMode = ST_OAM_OBJ_NORMAL;
                 gSprites[battlerSpriteId].affineAnimPaused = FALSE;
-                BattleOverworldScene_RestoreBattlerSpriteAnim(i);
+                BattleOverworldScene_RestoreBattlerSpriteOam(i);
                 continue;
             }
 

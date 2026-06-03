@@ -851,8 +851,8 @@ static void RunOwBattleAnimScript(void)
         gAnimScriptCallback();
     if (sOwBattleAnimWasActive && !gAnimScriptActive)
     {
-        BattleOverworldScene_RestoreBattlerSpriteAnim(0);
-        BattleOverworldScene_RestoreBattlerSpriteAnim(1);
+        BattleOverworldScene_RestoreBattlerSpriteOam(0);
+        BattleOverworldScene_RestoreBattlerSpriteOam(1);
         sOwBattleAnimWasActive = FALSE;
     }
 }

@@ -50,6 +50,8 @@ bool8 BattleOverworldScene_LoadMonSpriteGfx(struct Pokemon *mon, u8 battler);
 bool8 BattleOverworldScene_SetMonSpriteTemplate(u16 species, u8 battlerPosition);
 u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, s16 x, s16 y, u8 subpriority);
 void BattleOverworldScene_RestoreBattlerSpriteAnim(u8 battler);
+void BattleOverworldScene_RestoreBattlerSpriteOam(u8 battler);
+u16 BattleOverworldScene_GetBattlerSpriteFrameImageValue(u8 battler);
 bool8 BattleOverworldScene_DrawBattlerOnBg(u8 battler, u8 bgId, u8 paletteId, u16 tilesOffset, u8 *tiles, u16 *tilemap, s16 *bgX, s16 *bgY, u16 *frameTileCount);
 bool8 BattleOverworldScene_UpdateBattlerBgFrame(u8 battler, u8 paletteId, u16 tilesOffset, u16 frameTileCount, u16 *tilemap);
 

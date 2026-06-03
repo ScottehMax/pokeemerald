@@ -1435,7 +1435,13 @@ static bool8 ShouldFlipBattlerRotScaleX(u8 spriteId)
 {
     u8 battler = GetOverworldBattlerForRotScaleSprite(spriteId);
 
-    return battler < gBattlersCount && BattleOverworldScene_IsBattlerFacingRight(battler);
+    if (battler >= gBattlersCount)
+        return FALSE;
+
+    if (BattleOverworldScene_IsBattlerSprite(battler, spriteId))
+        return gSprites[spriteId].hFlip;
+
+    return BattleOverworldScene_IsBattlerFacingRight(battler);
 }
 
 void PrepareBattlerSpriteForRotScale(u8 spriteId, u8 objMode)
@@ -1445,13 +1451,15 @@ void PrepareBattlerSpriteForRotScale(u8 spriteId, u8 objMode)
     bool8 wasAffine = gSprites[spriteId].oam.affineMode;
 
     if (overworldBattler && !wasAffine)
-        BattleOverworldScene_RestoreBattlerSpriteAnim(battler);
+        BattleOverworldScene_RestoreBattlerSpriteOam(battler);
     if (overworldBattler)
         BattleOverworldScene_SetBattlerHiddenByMonBg(battler, FALSE);
     if (IsContest() || IsBattlerSpriteVisible(battler))
         gSprites[spriteId].invisible = FALSE;
     gSprites[spriteId].oam.objMode = objMode;
     gSprites[spriteId].affineAnimPaused = TRUE;
+    if (overworldBattler && !wasAffine)
+        gSprites[spriteId].hFlip = (gSprites[spriteId].oam.matrixNum >> 3) & 1;
     if (overworldBattler && !gSprites[spriteId].oam.affineMode)
     {
         u8 matrixNum = AllocOamMatrix();
@@ -1482,7 +1490,7 @@ void ResetSpriteRotScale(u8 spriteId)
         gSprites[spriteId].oam.objMode = ST_OAM_OBJ_NORMAL;
         gSprites[spriteId].affineAnimPaused = FALSE;
         FreeOamMatrix(matrixNum);
-        BattleOverworldScene_RestoreBattlerSpriteAnim(gSprites[spriteId].data[0]);
+        BattleOverworldScene_RestoreBattlerSpriteOam(gSprites[spriteId].data[0]);
         return;
     }
 
