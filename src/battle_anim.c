@@ -628,7 +628,6 @@ static void PrepareOverworldMonBg(void)
     if (!BattleOverworldScene_IsEnabled())
         return;
 
-    ShowBg(1);
     SetAnimBgAttribute(1, BG_ANIM_CHAR_BASE_BLOCK, 1);
     SetAnimBgAttribute(1, BG_ANIM_SCREEN_BASE_BLOCK, 28);
 }
@@ -639,6 +638,10 @@ static void ResetOverworldMonBg(void)
         return;
 
     SetAnimBgAttribute(1, BG_ANIM_CHAR_BASE_BLOCK, 0);
+    SetAnimBgAttribute(1, BG_ANIM_SCREEN_BASE_BLOCK, 28);
+    SetAnimBgAttribute(1, BG_ANIM_SCREEN_SIZE, 0);
+    SetAnimBgAttribute(1, BG_ANIM_AREA_OVERFLOW_MODE, 0);
+    CpuFill16(0, (void *)BG_SCREEN_ADDR(29), BG_SCREEN_SIZE);
     HideBg(1);
 }
 
@@ -795,6 +798,7 @@ void MoveBattlerSpriteToBG(u8 battler, bool8 toBG_2, bool8 setSpriteInvisible)
                 CpuCopy32(&gPlttBufferUnfaded[OBJ_PLTT_ID(gSprites[battlerSpriteId].oam.paletteNum)], (void *)(BG_PLTT + PLTT_OFFSET_4BPP(animBg.paletteId)), PLTT_SIZE_4BPP);
                 SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
                 SetGpuReg(REG_OFFSET_BG1VOFS, gBattle_BG1_Y);
+                ShowBg(1);
             }
         }
         else
@@ -1329,7 +1333,9 @@ static void LoadMoveBgForOverworldBattle(u16 bgId)
 
     BattleOverworldScene_SetMoveBgActive(TRUE);
     HideBg(2);
+    HideBg(3);
 
+    CpuFill32(0, (void *)BG_CHAR_ADDR(OW_MOVE_BG_CHARBASE), 0x4000);
     LZDecompressVram(gBattleAnimBackgroundTable[bgId].image, (void *)BG_CHAR_ADDR(OW_MOVE_BG_CHARBASE));
 
     LZDecompressWram(tilemap, gDecompressionBuffer);

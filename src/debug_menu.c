@@ -502,8 +502,8 @@ static void InitOwBattleAnimPreview(void)
     ShowBg(2);
     ShowBg(3);
 
-    sOwBattleAnimPlayerSpecies = SPECIES_TREECKO;
-    sOwBattleAnimOpponentSpecies = SPECIES_POOCHYENA;
+    sOwBattleAnimPlayerSpecies = SPECIES_SUICUNE;
+    sOwBattleAnimOpponentSpecies = SPECIES_PORYGON2;
     sOwBattleAnimPlayerTrainerGfx = OBJ_EVENT_GFX_BRENDAN_NORMAL;
     sOwBattleAnimOpponentTrainerGfx = OBJ_EVENT_GFX_YOUNGSTER;
     sOwBattleAnimMove = MOVE_POUND;
