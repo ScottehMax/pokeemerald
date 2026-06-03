@@ -43,6 +43,7 @@
 #define OW_BG_BLANK_TILE 0x040
 #define OW_MON_BG_CHARBASE 1
 #define OW_MON_BG_SCREENBASE 28
+#define OW_BATTLER_OBJ_PRIORITY 2
 
 struct BattleOwMonGfx
 {
@@ -1452,7 +1453,7 @@ void BattleOverworldScene_CreateTrainerSprites(void)
     if (sPlayerTrainerSpriteId != MAX_SPRITES)
     {
         gSprites[sPlayerTrainerSpriteId].oam.paletteNum = OW_TRAINER_PLAYER_PAL_SLOT;
-        gSprites[sPlayerTrainerSpriteId].oam.priority = 0;
+        gSprites[sPlayerTrainerSpriteId].oam.priority = OW_BATTLER_OBJ_PRIORITY;
     }
 
     if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
@@ -1468,7 +1469,7 @@ void BattleOverworldScene_CreateTrainerSprites(void)
         if (sOpponentTrainerSpriteId != MAX_SPRITES)
         {
             gSprites[sOpponentTrainerSpriteId].oam.paletteNum = OW_TRAINER_OPPONENT_PAL_SLOT;
-            gSprites[sOpponentTrainerSpriteId].oam.priority = 0;
+            gSprites[sOpponentTrainerSpriteId].oam.priority = OW_BATTLER_OBJ_PRIORITY;
         }
     }
 
@@ -1589,18 +1590,64 @@ s16 BattleOverworldScene_GetBattlerSpriteHeight(u8 battler)
     return GetOamHeight(sprite->oam.shape, sprite->oam.size);
 }
 
-bool8 BattleOverworldScene_DrawBattlerOnBg(u8 battler, u8 bgId, u8 paletteId, u16 tilesOffset, u8 *tiles, u16 *tilemap, s16 *bgX, s16 *bgY)
+static u16 GetBattleOverworldSpriteFrameImageValue(const struct Sprite *sprite, u8 animCmdIndex)
+{
+    if (sprite->anims == NULL || sprite->anims[sprite->animNum] == NULL)
+        return 0;
+    if (sprite->anims[sprite->animNum][animCmdIndex].type < 0)
+        return 0;
+
+    return sprite->anims[sprite->animNum][animCmdIndex].frame.imageValue;
+}
+
+static void DrawBattleOverworldBattlerBgTilemap(const struct Sprite *sprite, u8 paletteId, u16 tilesOffset, u16 frameTileOffset, u16 *tilemap)
 {
     u8 i;
     u8 j;
-    u8 spriteId;
     u8 width;
     u8 height;
     u8 widthTiles;
     u8 heightTiles;
     u16 tileAttr;
     u16 tileIndex;
+    bool8 hFlip;
+    bool8 vFlip;
+
+    width = GetOamWidth(sprite->oam.shape, sprite->oam.size);
+    height = GetOamHeight(sprite->oam.shape, sprite->oam.size);
+    widthTiles = width / 8;
+    heightTiles = height / 8;
+    hFlip = (sprite->oam.matrixNum >> 3) & 1;
+    vFlip = (sprite->oam.matrixNum >> 4) & 1;
+
+    tileAttr = paletteId << 12;
+    if (hFlip)
+        tileAttr |= 0x400;
+    if (vFlip)
+        tileAttr |= 0x800;
+
+    CpuFill16(tilesOffset | (paletteId << 12), tilemap, BG_SCREEN_SIZE * 2);
+    for (i = 0; i < heightTiles; i++)
+    {
+        for (j = 0; j < widthTiles; j++)
+        {
+            u8 srcX = hFlip ? widthTiles - 1 - j : j;
+            u8 srcY = vFlip ? heightTiles - 1 - i : i;
+            tileIndex = srcY * widthTiles + srcX;
+            tilemap[i * 32 + j] = tilesOffset + 1 + frameTileOffset + tileIndex + tileAttr;
+        }
+    }
+    CpuCopy16(tilemap, (void *)BG_SCREEN_ADDR(OW_MON_BG_SCREENBASE), BG_SCREEN_SIZE * 2);
+}
+
+bool8 BattleOverworldScene_DrawBattlerOnBg(u8 battler, u8 bgId, u8 paletteId, u16 tilesOffset, u8 *tiles, u16 *tilemap, s16 *bgX, s16 *bgY, u16 *frameTileCount)
+{
+    u8 spriteId;
+    u8 width;
+    u8 height;
     u16 tileSize;
+    u16 firstFrame;
+    u16 secondFrame;
     const struct Sprite *sprite;
 
     if (!IsBattleOverworldSceneEnabled() || battler >= MAX_BATTLERS_COUNT)
@@ -1616,35 +1663,40 @@ bool8 BattleOverworldScene_DrawBattlerOnBg(u8 battler, u8 bgId, u8 paletteId, u1
 
     width = GetOamWidth(sprite->oam.shape, sprite->oam.size);
     height = GetOamHeight(sprite->oam.shape, sprite->oam.size);
-    widthTiles = width / 8;
-    heightTiles = height / 8;
     tileSize = width * height / 2;
+    *frameTileCount = tileSize / TILE_SIZE_4BPP;
+    firstFrame = GetBattleOverworldSpriteFrameImageValue(sprite, 0);
+    secondFrame = GetBattleOverworldSpriteFrameImageValue(sprite, 1);
 
-    CpuFill32(0, tiles, tileSize + TILE_SIZE_4BPP);
-    CpuCopy16((const void *)(OBJ_VRAM0 + sprite->oam.tileNum * TILE_SIZE_4BPP), tiles + TILE_SIZE_4BPP, tileSize);
-    CpuCopy16(tiles, (void *)(BG_CHAR_ADDR(OW_MON_BG_CHARBASE) + tilesOffset * TILE_SIZE_4BPP), tileSize + TILE_SIZE_4BPP);
+    CpuFill32(0, tiles, tileSize * 2 + TILE_SIZE_4BPP);
+    CpuCopy16(sprite->images[firstFrame].data, tiles + TILE_SIZE_4BPP, tileSize);
+    CpuCopy16(sprite->images[secondFrame].data, tiles + TILE_SIZE_4BPP + tileSize, tileSize);
+    CpuCopy16(tiles, (void *)(BG_CHAR_ADDR(OW_MON_BG_CHARBASE) + tilesOffset * TILE_SIZE_4BPP), tileSize * 2 + TILE_SIZE_4BPP);
 
-    tileAttr = paletteId << 12;
-    if ((sprite->oam.matrixNum >> 3) & 1)
-        tileAttr |= 0x400;
-    if ((sprite->oam.matrixNum >> 4) & 1)
-        tileAttr |= 0x800;
-
-    CpuFill16(tilesOffset | (paletteId << 12), tilemap, BG_SCREEN_SIZE * 2);
-    for (i = 0; i < heightTiles; i++)
-    {
-        for (j = 0; j < widthTiles; j++)
-        {
-            u8 srcX = ((sprite->oam.matrixNum >> 3) & 1) ? widthTiles - 1 - j : j;
-            u8 srcY = ((sprite->oam.matrixNum >> 4) & 1) ? heightTiles - 1 - i : i;
-            tileIndex = srcY * widthTiles + srcX;
-            tilemap[i * 32 + j] = tilesOffset + 1 + tileIndex + tileAttr;
-        }
-    }
-    CpuCopy16(tilemap, (void *)BG_SCREEN_ADDR(OW_MON_BG_SCREENBASE), BG_SCREEN_SIZE * 2);
+    DrawBattleOverworldBattlerBgTilemap(sprite, paletteId, tilesOffset, sprite->animCmdIndex == 0 ? 0 : *frameTileCount, tilemap);
 
     *bgX = -(sprite->x + sprite->x2) + width / 2;
     *bgY = -(sprite->y + sprite->y2) + height / 2;
+    return TRUE;
+}
+
+bool8 BattleOverworldScene_UpdateBattlerBgFrame(u8 battler, u8 paletteId, u16 tilesOffset, u16 frameTileCount, u16 *tilemap)
+{
+    u8 spriteId;
+    const struct Sprite *sprite;
+
+    if (!IsBattleOverworldSceneEnabled() || battler >= MAX_BATTLERS_COUNT)
+        return FALSE;
+
+    spriteId = gBattlerSpriteIds[battler];
+    if (spriteId >= MAX_SPRITES)
+        return FALSE;
+
+    sprite = &gSprites[spriteId];
+    if (!sprite->inUse)
+        return FALSE;
+
+    DrawBattleOverworldBattlerBgTilemap(sprite, paletteId, tilesOffset, sprite->animCmdIndex == 0 ? 0 : frameTileCount, tilemap);
     return TRUE;
 }
 
@@ -1690,7 +1742,7 @@ bool8 BattleOverworldScene_CreateBattlerSprite(u8 battler)
         gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
         gSprites[gBattlerSpriteIds[battler]].data[2] = species;
         gSprites[gBattlerSpriteIds[battler]].oam.paletteNum = battler;
-        gSprites[gBattlerSpriteIds[battler]].oam.priority = 0;
+        gSprites[gBattlerSpriteIds[battler]].oam.priority = OW_BATTLER_OBJ_PRIORITY;
         gSprites[gBattlerSpriteIds[battler]].callback = SpriteCallbackDummy;
         gSprites[gBattlerSpriteIds[battler]].invisible = sOwBattlerHiddenByBall[battler];
         gBattleSpritesDataPtr->battlerData[battler].invisible = FALSE;
@@ -1903,7 +1955,7 @@ u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, 
     }
 
     gSprites[spriteId].coordOffsetEnabled = FALSE;
-    gSprites[spriteId].oam.priority = 0;
+    gSprites[spriteId].oam.priority = OW_BATTLER_OBJ_PRIORITY;
     gSprites[spriteId].callback = SpriteCallbackDummy;
     StartSpriteAnim(&gSprites[spriteId], 0);
     return spriteId;

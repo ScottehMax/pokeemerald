@@ -563,6 +563,8 @@ static void Cmd_playse(void)
 #define t2_BattlerId data[6]
 #define t2_HideTimer data[7]
 #define t2_HidePending data[8]
+#define t2_AnimCmdIndex data[9]
+#define t2_FrameTileCount data[10]
 
 static void Task_InitUpdateMonBg(u8 taskId)
 {
@@ -602,6 +604,10 @@ static void Task_InitUpdateMonBg(u8 taskId)
     gTasks[updateTaskId].t2_BattlerId = tBattlerId;
     gTasks[updateTaskId].t2_HideTimer = 0;
     gTasks[updateTaskId].t2_HidePending = BattleOverworldScene_IsEnabled();
+    gTasks[updateTaskId].t2_AnimCmdIndex = gSprites[battlerSpriteId].animCmdIndex;
+    gTasks[updateTaskId].t2_FrameTileCount = BattleOverworldScene_IsEnabled()
+                                           ? (BattleOverworldScene_GetBattlerSpriteWidth(tBattlerId) * BattleOverworldScene_GetBattlerSpriteHeight(tBattlerId) / 2 / TILE_SIZE_4BPP)
+                                           : 0;
     sMonAnimTaskIdArray[tIsPartner] = updateTaskId;
     DestroyAnimVisualTask(taskId);
 }
@@ -753,8 +759,8 @@ void MoveBattlerSpriteToBG(u8 battler, bool8 toBG_2, bool8 setSpriteInvisible)
         {
             if (BattleOverworldScene_IsEnabled())
             {
+                HideBg(1);
                 CpuFill32(0, (void *)(BG_CHAR_ADDR(1) + 0x2000), 0x2000);
-                CpuFill16(0xFFFF, (void *)BG_SCREEN_ADDR(28), 0x1000);
             }
             else
             {
@@ -765,7 +771,17 @@ void MoveBattlerSpriteToBG(u8 battler, bool8 toBG_2, bool8 setSpriteInvisible)
 
         GetBattleAnimBg1Data(&animBg);
         CpuFill16(0, animBg.bgTiles, 0x1000);
-        CpuFill16(0xFF, animBg.bgTilemap, 0x800);
+        if (BattleOverworldScene_IsEnabled())
+        {
+            u16 blankTile = animBg.tilesOffset | (animBg.paletteId << 12);
+
+            CpuFill16(blankTile, (void *)BG_SCREEN_ADDR(28), BG_SCREEN_SIZE * 2);
+            CpuFill16(blankTile, animBg.bgTilemap, BG_SCREEN_SIZE * 2);
+        }
+        else
+        {
+            CpuFill16(0xFF, animBg.bgTilemap, 0x800);
+        }
 
         PrepareOverworldMonBg();
         SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 2);
@@ -792,7 +808,9 @@ void MoveBattlerSpriteToBG(u8 battler, bool8 toBG_2, bool8 setSpriteInvisible)
 
         if (BattleOverworldScene_IsEnabled())
         {
-            if (BattleOverworldScene_DrawBattlerOnBg(battler, 1, animBg.paletteId, animBg.tilesOffset, animBg.bgTiles, animBg.bgTilemap, &gBattle_BG1_X, &gBattle_BG1_Y))
+            u16 frameTileCount;
+
+            if (BattleOverworldScene_DrawBattlerOnBg(battler, 1, animBg.paletteId, animBg.tilesOffset, animBg.bgTiles, animBg.bgTilemap, &gBattle_BG1_X, &gBattle_BG1_Y, &frameTileCount))
             {
                 LoadPalette(&gPlttBufferUnfaded[OBJ_PLTT_ID(gSprites[battlerSpriteId].oam.paletteNum)], BG_PLTT_ID(animBg.paletteId), PLTT_SIZE_4BPP);
                 CpuCopy32(&gPlttBufferUnfaded[OBJ_PLTT_ID(gSprites[battlerSpriteId].oam.paletteNum)], (void *)(BG_PLTT + PLTT_OFFSET_4BPP(animBg.paletteId)), PLTT_SIZE_4BPP);
@@ -922,6 +940,11 @@ static void Task_UpdateMonBg(u8 taskId)
 
     if (!gTasks[taskId].t2_InBg2)
     {
+        if (BattleOverworldScene_IsEnabled() && gTasks[taskId].t2_AnimCmdIndex != gSprites[spriteId].animCmdIndex)
+        {
+            gTasks[taskId].t2_AnimCmdIndex = gSprites[spriteId].animCmdIndex;
+            BattleOverworldScene_UpdateBattlerBgFrame(battler, animBg.paletteId, animBg.tilesOffset, gTasks[taskId].t2_FrameTileCount, animBg.bgTilemap);
+        }
         gBattle_BG1_X = x + gTasks[taskId].t2_BgX;
         gBattle_BG1_Y = y + gTasks[taskId].t2_BgY;
         CpuCopy32(&gPlttBufferFaded[OBJ_PLTT_ID(battler)], &gPlttBufferFaded[BG_PLTT_ID(animBg.paletteId)], PLTT_SIZE_4BPP);
@@ -948,6 +971,8 @@ static void Task_UpdateMonBg(u8 taskId)
 #undef t2_BattlerId
 #undef t2_HideTimer
 #undef t2_HidePending
+#undef t2_AnimCmdIndex
+#undef t2_FrameTileCount
 
 static void Cmd_clearmonbg(void)
 {
