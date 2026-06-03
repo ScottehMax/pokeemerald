@@ -897,6 +897,9 @@ u8 GetBattlerAtPosition(u8 position)
 
 bool8 IsBattlerSpritePresent(u8 battler)
 {
+    if (battler >= gBattlersCount)
+        return FALSE;
+
     if (IsContest())
     {
         if (gBattleAnimAttacker == battler)
@@ -1443,6 +1446,8 @@ void PrepareBattlerSpriteForRotScale(u8 spriteId, u8 objMode)
 
     if (overworldBattler && !wasAffine)
         BattleOverworldScene_RestoreBattlerSpriteAnim(battler);
+    if (overworldBattler)
+        BattleOverworldScene_SetBattlerHiddenByMonBg(battler, FALSE);
     if (IsContest() || IsBattlerSpriteVisible(battler))
         gSprites[spriteId].invisible = FALSE;
     gSprites[spriteId].oam.objMode = objMode;

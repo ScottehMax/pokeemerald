@@ -25,7 +25,7 @@
 */
 
 #define ANIM_SPRITE_INDEX_COUNT 8
-#define OW_MOVE_BG_CHARBASE 1
+#define OW_MOVE_BG_CHARBASE 2
 #define OW_MOVE_BG_SCREENBASE 30
 #define OW_MOVE_BG_TILE_OFFSET 0
 
@@ -95,6 +95,9 @@ static void LoadMoveBg(u16 bgId);
 static void LoadMoveBgForOverworldBattle(u16 bgId);
 static u16 GetFadeToBgBlendCnt(void);
 static bool8 ShouldUseBattlerBg(u8 battler);
+static void PrepareOverworldMonBg(void);
+static void ResetOverworldMonBg(void);
+static void CancelOverworldMonBgSpriteHide(u8 battler);
 
 EWRAM_DATA static const u8 *sBattleAnimScriptPtr = NULL;
 EWRAM_DATA static const u8 *sBattleAnimScriptRetAddr = NULL;
@@ -558,6 +561,8 @@ static void Cmd_playse(void)
 #define t2_BgY       data[4]
 #define t2_InBg2     data[5]
 #define t2_BattlerId data[6]
+#define t2_HideTimer data[7]
+#define t2_HidePending data[8]
 
 static void Task_InitUpdateMonBg(u8 taskId)
 {
@@ -566,16 +571,16 @@ static void Task_InitUpdateMonBg(u8 taskId)
     s16 *data = gTasks[taskId].data;
     u8 battlerSpriteId = gBattlerSpriteIds[tBattlerId];
 
-    if (!BattleOverworldScene_IsBattlerSprite(tBattlerId, battlerSpriteId))
-        gSprites[battlerSpriteId].invisible = TRUE;
-    if (BattleOverworldScene_IsEnabled())
-        tInBg2 = FALSE;
-
     if (!tActive)
     {
         DestroyAnimVisualTask(taskId);
         return;
     }
+
+    if (BattleOverworldScene_IsEnabled())
+        tInBg2 = FALSE;
+    else
+        gSprites[battlerSpriteId].invisible = TRUE;
 
     updateTaskId = CreateTask(Task_UpdateMonBg, 10);
     gTasks[updateTaskId].t2_SpriteId = battlerSpriteId;
@@ -595,6 +600,8 @@ static void Task_InitUpdateMonBg(u8 taskId)
 
     gTasks[updateTaskId].t2_InBg2 = tInBg2;
     gTasks[updateTaskId].t2_BattlerId = tBattlerId;
+    gTasks[updateTaskId].t2_HideTimer = 0;
+    gTasks[updateTaskId].t2_HidePending = BattleOverworldScene_IsEnabled();
     sMonAnimTaskIdArray[tIsPartner] = updateTaskId;
     DestroyAnimVisualTask(taskId);
 }
@@ -612,7 +619,44 @@ static bool8 ShouldMoveBattlerSpriteToBg2(u8 battler)
 
 static bool8 ShouldUseBattlerBg(u8 battler)
 {
-    return !BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]);
+    // Regular battlers use DrawBattlerOnBg; overworld battlers use the OW renderer.
+    return TRUE;
+}
+
+static void PrepareOverworldMonBg(void)
+{
+    if (!BattleOverworldScene_IsEnabled())
+        return;
+
+    ShowBg(1);
+    SetAnimBgAttribute(1, BG_ANIM_CHAR_BASE_BLOCK, 1);
+    SetAnimBgAttribute(1, BG_ANIM_SCREEN_BASE_BLOCK, 28);
+}
+
+static void ResetOverworldMonBg(void)
+{
+    if (!BattleOverworldScene_IsEnabled())
+        return;
+
+    SetAnimBgAttribute(1, BG_ANIM_CHAR_BASE_BLOCK, 0);
+    HideBg(1);
+}
+
+static void CancelOverworldMonBgSpriteHide(u8 battler)
+{
+    u8 i;
+
+    if (battler >= MAX_BATTLERS_COUNT)
+        return;
+
+    for (i = 0; i < ARRAY_COUNT(sMonAnimTaskIdArray); i++)
+    {
+        u8 taskId = sMonAnimTaskIdArray[i];
+
+        if (taskId != TASK_NONE && gTasks[taskId].t2_BattlerId == battler)
+            gTasks[taskId].t2_HidePending = FALSE;
+    }
+    BattleOverworldScene_SetBattlerHiddenByMonBg(battler, FALSE);
 }
 
 static void Cmd_monbg(void)
@@ -646,7 +690,7 @@ static void Cmd_monbg(void)
 
     // Move battler's partner to background
     battler ^= BIT_FLANK;
-    if (IsBattlerSpriteVisible(battler) && ShouldUseBattlerBg(battler))
+    if (animBattler > 1 && IsBattlerSpriteVisible(battler) && ShouldUseBattlerBg(battler))
     {
         toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);
@@ -704,14 +748,23 @@ void MoveBattlerSpriteToBG(u8 battler, bool8 toBG_2, bool8 setSpriteInvisible)
         }
         else
         {
-            RequestDma3Fill(0, (void *)(BG_SCREEN_ADDR(8)), 0x2000, 1);
-            RequestDma3Fill(0xFF, (void *)(BG_SCREEN_ADDR(28)), 0x1000, 0);
+            if (BattleOverworldScene_IsEnabled())
+            {
+                CpuFill32(0, (void *)(BG_CHAR_ADDR(1) + 0x2000), 0x2000);
+                CpuFill16(0xFFFF, (void *)BG_SCREEN_ADDR(28), 0x1000);
+            }
+            else
+            {
+                RequestDma3Fill(0, (void *)(BG_SCREEN_ADDR(8)), 0x2000, 1);
+                RequestDma3Fill(0xFF, (void *)(BG_SCREEN_ADDR(28)), 0x1000, 0);
+            }
         }
 
         GetBattleAnimBg1Data(&animBg);
         CpuFill16(0, animBg.bgTiles, 0x1000);
         CpuFill16(0xFF, animBg.bgTilemap, 0x800);
 
+        PrepareOverworldMonBg();
         SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 2);
         SetAnimBgAttribute(1, BG_ANIM_SCREEN_SIZE, 1);
         SetAnimBgAttribute(1, BG_ANIM_AREA_OVERFLOW_MODE, 0);
@@ -729,15 +782,27 @@ void MoveBattlerSpriteToBG(u8 battler, bool8 toBG_2, bool8 setSpriteInvisible)
         SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
         SetGpuReg(REG_OFFSET_BG1VOFS, gBattle_BG1_Y);
 
-        LoadPalette(&gPlttBufferUnfaded[OBJ_PLTT_ID(battler)], BG_PLTT_ID(animBg.paletteId), PLTT_SIZE_4BPP);
-        CpuCopy32(&gPlttBufferUnfaded[OBJ_PLTT_ID(battler)], (void *)(BG_PLTT + PLTT_OFFSET_4BPP(animBg.paletteId)), PLTT_SIZE_4BPP);
-
         if (IsContest())
             battlerPosition = 0;
         else
             battlerPosition = GetBattlerPosition(battler);
 
-        DrawBattlerOnBg(1, 0, 0, battlerPosition, animBg.paletteId, animBg.bgTiles, animBg.bgTilemap, animBg.tilesOffset);
+        if (BattleOverworldScene_IsEnabled())
+        {
+            if (BattleOverworldScene_DrawBattlerOnBg(battler, 1, animBg.paletteId, animBg.tilesOffset, animBg.bgTiles, animBg.bgTilemap, &gBattle_BG1_X, &gBattle_BG1_Y))
+            {
+                LoadPalette(&gPlttBufferUnfaded[OBJ_PLTT_ID(gSprites[battlerSpriteId].oam.paletteNum)], BG_PLTT_ID(animBg.paletteId), PLTT_SIZE_4BPP);
+                CpuCopy32(&gPlttBufferUnfaded[OBJ_PLTT_ID(gSprites[battlerSpriteId].oam.paletteNum)], (void *)(BG_PLTT + PLTT_OFFSET_4BPP(animBg.paletteId)), PLTT_SIZE_4BPP);
+                SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
+                SetGpuReg(REG_OFFSET_BG1VOFS, gBattle_BG1_Y);
+            }
+        }
+        else
+        {
+            LoadPalette(&gPlttBufferUnfaded[OBJ_PLTT_ID(battler)], BG_PLTT_ID(animBg.paletteId), PLTT_SIZE_4BPP);
+            CpuCopy32(&gPlttBufferUnfaded[OBJ_PLTT_ID(battler)], (void *)(BG_PLTT + PLTT_OFFSET_4BPP(animBg.paletteId)), PLTT_SIZE_4BPP);
+            DrawBattlerOnBg(1, 0, 0, battlerPosition, animBg.paletteId, animBg.bgTiles, animBg.bgTilemap, animBg.tilesOffset);
+        }
 
         if (IsContest())
             FlipBattlerBgTiles();
@@ -841,6 +906,12 @@ static void Task_UpdateMonBg(u8 taskId)
 
     spriteId = gTasks[taskId].t2_SpriteId;
     battler = gTasks[taskId].t2_BattlerId;
+    if (BattleOverworldScene_IsEnabled() && gTasks[taskId].t2_HidePending && gTasks[taskId].t2_HideTimer++ != 0)
+    {
+        gTasks[taskId].t2_HidePending = FALSE;
+        BattleOverworldScene_SetBattlerHiddenByMonBg(battler, TRUE);
+    }
+
     GetBattleAnimBg1Data(&animBg);
     x = gTasks[taskId].t2_SpriteX - (gSprites[spriteId].x + gSprites[spriteId].x2);
     y = gTasks[taskId].t2_SpriteY - (gSprites[spriteId].y + gSprites[spriteId].y2);
@@ -871,6 +942,8 @@ static void Task_UpdateMonBg(u8 taskId)
 #undef t2_BgY
 #undef t2_InBg2
 #undef t2_BattlerId
+#undef t2_HideTimer
+#undef t2_HidePending
 
 static void Cmd_clearmonbg(void)
 {
@@ -893,9 +966,17 @@ static void Cmd_clearmonbg(void)
         battler = gBattleAnimTarget;
 
     if (sMonAnimTaskIdArray[0] != TASK_NONE)
-        gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
+    {
+        CancelOverworldMonBgSpriteHide(battler);
+        if (!BattleOverworldScene_IsEnabled())
+            gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
+    }
     if (animBattlerId > 1 && sMonAnimTaskIdArray[1] != TASK_NONE)
-        gSprites[gBattlerSpriteIds[BATTLE_PARTNER(battler)]].invisible = FALSE;
+    {
+        CancelOverworldMonBgSpriteHide(BATTLE_PARTNER(battler));
+        if (!BattleOverworldScene_IsEnabled())
+            gSprites[gBattlerSpriteIds[BATTLE_PARTNER(battler)]].invisible = FALSE;
+    }
     else
         animBattlerId = 0;
 
@@ -926,6 +1007,8 @@ static void Task_ClearMonBg(u8 taskId)
             DestroyTask(sMonAnimTaskIdArray[1]);
             sMonAnimTaskIdArray[1] = TASK_NONE;
         }
+        if (sMonAnimTaskIdArray[0] == TASK_NONE && sMonAnimTaskIdArray[1] == TASK_NONE)
+            ResetOverworldMonBg();
         DestroyTask(taskId);
     }
 }
@@ -988,9 +1071,17 @@ static void Cmd_clearmonbg_static(void)
         battler = gBattleAnimTarget;
 
     if (IsBattlerSpriteVisible(battler))
-        gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
+    {
+        CancelOverworldMonBgSpriteHide(battler);
+        if (!BattleOverworldScene_IsEnabled())
+            gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
+    }
     if (animBattlerId > 1 && IsBattlerSpriteVisible(BATTLE_PARTNER(battler)))
-        gSprites[gBattlerSpriteIds[BATTLE_PARTNER(battler)]].invisible = FALSE;
+    {
+        CancelOverworldMonBgSpriteHide(BATTLE_PARTNER(battler));
+        if (!BattleOverworldScene_IsEnabled())
+            gSprites[gBattlerSpriteIds[BATTLE_PARTNER(battler)]].invisible = FALSE;
+    }
     else
         animBattlerId = 0;
 
@@ -1017,6 +1108,7 @@ static void Task_ClearMonBgStatic(u8 taskId)
          && ShouldUseBattlerBg(BATTLE_PARTNER(battler)))
             ResetBattleAnimBg(toBG_2 ^ 1);
 
+        ResetOverworldMonBg();
         DestroyTask(taskId);
     }
 }
@@ -1236,10 +1328,9 @@ static void LoadMoveBgForOverworldBattle(u16 bgId)
     u16 winOut;
 
     BattleOverworldScene_SetMoveBgActive(TRUE);
+    HideBg(2);
 
-    CpuFill32(0, gBattleAnimBgTileBuffer, 0x2000);
-    LZDecompressWram(gBattleAnimBackgroundTable[bgId].image, gBattleAnimBgTileBuffer);
-    CpuCopy32(gBattleAnimBgTileBuffer, (void *)BG_CHAR_ADDR(OW_MOVE_BG_CHARBASE), 0x2000);
+    LZDecompressVram(gBattleAnimBackgroundTable[bgId].image, (void *)BG_CHAR_ADDR(OW_MOVE_BG_CHARBASE));
 
     LZDecompressWram(tilemap, gDecompressionBuffer);
     RelocateBattleBgPal(BATTLE_OW_MOVE_BG_PAL_SLOT, (void *)gDecompressionBuffer, OW_MOVE_BG_TILE_OFFSET, FALSE);
@@ -1254,7 +1345,6 @@ static void LoadMoveBgForOverworldBattle(u16 bgId)
 
     gBattle_BG3_X = 0;
     gBattle_BG3_Y = 0;
-    HideBg(2);
     ShowBg(3);
     SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_MOVE_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_MOVE_BG_SCREENBASE) | BGCNT_TXT256x256);
     SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
@@ -1765,6 +1855,8 @@ static void Cmd_splitbgprio(void)
     else
         battler = gBattleAnimAttacker;
 
+    CancelOverworldMonBgSpriteHide(battler);
+
     // Apply only if the given battler is the lead (on left from team's perspective)
     battlerPosition = GetBattlerPosition(battler);
     if (!IsContest() && (battlerPosition == B_POSITION_PLAYER_LEFT || battlerPosition == B_POSITION_OPPONENT_RIGHT))
@@ -1777,7 +1869,12 @@ static void Cmd_splitbgprio(void)
 
 static void Cmd_splitbgprio_all(void)
 {
+    u8 battler;
+
     sBattleAnimScriptPtr++;
+    for (battler = 0; battler < gBattlersCount; battler++)
+        CancelOverworldMonBgSpriteHide(battler);
+
     if (!IsContest())
     {
         SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 1);
@@ -1802,6 +1899,8 @@ static void Cmd_splitbgprio_foes(void)
             battler = gBattleAnimTarget;
         else
             battler = gBattleAnimAttacker;
+
+        CancelOverworldMonBgSpriteHide(battler);
 
         // Apply only if the given battler is the lead (on left from team's perspective)
         battlerPosition = GetBattlerPosition(battler);

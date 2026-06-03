@@ -38,6 +38,7 @@ void BattleOverworldScene_RegisterBattlerSprite(u8 battler, u8 spriteId);
 bool8 BattleOverworldScene_IsBattlerSprite(u8 battler, u8 spriteId);
 void BattleOverworldScene_StartBattlerSpriteAnim(u8 battler, u8 spriteId, u8 animNum);
 void BattleOverworldScene_SetBattlerHiddenByBall(u8 battler, bool8 hidden);
+void BattleOverworldScene_SetBattlerHiddenByMonBg(u8 battler, bool8 hidden);
 void BattleOverworldScene_PrepareHealthbox(u8 battler, struct Pokemon *mon, u8 partyId);
 bool8 BattleOverworldScene_IsHealthboxPrepared(u8 battler, u8 partyId);
 void BattleOverworldScene_ClearPreparedHealthbox(u8 battler);
@@ -49,5 +50,6 @@ bool8 BattleOverworldScene_LoadMonSpriteGfx(struct Pokemon *mon, u8 battler);
 bool8 BattleOverworldScene_SetMonSpriteTemplate(u16 species, u8 battlerPosition);
 u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, s16 x, s16 y, u8 subpriority);
 void BattleOverworldScene_RestoreBattlerSpriteAnim(u8 battler);
+bool8 BattleOverworldScene_DrawBattlerOnBg(u8 battler, u8 bgId, u8 paletteId, u16 tilesOffset, u8 *tiles, u16 *tilemap, s16 *bgX, s16 *bgY);
 
 #endif // GUARD_BATTLE_OVERWORLD_SCENE_H
