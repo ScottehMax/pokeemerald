@@ -107,7 +107,10 @@ SHELL := bash -o pipefail
 # Set flags for tools
 ASFLAGS := -mcpu=arm7tdmi --defsym MODERN=$(MODERN)
 
-INCLUDE_DIRS := include
+GENERATED_INCLUDE_DIR := $(OBJ_DIR)/include
+BUILD_INFO_H := $(GENERATED_INCLUDE_DIR)/build_info.h
+
+INCLUDE_DIRS := include $(GENERATED_INCLUDE_DIR)
 INCLUDE_CPP_ARGS := $(INCLUDE_DIRS:%=-iquote %)
 INCLUDE_SCANINC_ARGS := $(INCLUDE_DIRS:%=-I %)
 
@@ -160,7 +163,7 @@ MAKEFLAGS += --no-print-directory
 .DELETE_ON_ERROR:
 
 RULES_NO_SCAN += libagbsyscall clean clean-assets tidy tidymodern tidynonmodern generated clean-generated
-.PHONY: all rom modern compare
+.PHONY: all rom modern compare FORCE
 .PHONY: $(RULES_NO_SCAN)
 
 infoshell = $(foreach line, $(shell $1 | sed "s/ /__SPACE__/g"), $(info $(subst __SPACE__, ,$(line))))
@@ -214,7 +217,7 @@ OBJS     := $(C_OBJS) $(C_ASM_OBJS) $(ASM_OBJS) $(DATA_ASM_OBJS) $(MID_OBJS)
 OBJS_REL := $(patsubst $(OBJ_DIR)/%,%,$(OBJS))
 
 SUBDIRS  := $(sort $(dir $(OBJS)))
-$(shell mkdir -p $(SUBDIRS))
+$(shell mkdir -p $(SUBDIRS) $(GENERATED_INCLUDE_DIR))
 
 # Pretend rules that are actually flags defer to `make all`
 modern: all
@@ -277,7 +280,20 @@ generated: $(AUTO_GEN_TARGETS)
 
 clean-generated:
 	@rm -f $(AUTO_GEN_TARGETS)
+	@rm -f $(BUILD_INFO_H)
 	@echo "rm -f <AUTO_GEN_TARGETS>"
+
+FORCE:
+
+$(BUILD_INFO_H): FORCE
+	@mkdir -p $(dir $@)
+	@branch="$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"; \
+	hash="$$(git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"; \
+	branch="$$(printf '%s' "$$branch" | sed 's/["\\]/\\&/g')"; \
+	hash="$$(printf '%s' "$$hash" | sed 's/["\\]/\\&/g')"; \
+	tmp="$@.tmp"; \
+	printf '#ifndef GUARD_BUILD_INFO_H\n#define GUARD_BUILD_INFO_H\n\n#define BUILD_INFO_TEXT "{COLOR RED}{SHADOW LIGHT_RED}%s{COLOR WHITE}{SHADOW DARK_GRAY} {COLOR GREEN}{SHADOW LIGHT_GREEN}%s{COLOR WHITE}{SHADOW DARK_GRAY}"\n\n#endif // GUARD_BUILD_INFO_H\n' "$$branch" "$$hash" > "$$tmp"; \
+	if ! test -f "$@" || ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm "$$tmp"; fi
 
 ifeq ($(MODERN),0)
 $(C_BUILDDIR)/libc.o: CC1 := $(TOOLS_DIR)/agbcc/bin/old_agbcc$(EXE)
@@ -300,6 +316,9 @@ endif
 
 # As a side effect, they're evaluated immediately instead of when the rule is invoked.
 # It doesn't look like $(shell) can be deferred so there might not be a better way (Icedude_907: there is soon).
+
+$(C_BUILDDIR)/debug_menu.o: $(BUILD_INFO_H)
+$(C_BUILDDIR)/debug_menu.d: $(BUILD_INFO_H)
 
 $(C_BUILDDIR)/%.o: $(C_SUBDIR)/%.c
 ifneq ($(KEEP_TEMPS),1)

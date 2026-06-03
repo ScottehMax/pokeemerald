@@ -1,4 +1,5 @@
 #include "global.h"
+#include "build_info.h"
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_gfx_sfx_util.h"
@@ -41,11 +42,18 @@ extern const struct MapLayout *const gMapLayouts[];
 #define OW_BATTLE_DEBUG_PALETTE 1
 #define OW_BATTLE_DEBUG_ROW_HEIGHT 9
 #define OW_BATTLE_ANIM_BASE_Y OW_BATTLE_PREVIEW_BASE_Y
+#define DEBUG_BUILD_INFO_WIDTH_TILES 20
+#define DEBUG_BUILD_INFO_HEIGHT_TILES 2
+#define DEBUG_BUILD_INFO_GFXTAG_LEFT 0xD631
+#define DEBUG_BUILD_INFO_GFXTAG_MID 0xD632
+#define DEBUG_BUILD_INFO_GFXTAG_RIGHT 0xD633
+#define DEBUG_BUILD_INFO_PALTAG 0xD634
 
 enum
 {
     WIN_DEBUG_MENU,
-    WIN_DEBUG_PREVIEW
+    WIN_DEBUG_PREVIEW,
+    WIN_DEBUG_BUILD_INFO
 };
 
 static void CB2_DebugMenu(void);
@@ -54,6 +62,9 @@ static void Task_DebugMenuInput(u8 taskId);
 static void Task_OwBattlePreviewInput(u8 taskId);
 static void Task_OwBattleAnimInput(u8 taskId);
 static void InitDebugMenuBgsAndWindows(void);
+static void DrawDebugBuildInfo(void);
+static void HideDebugBuildInfo(void);
+static void CopyBuildInfoTilesToSprite(u16 tileStart, u8 srcTileX, u8 srcWidthTiles, u8 objWidthTiles, u8 objHeightTiles);
 static void InitOwBattlePreview(void);
 static void InitOwBattleAnimPreview(void);
 static void DrawOwBattlePreviewText(void);
@@ -117,7 +128,83 @@ static const u8 sText_Player[] = _("PLAYER");
 static const u8 sText_Opponent[] = _("OPPONENT");
 static const u8 sText_AnimHelp1[] = _("UP/DN ROW  L/R VALUE");
 static const u8 sText_AnimHelp2[] = _("A PLAY  SEL HELP  B BACK");
+static const u8 sText_BuildInfo[] = _(BUILD_INFO_TEXT);
 static const u8 sTextColor_TransparentBg[] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY};
+static const u8 sBuildInfoBlankTiles64x32[64 * 32 / 2] = {0};
+static const u8 sBuildInfoBlankTiles32x16[32 * 16 / 2] = {0};
+
+static const struct OamData sOam_BuildInfo64x32 =
+{
+    .y = 0,
+    .affineMode = ST_OAM_AFFINE_OFF,
+    .objMode = ST_OAM_OBJ_NORMAL,
+    .mosaic = FALSE,
+    .bpp = ST_OAM_4BPP,
+    .shape = SPRITE_SHAPE(64x32),
+    .x = 0,
+    .matrixNum = 0,
+    .size = SPRITE_SIZE(64x32),
+    .tileNum = 0,
+    .priority = 0,
+    .paletteNum = 0,
+    .affineParam = 0
+};
+
+static const struct OamData sOam_BuildInfo32x16 =
+{
+    .y = 0,
+    .affineMode = ST_OAM_AFFINE_OFF,
+    .objMode = ST_OAM_OBJ_NORMAL,
+    .mosaic = FALSE,
+    .bpp = ST_OAM_4BPP,
+    .shape = SPRITE_SHAPE(32x16),
+    .x = 0,
+    .matrixNum = 0,
+    .size = SPRITE_SIZE(32x16),
+    .tileNum = 0,
+    .priority = 0,
+    .paletteNum = 0,
+    .affineParam = 0
+};
+
+static const struct SpriteSheet sBuildInfoSpriteSheets[] =
+{
+    {sBuildInfoBlankTiles64x32, sizeof(sBuildInfoBlankTiles64x32), DEBUG_BUILD_INFO_GFXTAG_LEFT},
+    {sBuildInfoBlankTiles64x32, sizeof(sBuildInfoBlankTiles64x32), DEBUG_BUILD_INFO_GFXTAG_MID},
+    {sBuildInfoBlankTiles32x16, sizeof(sBuildInfoBlankTiles32x16), DEBUG_BUILD_INFO_GFXTAG_RIGHT},
+    {}
+};
+
+static const struct SpriteTemplate sBuildInfoSpriteTemplates[] =
+{
+    {
+        .tileTag = DEBUG_BUILD_INFO_GFXTAG_LEFT,
+        .paletteTag = TAG_NONE,
+        .oam = &sOam_BuildInfo64x32,
+        .anims = gDummySpriteAnimTable,
+        .images = NULL,
+        .affineAnims = gDummySpriteAffineAnimTable,
+        .callback = SpriteCallbackDummy
+    },
+    {
+        .tileTag = DEBUG_BUILD_INFO_GFXTAG_MID,
+        .paletteTag = TAG_NONE,
+        .oam = &sOam_BuildInfo64x32,
+        .anims = gDummySpriteAnimTable,
+        .images = NULL,
+        .affineAnims = gDummySpriteAffineAnimTable,
+        .callback = SpriteCallbackDummy
+    },
+    {
+        .tileTag = DEBUG_BUILD_INFO_GFXTAG_RIGHT,
+        .paletteTag = TAG_NONE,
+        .oam = &sOam_BuildInfo32x16,
+        .anims = gDummySpriteAnimTable,
+        .images = NULL,
+        .affineAnims = gDummySpriteAffineAnimTable,
+        .callback = SpriteCallbackDummy
+    }
+};
 
 static const struct MenuAction sDebugMenuActions[] =
 {
@@ -186,6 +273,15 @@ static const struct WindowTemplate sDebugMenuWindowTemplates[] =
         .paletteNum = OW_BATTLE_DEBUG_PALETTE,
         .baseBlock = 1
     },
+    [WIN_DEBUG_BUILD_INFO] = {
+        .bg = 0,
+        .tilemapLeft = 0,
+        .tilemapTop = 0,
+        .width = DEBUG_BUILD_INFO_WIDTH_TILES,
+        .height = DEBUG_BUILD_INFO_HEIGHT_TILES,
+        .paletteNum = OW_BATTLE_DEBUG_PALETTE,
+        .baseBlock = 1
+    },
     DUMMY_WIN_TEMPLATE
 };
 
@@ -228,6 +324,7 @@ void CB2_InitDebugMenu(void)
     AddTextPrinterParameterized(WIN_DEBUG_MENU, FONT_NORMAL, sText_Debug, 8, 1, TEXT_SKIP_DRAW, NULL);
     PrintMenuTable(WIN_DEBUG_MENU, ARRAY_COUNT(sDebugMenuActions), sDebugMenuActions);
     InitMenuInUpperLeftCornerNormal(WIN_DEBUG_MENU, ARRAY_COUNT(sDebugMenuActions), 0);
+    DrawDebugBuildInfo();
     CopyWindowToVram(WIN_DEBUG_MENU, COPYWIN_FULL);
     CreateTask(Task_DebugMenuInput, 0);
     BeginNormalPaletteFade(PALETTES_ALL, 0, 16, 0, RGB_BLACK);
@@ -255,9 +352,88 @@ static void InitDebugMenuBgsAndWindows(void)
     DeactivateAllTextPrinters();
     LoadMessageBoxAndBorderGfx();
     Menu_LoadStdPalAt(BG_PLTT_ID(OW_BATTLE_DEBUG_PALETTE));
+    gBattle_BG0_X = 0;
+    gBattle_BG0_Y = 0;
     SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_ON | DISPCNT_OBJ_1D_MAP);
     ShowBg(0);
     HideBg(3);
+}
+
+static void DrawDebugBuildInfo(void)
+{
+    s16 x = DEBUG_BUILD_INFO_WIDTH_TILES * TILE_WIDTH - GetStringWidth(OW_BATTLE_DEBUG_FONT, sText_BuildInfo, 0);
+    u8 i;
+    u8 palNum;
+    u8 spriteIds[ARRAY_COUNT(sBuildInfoSpriteTemplates)];
+    static const u8 sSpriteXCoords[ARRAY_COUNT(sBuildInfoSpriteTemplates)] = {112, 176, 224};
+    static const u8 sSpriteYCoords[ARRAY_COUNT(sBuildInfoSpriteTemplates)] = {16, 16, 8};
+
+    if (x < 0)
+        x = 0;
+
+    palNum = AllocSpritePalette(DEBUG_BUILD_INFO_PALTAG);
+    if (palNum == 0xFF)
+        return;
+
+    LoadSpriteSheets(sBuildInfoSpriteSheets);
+    if (GetSpriteTileStartByTag(DEBUG_BUILD_INFO_GFXTAG_LEFT) == 0xFFFF
+     || GetSpriteTileStartByTag(DEBUG_BUILD_INFO_GFXTAG_MID) == 0xFFFF
+     || GetSpriteTileStartByTag(DEBUG_BUILD_INFO_GFXTAG_RIGHT) == 0xFFFF)
+        return;
+
+    LoadPalette(&gPlttBufferUnfaded[BG_PLTT_ID(OW_BATTLE_DEBUG_PALETTE)], OBJ_PLTT_ID(palNum), PLTT_SIZE_4BPP);
+
+    FillWindowPixelBuffer(WIN_DEBUG_BUILD_INFO, PIXEL_FILL(0));
+    AddTextPrinterParameterized4(WIN_DEBUG_BUILD_INFO, OW_BATTLE_DEBUG_FONT, x, 0, 0, 0, sTextColor_TransparentBg, TEXT_SKIP_DRAW, sText_BuildInfo);
+
+    CopyBuildInfoTilesToSprite(GetSpriteTileStartByTag(DEBUG_BUILD_INFO_GFXTAG_LEFT), 0, 8, 8, 4);
+    CopyBuildInfoTilesToSprite(GetSpriteTileStartByTag(DEBUG_BUILD_INFO_GFXTAG_MID), 8, 8, 8, 4);
+    CopyBuildInfoTilesToSprite(GetSpriteTileStartByTag(DEBUG_BUILD_INFO_GFXTAG_RIGHT), 16, 4, 4, 2);
+
+    for (i = 0; i < ARRAY_COUNT(sBuildInfoSpriteTemplates); i++)
+    {
+        spriteIds[i] = CreateSprite(&sBuildInfoSpriteTemplates[i], sSpriteXCoords[i], sSpriteYCoords[i], 0);
+        if (spriteIds[i] != MAX_SPRITES)
+            gSprites[spriteIds[i]].oam.paletteNum = palNum;
+    }
+}
+
+static void CopyBuildInfoTilesToSprite(u16 tileStart, u8 srcTileX, u8 srcWidthTiles, u8 objWidthTiles, u8 objHeightTiles)
+{
+    u8 row;
+    u8 col;
+    u8 *dest = (u8 *)OBJ_VRAM0 + (tileStart * TILE_SIZE_4BPP);
+
+    CpuFill32(0, dest, objWidthTiles * objHeightTiles * TILE_SIZE_4BPP);
+
+    for (row = 0; row < DEBUG_BUILD_INFO_HEIGHT_TILES; row++)
+    {
+        for (col = 0; col < srcWidthTiles; col++)
+        {
+            CpuCopy16(gWindows[WIN_DEBUG_BUILD_INFO].tileData + ((row * DEBUG_BUILD_INFO_WIDTH_TILES + srcTileX + col) * TILE_SIZE_4BPP),
+                      dest + ((row * objWidthTiles + col) * TILE_SIZE_4BPP),
+                      TILE_SIZE_4BPP);
+        }
+    }
+}
+
+static void HideDebugBuildInfo(void)
+{
+    u8 i;
+
+    for (i = 0; i < MAX_SPRITES; i++)
+    {
+        if (gSprites[i].inUse
+         && (gSprites[i].template == &sBuildInfoSpriteTemplates[0]
+          || gSprites[i].template == &sBuildInfoSpriteTemplates[1]
+          || gSprites[i].template == &sBuildInfoSpriteTemplates[2]))
+            DestroySprite(&gSprites[i]);
+    }
+
+    FreeSpriteTilesByTag(DEBUG_BUILD_INFO_GFXTAG_LEFT);
+    FreeSpriteTilesByTag(DEBUG_BUILD_INFO_GFXTAG_MID);
+    FreeSpriteTilesByTag(DEBUG_BUILD_INFO_GFXTAG_RIGHT);
+    FreeSpritePaletteByTag(DEBUG_BUILD_INFO_PALTAG);
 }
 
 static void Task_DebugMenuInput(u8 taskId)
@@ -273,11 +449,13 @@ static void Task_DebugMenuInput(u8 taskId)
     case 0:
         PlaySE(SE_SELECT);
         DestroyTask(taskId);
+        HideDebugBuildInfo();
         InitOwBattlePreview();
         break;
     case 1:
         PlaySE(SE_SELECT);
         DestroyTask(taskId);
+        HideDebugBuildInfo();
         InitOwBattleAnimPreview();
         break;
     case 2:
