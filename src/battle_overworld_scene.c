@@ -41,6 +41,7 @@
 #define OW_BG_LOWER_ID 3
 #define OW_BG_UPPER_ID 2
 #define OW_BG_BLANK_TILE 0x040
+#define OW_BG_DEBUG_SCROLL_FRAMES 4
 #define OW_MON_BG_CHARBASE 1
 #define OW_MON_BG_SCREENBASE 28
 #define OW_BATTLER_OBJ_PRIORITY 2
@@ -267,6 +268,7 @@ static const union AnimCmd *const sAnimTable_BattleTrainerFaceEast[] =
 
 static bool8 IsBattleOverworldSceneEnabled(void);
 static void BattleOverworldScene_ApplyBgConfig(void);
+static void BattleOverworldScene_SetBaseBackgroundVisibility(bool8 visible);
 static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerPic, u8 trainerClass);
 static bool8 SetBattleOwMonSpriteTemplate(u16 species, u8 battlerPosition);
 static void Task_BattleOverworldScene_WildShinyAnimations(u8 taskId);
@@ -280,14 +282,24 @@ static bool8 sOwBattlerHiddenByMonBg[MAX_BATTLERS_COUNT];
 static bool8 sCreatedTrainerSprites;
 static bool8 sSceneSuspended;
 static bool8 sSceneVisible;
+static bool8 sShowBaseBgInVBlank;
 static bool8 sMoveBgActive;
 static EWRAM_DATA u16 sBattleOwBgTileMap[NUM_TILES_TOTAL] = {0};
+static EWRAM_DATA u8 sBattleOwBgPalMap[16] = {0};
 static EWRAM_DATA u32 sBattleOwBgPaletteMask = 0;
 // BG palettes 8 and 9 are used as battle-animation scratch palettes for battler BG masks.
 static const u8 sBattleOwBgFreePalSlots[] = {2, 3, 4, 7, 10, 11, 12, 13, 14, 15};
 static EWRAM_DATA const struct MapLayout *sBattleOwBgLayout = 0;
 static EWRAM_DATA u16 sBattleOwBgMapX = 0;
 static EWRAM_DATA u16 sBattleOwBgMapY = 0;
+static EWRAM_DATA u16 sBattleOwBgNextTile = 0;
+static EWRAM_DATA u8 sBattleOwBgNextPalSlot = 0;
+static EWRAM_DATA u8 sBattleOwBgTilemapX = 0;
+static EWRAM_DATA u8 sBattleOwBgTilemapY = 0;
+static EWRAM_DATA s8 sBattleOwBgDebugScrollDeltaX = 0;
+static EWRAM_DATA s8 sBattleOwBgDebugScrollDeltaY = 0;
+static EWRAM_DATA u8 sBattleOwBgDebugScrollFrame = 0;
+static EWRAM_DATA bool8 sBattleOwBgDebugScrollActive = FALSE;
 static EWRAM_DATA bool8 sBattleOwBgTilesetAnimsActive = FALSE;
 static EWRAM_DATA u8 sPreparedHealthboxPartyIds[MAX_BATTLERS_COUNT] = {0};
 
@@ -505,18 +517,18 @@ static u16 GetMapMetatileIdAt(u8 x, u8 y)
     return metatileId;
 }
 
-static void DrawMapMetatile(u16 *lowerBg, u16 *upperBg, u8 x, u8 y, const u16 *metatile, const u8 *palMap)
+static void DrawMapMetatile(u16 *lowerBg, u16 *upperBg, u8 x, u8 y, const u16 *metatile)
 {
     u16 offset = y * 2 * 32 + x * 2;
 
-    lowerBg[offset] = RemapBgTile(metatile[0], palMap);
-    lowerBg[offset + 1] = RemapBgTile(metatile[1], palMap);
-    lowerBg[offset + 32] = RemapBgTile(metatile[2], palMap);
-    lowerBg[offset + 33] = RemapBgTile(metatile[3], palMap);
-    upperBg[offset] = RemapBgTile(metatile[4], palMap);
-    upperBg[offset + 1] = RemapBgTile(metatile[5], palMap);
-    upperBg[offset + 32] = RemapBgTile(metatile[6], palMap);
-    upperBg[offset + 33] = RemapBgTile(metatile[7], palMap);
+    lowerBg[offset] = RemapBgTile(metatile[0], sBattleOwBgPalMap);
+    lowerBg[offset + 1] = RemapBgTile(metatile[1], sBattleOwBgPalMap);
+    lowerBg[offset + 32] = RemapBgTile(metatile[2], sBattleOwBgPalMap);
+    lowerBg[offset + 33] = RemapBgTile(metatile[3], sBattleOwBgPalMap);
+    upperBg[offset] = RemapBgTile(metatile[4], sBattleOwBgPalMap);
+    upperBg[offset + 1] = RemapBgTile(metatile[5], sBattleOwBgPalMap);
+    upperBg[offset + 32] = RemapBgTile(metatile[6], sBattleOwBgPalMap);
+    upperBg[offset + 33] = RemapBgTile(metatile[7], sBattleOwBgPalMap);
 }
 
 static void LoadMapPalette(u8 srcPal, u8 destPal)
@@ -576,27 +588,51 @@ static void TryAssignMapTile(const u16 *metatile, u16 *nextTile)
     }
 }
 
-static void BuildMapTileAndPaletteMaps(u8 *palMap)
+static void BuildMapTileAndPaletteMaps(void)
 {
     u8 i;
     u8 x;
     u8 y;
-    u8 nextPalSlot = 0;
     u16 metatileId;
-    u16 nextTile = GetNextMapTile(OW_BG_BLANK_TILE);
 
     for (i = 0; i < 16; i++)
-        palMap[i] = OW_BG_PAL_UNMAPPED;
+        sBattleOwBgPalMap[i] = OW_BG_PAL_UNMAPPED;
     for (metatileId = 0; metatileId < NUM_TILES_TOTAL; metatileId++)
         sBattleOwBgTileMap[metatileId] = OW_BG_TILE_UNMAPPED;
+    sBattleOwBgNextPalSlot = 0;
+    sBattleOwBgNextTile = GetNextMapTile(OW_BG_BLANK_TILE);
 
     for (y = 0; y < OW_BG_MAP_HEIGHT; y++)
     {
         for (x = 0; x < OW_BG_MAP_WIDTH; x++)
         {
             metatileId = GetMapMetatileIdAt(x, y);
-            TryAssignMapPalette(GetMapMetatile(metatileId), palMap, &nextPalSlot);
-            TryAssignMapTile(GetMapMetatile(metatileId), &nextTile);
+            TryAssignMapPalette(GetMapMetatile(metatileId), sBattleOwBgPalMap, &sBattleOwBgNextPalSlot);
+            TryAssignMapTile(GetMapMetatile(metatileId), &sBattleOwBgNextTile);
+        }
+    }
+}
+
+static void AssignMapSliceToTileAndPaletteMapsAbs(u16 x, u16 y, u8 width, u8 height)
+{
+    u8 i;
+    u8 j;
+    u16 metatileId;
+
+    for (j = 0; j < height; j++)
+    {
+        for (i = 0; i < width; i++)
+        {
+            if (x + i >= sBattleOwBgLayout->width || y + j >= sBattleOwBgLayout->height)
+                metatileId = 0;
+            else
+            {
+                metatileId = sBattleOwBgLayout->map[(y + j) * sBattleOwBgLayout->width + x + i] & MAPGRID_METATILE_ID_MASK;
+                if (metatileId >= NUM_METATILES_TOTAL)
+                    metatileId = 0;
+            }
+            TryAssignMapPalette(GetMapMetatile(metatileId), sBattleOwBgPalMap, &sBattleOwBgNextPalSlot);
+            TryAssignMapTile(GetMapMetatile(metatileId), &sBattleOwBgNextTile);
         }
     }
 }
@@ -708,25 +744,26 @@ static s16 GetTrainerBaselineAlignedY(const struct ObjectEventGraphicsInfo *grap
 
 static void BattleOverworldScene_DrawBackground(bool8 visible)
 {
-    u8 palMap[16];
     u8 x;
     u8 y;
     u16 metatileId;
     u16 *lowerBg = (u16 *)BG_SCREEN_ADDR(OW_BG_LOWER_SCREENBASE);
     u16 *upperBg = (u16 *)BG_SCREEN_ADDR(OW_BG_UPPER_SCREENBASE);
 
-    BuildMapTileAndPaletteMaps(palMap);
-    UpdateMapPaletteMask(palMap);
+    BuildMapTileAndPaletteMaps();
+    UpdateMapPaletteMask(sBattleOwBgPalMap);
 
     CpuFill16(0, lowerBg, BG_SCREEN_SIZE);
     CpuFill16(0, upperBg, BG_SCREEN_SIZE);
+    sBattleOwBgTilemapX = 0;
+    sBattleOwBgTilemapY = 0;
 
     for (y = 0; y < OW_BG_MAP_HEIGHT; y++)
     {
         for (x = 0; x < OW_BG_MAP_WIDTH; x++)
         {
             metatileId = GetMapMetatileIdAt(x, y);
-            DrawMapMetatile(lowerBg, upperBg, x, y, GetMapMetatile(metatileId), palMap);
+            DrawMapMetatile(lowerBg, upperBg, x, y, GetMapMetatile(metatileId));
         }
     }
 
@@ -755,13 +792,11 @@ static void BattleOverworldScene_DrawBackground(bool8 visible)
 
 void BattleOverworldScene_LoadBackground(void)
 {
-    u8 palMap[16];
-
     if (!IsBattleOverworldSceneEnabled())
         return;
 
     BattleOverworldScene_SetCurrentMapBackgroundLayout();
-    BuildMapTileAndPaletteMaps(palMap);
+    BuildMapTileAndPaletteMaps();
     LoadMappedMapTiles();
     BattleOverworldScene_InitBackgroundAnimation();
     BattleOverworldScene_DrawBackground(sSceneVisible);
@@ -778,31 +813,199 @@ void BattleOverworldScene_RestoreBackground(void)
 
 void BattleOverworldScene_LoadDebugBackground(const struct MapLayout *layout, u16 x, u16 y)
 {
-    u8 palMap[16];
-
+    sBattleOwBgDebugScrollActive = FALSE;
     BattleOverworldScene_SetBackgroundLayout(layout, x, y);
-    BuildMapTileAndPaletteMaps(palMap);
+    BuildMapTileAndPaletteMaps();
     LoadMappedMapTiles();
     BattleOverworldScene_InitBackgroundAnimation();
     sSceneVisible = TRUE;
     BattleOverworldScene_DrawBackground(TRUE);
 }
 
+static u8 WrapBgTilemapCoord(s16 coord)
+{
+    return coord & 31;
+}
+
+static u16 GetMapMetatileIdAtAbs(u16 mapX, u16 mapY)
+{
+    u16 metatileId;
+
+    if (mapX >= sBattleOwBgLayout->width || mapY >= sBattleOwBgLayout->height)
+        return 0;
+
+    metatileId = sBattleOwBgLayout->map[mapY * sBattleOwBgLayout->width + mapX] & MAPGRID_METATILE_ID_MASK;
+    if (metatileId >= NUM_METATILES_TOTAL)
+        return 0;
+
+    return metatileId;
+}
+
+static void DrawDebugMapSliceAbs(u16 mapX, u16 mapY, u8 bgTileX, u8 bgTileY, u8 width, u8 height)
+{
+    u8 x;
+    u8 y;
+    u16 *lowerBg = (u16 *)BG_SCREEN_ADDR(OW_BG_LOWER_SCREENBASE);
+    u16 *upperBg = (u16 *)BG_SCREEN_ADDR(OW_BG_UPPER_SCREENBASE);
+
+    for (y = 0; y < height; y++)
+    {
+        for (x = 0; x < width; x++)
+        {
+            DrawMapMetatile(lowerBg,
+                            upperBg,
+                            WrapBgTilemapCoord(bgTileX + x * 2) / 2,
+                            WrapBgTilemapCoord(bgTileY + y * 2) / 2,
+                            GetMapMetatile(GetMapMetatileIdAtAbs(mapX + x, mapY + y)));
+        }
+    }
+}
+
+static void PrepareDebugMapScrollSlices(u16 x, u16 y, s8 deltaX, s8 deltaY)
+{
+    u16 sliceMapX;
+    u16 sliceMapY;
+    s16 sliceDelta;
+    u8 sliceBgTileX;
+    u8 sliceBgTileY;
+
+    if (deltaX != 0)
+    {
+        if (deltaX > 0)
+        {
+            sliceMapX = x + OW_BG_MAP_WIDTH - 1;
+            sliceBgTileX = WrapBgTilemapCoord(sBattleOwBgTilemapX + OW_BG_MAP_WIDTH * 2);
+        }
+        else
+        {
+            sliceMapX = x;
+            sliceBgTileX = WrapBgTilemapCoord(sBattleOwBgTilemapX - 2);
+        }
+        sliceMapY = y;
+        sliceDelta = (s16)sliceMapY - (s16)sBattleOwBgMapY;
+        sliceBgTileY = WrapBgTilemapCoord(sBattleOwBgTilemapY + sliceDelta * 2);
+        AssignMapSliceToTileAndPaletteMapsAbs(sliceMapX, sliceMapY, 1, OW_BG_MAP_HEIGHT);
+        DrawDebugMapSliceAbs(sliceMapX, sliceMapY, sliceBgTileX, sliceBgTileY, 1, OW_BG_MAP_HEIGHT);
+    }
+
+    if (deltaY != 0)
+    {
+        if (deltaY > 0)
+        {
+            sliceMapY = y + OW_BG_MAP_HEIGHT - 1;
+            sliceBgTileY = WrapBgTilemapCoord(sBattleOwBgTilemapY + OW_BG_MAP_HEIGHT * 2);
+        }
+        else
+        {
+            sliceMapY = y;
+            sliceBgTileY = WrapBgTilemapCoord(sBattleOwBgTilemapY - 2);
+        }
+        sliceMapX = x;
+        sliceDelta = (s16)sliceMapX - (s16)sBattleOwBgMapX;
+        sliceBgTileX = WrapBgTilemapCoord(sBattleOwBgTilemapX + sliceDelta * 2);
+        AssignMapSliceToTileAndPaletteMapsAbs(sliceMapX, sliceMapY, OW_BG_MAP_WIDTH, 1);
+        DrawDebugMapSliceAbs(sliceMapX, sliceMapY, sliceBgTileX, sliceBgTileY, OW_BG_MAP_WIDTH, 1);
+    }
+}
+
+bool8 BattleOverworldScene_BeginDebugBackgroundScroll(const struct MapLayout *layout, u16 x, u16 y)
+{
+    s16 deltaX;
+    s16 deltaY;
+
+    if (layout != sBattleOwBgLayout)
+    {
+        BattleOverworldScene_LoadDebugBackground(layout, x, y);
+        return FALSE;
+    }
+
+    deltaX = x - sBattleOwBgMapX;
+    deltaY = y - sBattleOwBgMapY;
+    if (deltaX < -1 || deltaX > 1 || deltaY < -1 || deltaY > 1)
+    {
+        BattleOverworldScene_LoadDebugBackground(layout, x, y);
+        return FALSE;
+    }
+
+    if (deltaX == 0 && deltaY == 0)
+        return FALSE;
+
+    sBattleOwBgDebugScrollDeltaX = deltaX;
+    sBattleOwBgDebugScrollDeltaY = deltaY;
+    sBattleOwBgDebugScrollFrame = 0;
+    sBattleOwBgDebugScrollActive = TRUE;
+    PrepareDebugMapScrollSlices(x, y, deltaX, deltaY);
+    LoadMappedMapTiles();
+    UpdateMapPaletteMask(sBattleOwBgPalMap);
+
+    return TRUE;
+}
+
+bool8 BattleOverworldScene_UpdateDebugBackgroundScroll(void)
+{
+    if (!sBattleOwBgDebugScrollActive)
+        return TRUE;
+
+    gBattle_BG2_X += sBattleOwBgDebugScrollDeltaX * (16 / OW_BG_DEBUG_SCROLL_FRAMES);
+    gBattle_BG3_X += sBattleOwBgDebugScrollDeltaX * (16 / OW_BG_DEBUG_SCROLL_FRAMES);
+    gBattle_BG2_Y += sBattleOwBgDebugScrollDeltaY * (16 / OW_BG_DEBUG_SCROLL_FRAMES);
+    gBattle_BG3_Y += sBattleOwBgDebugScrollDeltaY * (16 / OW_BG_DEBUG_SCROLL_FRAMES);
+    sBattleOwBgDebugScrollFrame++;
+    if (sBattleOwBgDebugScrollFrame < OW_BG_DEBUG_SCROLL_FRAMES)
+        return FALSE;
+
+    sBattleOwBgMapX += sBattleOwBgDebugScrollDeltaX;
+    sBattleOwBgMapY += sBattleOwBgDebugScrollDeltaY;
+    sBattleOwBgTilemapX = WrapBgTilemapCoord(sBattleOwBgTilemapX + sBattleOwBgDebugScrollDeltaX * 2);
+    sBattleOwBgTilemapY = WrapBgTilemapCoord(sBattleOwBgTilemapY + sBattleOwBgDebugScrollDeltaY * 2);
+    sBattleOwBgDebugScrollActive = FALSE;
+
+    return TRUE;
+}
+
 void BattleOverworldScene_StopBackgroundAnimation(void)
 {
     sBattleOwBgTilesetAnimsActive = FALSE;
+    sBattleOwBgDebugScrollActive = FALSE;
 }
 
 void BattleOverworldScene_UpdateBackgroundAnimation(void)
 {
-    if (sBattleOwBgTilesetAnimsActive && !sMoveBgActive)
+    if (!sSceneSuspended && sBattleOwBgTilesetAnimsActive && !sMoveBgActive)
         UpdateTilesetAnimations();
 }
 
 void BattleOverworldScene_TransferBackgroundAnimation(void)
 {
-    if (sBattleOwBgTilesetAnimsActive && !sMoveBgActive)
+    if (!sSceneSuspended && sBattleOwBgTilesetAnimsActive && !sMoveBgActive)
         TransferTilesetAnimsBuffer();
+}
+
+void BattleOverworldScene_ShowBaseBackgroundInVBlank(void)
+{
+    sShowBaseBgInVBlank = TRUE;
+    sSceneSuspended = FALSE;
+}
+
+void BattleOverworldScene_TryShowBaseBackgroundInVBlank(void)
+{
+    if (!sShowBaseBgInVBlank)
+        return;
+
+    gBattle_BG2_X = 0;
+    gBattle_BG2_Y = 0;
+    gBattle_BG3_X = 0;
+    gBattle_BG3_Y = 0;
+    BattleOverworldScene_ApplyBgConfig();
+    SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(2) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_UPPER_SCREENBASE) | BGCNT_TXT256x256);
+    SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
+    SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
+    SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
+    SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
+    SetGpuReg(REG_OFFSET_BG3VOFS, gBattle_BG3_Y);
+    CpuCopy32(gPlttBufferFaded, (void *)BG_PLTT, BG_PLTT_SIZE);
+    BattleOverworldScene_SetBaseBackgroundVisibility(TRUE);
+    sShowBaseBgInVBlank = FALSE;
 }
 
 bool8 BattleOverworldScene_IsTilesetAnimActive(void)
@@ -834,34 +1037,39 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
         return;
     if (sMoveBgActive)
         return;
+    if (sShowBaseBgInVBlank)
+        return;
+    if (sBattleOwBgDebugScrollActive)
+        return;
+    if (sBattleOwBgTilemapX != 0 || sBattleOwBgTilemapY != 0)
+        return;
 
     gBattle_BG2_X = 0;
     gBattle_BG2_Y = 0;
     gBattle_BG3_X = 0;
     gBattle_BG3_Y = 0;
     BattleOverworldScene_ApplyBgConfig();
-    if (sSceneVisible)
-    {
-        ShowBg(OW_BG_UPPER_ID);
-        ShowBg(OW_BG_LOWER_ID);
-    }
-    else
-    {
-        HideBg(OW_BG_UPPER_ID);
-        HideBg(OW_BG_LOWER_ID);
-    }
     SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(2) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_UPPER_SCREENBASE) | BGCNT_TXT256x256);
     SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
     SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
     SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
     SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
     SetGpuReg(REG_OFFSET_BG3VOFS, gBattle_BG3_Y);
+    BattleOverworldScene_SetBaseBackgroundVisibility(sSceneVisible);
 
     winIn = GetGpuReg(REG_OFFSET_WININ);
     winOut = GetGpuReg(REG_OFFSET_WINOUT);
     SetGpuReg(REG_OFFSET_WININ, winIn | WININ_WIN0_BG2 | WININ_WIN1_BG2 | WININ_WIN0_BG3 | WININ_WIN1_BG3);
     SetGpuReg(REG_OFFSET_WINOUT, winOut | WINOUT_WIN01_BG2 | WINOUT_WINOBJ_BG2 | WINOUT_WIN01_BG3 | WINOUT_WINOBJ_BG3);
 
+}
+
+static void BattleOverworldScene_SetBaseBackgroundVisibility(bool8 visible)
+{
+    if (visible)
+        SetGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_BG2_ON | DISPCNT_BG3_ON);
+    else
+        ClearGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_BG2_ON | DISPCNT_BG3_ON);
 }
 
 bool8 BattleOverworldScene_IsProtectedBg(u8 bgId)
@@ -887,8 +1095,7 @@ void BattleOverworldScene_BeginSceneFadeIn(void)
     sSceneVisible = TRUE;
     ShowBg(0);
     ShowBg(1);
-    ShowBg(2);
-    ShowBg(3);
+    BattleOverworldScene_KeepBaseBackgroundVisible();
     BeginHardwarePaletteFade(0xFF, 0, 0x10, 0, 1);
 }
 
@@ -1127,7 +1334,9 @@ void BattleOverworldScene_Reset(void)
     BattleOverworldScene_ResetSpriteReferences();
     sSceneSuspended = FALSE;
     sSceneVisible = FALSE;
+    sShowBaseBgInVBlank = FALSE;
     sMoveBgActive = FALSE;
+    sBattleOwBgDebugScrollActive = FALSE;
     sBattleOwBgTilesetAnimsActive = FALSE;
     for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
         sPreparedHealthboxPartyIds[battler] = PARTY_SIZE;

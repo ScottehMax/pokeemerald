@@ -292,7 +292,7 @@ $(BUILD_INFO_H): FORCE
 	branch="$$(printf '%s' "$$branch" | sed 's/["\\]/\\&/g')"; \
 	hash="$$(printf '%s' "$$hash" | sed 's/["\\]/\\&/g')"; \
 	tmp="$@.tmp"; \
-	printf '#ifndef GUARD_BUILD_INFO_H\n#define GUARD_BUILD_INFO_H\n\n#define BUILD_INFO_TEXT "{COLOR RED}{SHADOW LIGHT_RED}%s{COLOR WHITE}{SHADOW DARK_GRAY} {COLOR GREEN}{SHADOW LIGHT_GREEN}%s{COLOR WHITE}{SHADOW DARK_GRAY}"\n\n#endif // GUARD_BUILD_INFO_H\n' "$$branch" "$$hash" > "$$tmp"; \
+	printf '#ifndef GUARD_BUILD_INFO_H\n#define GUARD_BUILD_INFO_H\n\n#define BUILD_INFO_TEXT "{COLOR WHITE}{SHADOW DARK_GRAY}%s{COLOR WHITE}{SHADOW DARK_GRAY} {COLOR WHITE}{SHADOW DARK_GRAY}%s{COLOR WHITE}{SHADOW DARK_GRAY}"\n\n#endif // GUARD_BUILD_INFO_H\n' "$$branch" "$$hash" > "$$tmp"; \
 	if ! test -f "$@" || ! cmp -s "$$tmp" "$@"; then mv "$$tmp" "$@"; else rm "$$tmp"; fi
 
 ifeq ($(MODERN),0)

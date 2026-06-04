@@ -8,6 +8,8 @@
 #include "decompress.h"
 #include "evolution_scene.h"
 #include "evolution_graphics.h"
+#include "field_camera.h"
+#include "fieldmap.h"
 #include "gpu_regs.h"
 #include "link.h"
 #include "link_rfu.h"
@@ -27,6 +29,7 @@
 #include "task.h"
 #include "text.h"
 #include "text_window.h"
+#include "tileset_anims.h"
 #include "trig.h"
 #include "trade.h"
 #include "util.h"
@@ -69,6 +72,7 @@ static void Task_AnimateBg(u8 taskId);
 static void PrepareBgForAnim(u8 bgId);
 static void HideBgAnimLayers(bool8 isLink);
 static void RestoreBgAfterAnim(void);
+static void RestoreFieldGraphicsAfterEvolution(void);
 static u32 GetEvolutionBgPaletteFadeMask(u32 selectedPalettes);
 
 static const u16 sUnusedPal1[] = INCGFX_U16("graphics/evolution_scene/unused_1.pal", ".gbapal");
@@ -537,6 +541,7 @@ static void CB2_EvolutionSceneUpdate(void)
     BuildOamBuffer();
     RunTextPrinters();
     UpdatePaletteFade();
+    BattleOverworldScene_UpdateBackgroundAnimation();
     RunTasks();
 }
 
@@ -825,6 +830,7 @@ static void Task_EvolutionScene(u8 taskId)
             FreeMonSpritesGfx();
             FREE_AND_SET_NULL(sEvoStructPtr);
             FreeAllWindowBuffers();
+            RestoreFieldGraphicsAfterEvolution();
             SetMainCallback2(gCB2_AfterEvolution);
         }
         break;
@@ -1452,6 +1458,7 @@ static void VBlankCB_EvolutionScene(void)
     LoadOam();
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();
+    BattleOverworldScene_TransferBackgroundAnimation();
     ScanlineEffect_InitHBlankDmaTransfer();
 }
 
@@ -1696,6 +1703,25 @@ static void HideBgAnimLayers(bool8 isLink)
 static u32 GetEvolutionBgPaletteFadeMask(u32 selectedPalettes)
 {
     return BattleOverworldScene_ApplyBgPaletteMask(selectedPalettes);
+}
+
+static void RestoreFieldGraphicsAfterEvolution(void)
+{
+    bool16 paletteTransferDisabled;
+
+    if (gMain.inBattle || !BattleOverworldScene_IsEnabled())
+        return;
+
+    paletteTransferDisabled = gPaletteFade.bufferTransferDisabled;
+    gPaletteFade.bufferTransferDisabled = TRUE;
+    BattleOverworldScene_StopBackgroundAnimation();
+    CopyMapTilesetsToVram(gMapHeader.mapLayout);
+    LoadMapTilesetPalettes(gMapHeader.mapLayout);
+    InitTextBoxGfxAndPrinters();
+    DrawWholeMapView();
+    InitTilesetAnimations();
+    BlendPalettes(PALETTES_ALL, 16, RGB_BLACK);
+    gPaletteFade.bufferTransferDisabled = paletteTransferDisabled;
 }
 
 static void RestoreBgAfterAnim(void)

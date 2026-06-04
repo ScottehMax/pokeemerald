@@ -1,5 +1,8 @@
 #include "global.h"
+#include "battle.h"
+#include "battle_bg.h"
 #include "battle_main.h"
+#include "battle_overworld_scene.h"
 #include "bg.h"
 #include "data.h"
 #include "decompress.h"
@@ -271,6 +274,14 @@ static void HighlightSubmenuScreenSelectBarItem(u8, u16);
 static void Task_DisplayCaughtMonDexPage(u8);
 static void Task_HandleCaughtMonPageInput(u8);
 static void Task_ExitCaughtMonPage(u8);
+static void ResetCaughtMonDexPageVideo(void);
+static void SaveCaughtMonDexPageBgPalettes(void);
+static void RestoreCaughtMonDexPageBgPalettes(void);
+static bool8 IsCaughtMonDexPageExitFadeComplete(void);
+static bool8 IsCaughtMonDexPageOwBattle(u8 taskId);
+static bool8 IsCaughtMonDexPageMonCentered(u8 taskId);
+static void RestoreCaughtMonDexPageMonPalette(u8 taskId);
+static void StartCaughtMonDexPageOwBattleFadeIn(void);
 static void SpriteCB_SlideCaughtMonToCenter(struct Sprite *sprite);
 static void PrintMonInfo(u32 num, u32, u32 owned, u32 newEntry);
 static void PrintMonHeight(u16 height, u8 left, u8 top);
@@ -943,18 +954,18 @@ static const struct WindowTemplate sInfoScreen_WindowTemplates[] =
 static const struct BgTemplate sNewEntryInfoScreen_BgTemplate[] =
 {
     {
-        .bg = 2,
-        .charBaseIndex = 2,
-        .mapBaseIndex = 14,
+        .bg = 0,
+        .charBaseIndex = 0,
+        .mapBaseIndex = 29,
         .screenSize = 0,
         .paletteMode = 0,
         .priority = 2,
-        .baseTile = 0
+        .baseTile = 256
     },
     {
-        .bg = 3,
-        .charBaseIndex = 1,
-        .mapBaseIndex = 15,
+        .bg = 1,
+        .charBaseIndex = 0,
+        .mapBaseIndex = 31,
         .screenSize = 0,
         .paletteMode = 0,
         .priority = 3,
@@ -966,7 +977,7 @@ static const struct WindowTemplate sNewEntryInfoScreen_WindowTemplates[] =
 {
     [WIN_INFO] =
     {
-        .bg = 2,
+        .bg = 0,
         .tilemapLeft = 0,
         .tilemapTop = 0,
         .width = 32,
@@ -976,7 +987,7 @@ static const struct WindowTemplate sNewEntryInfoScreen_WindowTemplates[] =
     },
     [WIN_FOOTPRINT] =
     {
-        .bg = 2,
+        .bg = 0,
         .tilemapLeft = 25,
         .tilemapTop = 8,
         .width = 2,
@@ -1483,6 +1494,8 @@ static const struct BgTemplate sSearchMenu_BgTemplate[] =
         .baseTile = 0
     }
 };
+
+static u16 *sCaughtMonDexPageBgPalettes;
 
 static const struct WindowTemplate sSearchMenu_WindowTemplate[] =
 {
@@ -3936,12 +3949,13 @@ static void HighlightSubmenuScreenSelectBarItem(u8 a, u16 b)
 #define tDexNum        data[1]
 #define tPalTimer      data[2]
 #define tMonSpriteId   data[3]
+#define tOwBattle      data[4]
 #define tOtIdLo        data[12]
 #define tOtIdHi        data[13]
 #define tPersonalityLo data[14]
 #define tPersonalityHi data[15]
 
-u8 DisplayCaughtMonDexPage(u16 dexNum, u32 otId, u32 personality)
+u8 DisplayCaughtMonDexPage(u16 dexNum, u32 otId, u32 personality, bool8 owBattle)
 {
     u8 taskId = CreateTask(Task_DisplayCaughtMonDexPage, 0);
 
@@ -3951,6 +3965,7 @@ u8 DisplayCaughtMonDexPage(u16 dexNum, u32 otId, u32 personality)
     gTasks[taskId].tOtIdHi = otId >> 16;
     gTasks[taskId].tPersonalityLo = personality;
     gTasks[taskId].tPersonalityHi = personality >> 16;
+    gTasks[taskId].tOwBattle = owBattle;
     return taskId;
 }
 
@@ -3966,20 +3981,20 @@ static void Task_DisplayCaughtMonDexPage(u8 taskId)
         if (!gPaletteFade.active)
         {
             gPokedexVBlankCB = gMain.vblankCallback;
-            SetVBlankCallback(NULL);
-            ResetOtherVideoRegisters(DISPCNT_BG0_ON);
+            SaveCaughtMonDexPageBgPalettes();
+            ResetCaughtMonDexPageVideo();
             ResetBgsAndClearDma3BusyFlags(0);
             InitBgsFromTemplates(0, sNewEntryInfoScreen_BgTemplate, ARRAY_COUNT(sNewEntryInfoScreen_BgTemplate));
-            SetBgTilemapBuffer(3, AllocZeroed(BG_SCREEN_SIZE));
-            SetBgTilemapBuffer(2, AllocZeroed(BG_SCREEN_SIZE));
+            SetBgTilemapBuffer(1, AllocZeroed(BG_SCREEN_SIZE));
+            SetBgTilemapBuffer(0, AllocZeroed(BG_SCREEN_SIZE));
             InitWindows(sNewEntryInfoScreen_WindowTemplates);
             DeactivateAllTextPrinters();
             gTasks[taskId].tState = 1;
         }
         break;
     case 1:
-        DecompressAndLoadBgGfxUsingHeap(3, gPokedexMenu_Gfx, 0x2000, 0, 0);
-        CopyToBgTilemapBuffer(3, gPokedexInfoScreen_Tilemap, 0, 0);
+        LZDecompressVram(gPokedexMenu_Gfx, (void *)BG_CHAR_ADDR(0));
+        CopyToBgTilemapBuffer(1, gPokedexInfoScreen_Tilemap, 0, 0);
         FillWindowPixelBuffer(WIN_INFO, PIXEL_FILL(0));
         PutWindowTilemap(WIN_INFO);
         PutWindowTilemap(WIN_FOOTPRINT);
@@ -3990,21 +4005,23 @@ static void Task_DisplayCaughtMonDexPage(u8 taskId)
         gTasks[taskId].tState++;
         break;
     case 2:
+        PrintMonInfo(dexNum, IsNationalPokedexEnabled(), 1, 1);
+        CopyWindowToVram(WIN_INFO, COPYWIN_FULL);
+        CopyBgTilemapBufferToVram(0);
+        CopyBgTilemapBufferToVram(1);
         gTasks[taskId].tState++;
         break;
     case 3:
-        PrintMonInfo(dexNum, IsNationalPokedexEnabled(), 1, 1);
-        CopyWindowToVram(WIN_INFO, COPYWIN_FULL);
-        CopyBgTilemapBufferToVram(2);
-        CopyBgTilemapBufferToVram(3);
+        spriteId = CreateMonSpriteFromNationalDexNumber(dexNum, MON_PAGE_X, MON_PAGE_Y, 0);
+        gSprites[spriteId].oam.priority = 0;
+        gTasks[taskId].tMonSpriteId = spriteId;
         gTasks[taskId].tState++;
         break;
     case 4:
-        spriteId = CreateMonSpriteFromNationalDexNumber(dexNum, MON_PAGE_X, MON_PAGE_Y, 0);
-        gSprites[spriteId].oam.priority = 0;
+        if (IsDma3ManagerBusyWithBgCopy())
+            break;
         BeginNormalPaletteFade(PALETTES_ALL, 0, 0x10, 0, RGB_BLACK);
-        SetVBlankCallback(gPokedexVBlankCB);
-        gTasks[taskId].tMonSpriteId = spriteId;
+        SetVBlankCallback(VBlankCB_Pokedex);
         gTasks[taskId].tState++;
         break;
     case 5:
@@ -4012,8 +4029,8 @@ static void Task_DisplayCaughtMonDexPage(u8 taskId)
         SetGpuReg(REG_OFFSET_BLDALPHA, 0);
         SetGpuReg(REG_OFFSET_BLDY, 0);
         SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_1D_MAP | DISPCNT_OBJ_ON);
-        ShowBg(2);
-        ShowBg(3);
+        ShowBg(0);
+        ShowBg(1);
         gTasks[taskId].tState++;
         break;
     case 6:
@@ -4027,12 +4044,90 @@ static void Task_DisplayCaughtMonDexPage(u8 taskId)
     }
 }
 
+static void ResetCaughtMonDexPageVideo(void)
+{
+    SetVBlankCallback(NULL);
+    SetGpuReg(REG_OFFSET_DISPCNT, 0);
+    ScanlineEffect_Stop();
+    ResetOtherVideoRegisters(DISPCNT_BG2_ON | DISPCNT_BG3_ON);
+}
+
+static void SaveCaughtMonDexPageBgPalettes(void)
+{
+    FREE_AND_SET_NULL(sCaughtMonDexPageBgPalettes);
+    sCaughtMonDexPageBgPalettes = Alloc(BG_PLTT_SIZE);
+    if (sCaughtMonDexPageBgPalettes != NULL)
+        CpuCopy16(gPlttBufferUnfaded, sCaughtMonDexPageBgPalettes, BG_PLTT_SIZE);
+}
+
+static void RestoreCaughtMonDexPageBgPalettes(void)
+{
+    if (sCaughtMonDexPageBgPalettes != NULL)
+    {
+        LoadPalette(sCaughtMonDexPageBgPalettes, 0, BG_PLTT_SIZE);
+        FREE_AND_SET_NULL(sCaughtMonDexPageBgPalettes);
+    }
+}
+
+static bool8 IsCaughtMonDexPageOwBattle(u8 taskId)
+{
+    return gMain.inBattle && gTasks[taskId].tOwBattle;
+}
+
+static bool8 IsCaughtMonDexPageMonCentered(u8 taskId)
+{
+    u8 spriteId = gTasks[taskId].tMonSpriteId;
+
+    return gSprites[spriteId].x == DISPLAY_WIDTH / 2
+        && gSprites[spriteId].y == DISPLAY_HEIGHT / 2;
+}
+
+static void RestoreCaughtMonDexPageMonPalette(u8 taskId)
+{
+    u16 species = NationalPokedexNumToSpecies(gTasks[taskId].tDexNum);
+    u32 otId = ((u16)gTasks[taskId].tOtIdHi << 16) | (u16)gTasks[taskId].tOtIdLo;
+    u32 personality = ((u16)gTasks[taskId].tPersonalityHi << 16) | (u16)gTasks[taskId].tPersonalityLo;
+    u8 paletteNum = gSprites[gTasks[taskId].tMonSpriteId].oam.paletteNum;
+    const u32 *lzPaletteData = GetMonSpritePalFromSpeciesAndPersonality(species, otId, personality);
+
+    LoadCompressedPalette(lzPaletteData, OBJ_PLTT_ID(paletteNum), PLTT_SIZE_4BPP);
+}
+
+static void StartCaughtMonDexPageOwBattleFadeIn(void)
+{
+    gBattle_BG2_X = 0;
+    gBattle_BG2_Y = 0;
+    gBattle_BG3_X = 0;
+    gBattle_BG3_Y = 0;
+    ResetPaletteFadeControl();
+    gPaletteFade.bufferTransferDisabled = TRUE;
+    BeginNormalPaletteFade(PALETTES_BG, 0, 16, 0, RGB_BLACK);
+    gPaletteFade.bufferTransferDisabled = FALSE;
+    BattleOverworldScene_ShowBaseBackgroundInVBlank();
+    SetVBlankCallback(VBlankCB_Battle);
+    ShowBg(0);
+}
+
+static bool8 IsCaughtMonDexPageExitFadeComplete(void)
+{
+    if (!gPaletteFade.active)
+        return TRUE;
+    if (gPaletteFade.softwareFadeFinishing && gPaletteFade.y == gPaletteFade.targetY)
+    {
+        ResetPaletteFadeControl();
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 static void Task_HandleCaughtMonPageInput(u8 taskId)
 {
     if (JOY_NEW(A_BUTTON | B_BUTTON))
     {
         BeginNormalPaletteFade(PALETTES_BG, 0, 0, 16, RGB_BLACK);
         gSprites[gTasks[taskId].tMonSpriteId].callback = SpriteCB_SlideCaughtMonToCenter;
+        gTasks[taskId].tState = 0;
         gTasks[taskId].func = Task_ExitCaughtMonPage;
     }
     // Flicker caught screen color
@@ -4048,31 +4143,44 @@ static void Task_HandleCaughtMonPageInput(u8 taskId)
 
 static void Task_ExitCaughtMonPage(u8 taskId)
 {
-    if (!gPaletteFade.active)
+    if (IsCaughtMonDexPageExitFadeComplete() && IsCaughtMonDexPageMonCentered(taskId))
     {
-        u16 species;
-        u32 otId;
-        u32 personality;
-        u8 paletteNum;
-        const u32 *lzPaletteData;
         void *buffer;
+
+        if (gTasks[taskId].tState == 0)
+        {
+            gTasks[taskId].tState++;
+            return;
+        }
 
         SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_1D_MAP | DISPCNT_OBJ_ON);
         FreeAllWindowBuffers();
-        buffer = GetBgTilemapBuffer(2);
+        buffer = GetBgTilemapBuffer(0);
         if (buffer)
             Free(buffer);
-        buffer = GetBgTilemapBuffer(3);
+        buffer = GetBgTilemapBuffer(1);
         if (buffer)
             Free(buffer);
 
-        species = NationalPokedexNumToSpecies(gTasks[taskId].tDexNum);
-        otId = ((u16)gTasks[taskId].tOtIdHi << 16) | (u16)gTasks[taskId].tOtIdLo;
-        personality = ((u16)gTasks[taskId].tPersonalityHi << 16) | (u16)gTasks[taskId].tPersonalityLo;
-        paletteNum = gSprites[gTasks[taskId].tMonSpriteId].oam.paletteNum;
-        lzPaletteData = GetMonSpritePalFromSpeciesAndPersonality(species, otId, personality);
-        LoadCompressedPalette(lzPaletteData, OBJ_PLTT_ID(paletteNum), PLTT_SIZE_4BPP);
-        DestroyTask(taskId);
+        RestoreCaughtMonDexPageMonPalette(taskId);
+        if (IsCaughtMonDexPageOwBattle(taskId))
+        {
+            SetVBlankCallback(NULL);
+            gPaletteFade.bufferTransferDisabled = TRUE;
+            RestoreCaughtMonDexPageBgPalettes();
+            InitBattleBgsVideo();
+            HideBg(2);
+            HideBg(3);
+            LoadBattleTextboxAndWindowGfx();
+            StartCaughtMonDexPageOwBattleFadeIn();
+            DestroyTask(taskId);
+        }
+        else
+        {
+            RestoreCaughtMonDexPageBgPalettes();
+            SetVBlankCallback(gPokedexVBlankCB);
+            DestroyTask(taskId);
+        }
     }
 }
 
@@ -4093,6 +4201,7 @@ static void SpriteCB_SlideCaughtMonToCenter(struct Sprite *sprite)
 #undef tDexNum
 #undef tPalTimer
 #undef tMonSpriteId
+#undef tOwBattle
 #undef tOtIdLo
 #undef tOtIdHi
 #undef tPersonalityLo

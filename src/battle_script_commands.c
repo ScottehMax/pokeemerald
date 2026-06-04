@@ -79,6 +79,9 @@ static void PutMonIconOnLvlUpBanner(void);
 static void DrawLevelUpBannerText(void);
 static void SpriteCB_MonIconOnLvlUpBanner(struct Sprite *sprite);
 
+static u8 sDisplayDexInfoTaskId;
+static bool8 sDisplayDexInfoOwBattle;
+
 static void Cmd_attackcanceler(void);
 static void Cmd_accuracycheck(void);
 static void Cmd_attackstring(void);
@@ -10138,6 +10141,7 @@ static void Cmd_displaydexinfo(void)
     switch (gBattleCommunication[0])
     {
     case 0:
+        sDisplayDexInfoOwBattle = BattleOverworldScene_IsEnabled();
         BeginNormalPaletteFade(PALETTES_ALL, 0, 0, 16, RGB_BLACK);
         gBattleCommunication[0]++;
         break;
@@ -10146,16 +10150,26 @@ static void Cmd_displaydexinfo(void)
         {
             FreeAllWindowBuffers();
             BattleOverworldScene_SetSuspended(TRUE);
-            gBattleCommunication[TASK_ID] = DisplayCaughtMonDexPage(SpeciesToNationalPokedexNum(species),
-                                                                        gBattleMons[gBattlerTarget].otId,
-                                                                        gBattleMons[gBattlerTarget].personality);
+            sDisplayDexInfoTaskId = DisplayCaughtMonDexPage(SpeciesToNationalPokedexNum(species),
+                                                            gBattleMons[gBattlerTarget].otId,
+                                                            gBattleMons[gBattlerTarget].personality,
+                                                            sDisplayDexInfoOwBattle);
             gBattleCommunication[0]++;
         }
         break;
     case 2:
-        if (!gPaletteFade.active
-            && gMain.callback2 == BattleMainCB2
-            && !gTasks[gBattleCommunication[TASK_ID]].isActive)
+        if (sDisplayDexInfoOwBattle)
+        {
+            if (gMain.callback2 == BattleMainCB2
+                && !gTasks[sDisplayDexInfoTaskId].isActive)
+            {
+                SetVBlankCallback(VBlankCB_Battle);
+                gBattlescriptCurrInstr++;
+            }
+        }
+        else if (!gPaletteFade.active
+                 && gMain.callback2 == BattleMainCB2
+                 && !gTasks[sDisplayDexInfoTaskId].isActive)
         {
             SetVBlankCallback(VBlankCB_Battle);
             gBattleCommunication[0]++;

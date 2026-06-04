@@ -91,6 +91,7 @@ static EWRAM_DATA u16 sOwBattlePreviewX = 0;
 static EWRAM_DATA u16 sOwBattlePreviewY = 0;
 static EWRAM_DATA bool8 sOwBattlePreviewInitialized = FALSE;
 static EWRAM_DATA bool8 sOwBattlePreviewHelpVisible = FALSE;
+static EWRAM_DATA bool8 sOwBattlePreviewScrollActive = FALSE;
 static EWRAM_DATA u16 sOwBattleAnimPlayerSpecies = 0;
 static EWRAM_DATA u16 sOwBattleAnimOpponentSpecies = 0;
 static EWRAM_DATA u16 sOwBattleAnimPlayerTrainerGfx = 0;
@@ -476,6 +477,7 @@ static void InitOwBattlePreview(void)
     ShowBg(3);
     sOwBattlePreviewInitialized = FALSE;
     sOwBattlePreviewHelpVisible = TRUE;
+    sOwBattlePreviewScrollActive = FALSE;
     sOwBattlePreviewLayoutId = OW_BATTLE_PREVIEW_DEFAULT_LAYOUT;
     ResetOwBattlePreviewOffset();
     RefreshOwBattlePreview();
@@ -498,6 +500,12 @@ static void Task_OwBattlePreviewInput(u8 taskId)
         FreeAllWindowBuffers();
         gMain.state = 0;
         SetMainCallback2(CB2_InitDebugMenu);
+        return;
+    }
+    if (sOwBattlePreviewScrollActive)
+    {
+        if (BattleOverworldScene_UpdateDebugBackgroundScroll())
+            sOwBattlePreviewScrollActive = FALSE;
         return;
     }
     if (JOY_NEW(SELECT_BUTTON))
@@ -550,8 +558,13 @@ static void Task_OwBattlePreviewInput(u8 taskId)
 
 static void RefreshOwBattlePreview(void)
 {
+    const struct MapLayout *layout = GetOwBattlePreviewLayout();
+
     ClampOwBattlePreviewOffset();
-    BattleOverworldScene_LoadDebugBackground(GetOwBattlePreviewLayout(), sOwBattlePreviewX, sOwBattlePreviewY);
+    if (sOwBattlePreviewInitialized)
+        sOwBattlePreviewScrollActive = BattleOverworldScene_BeginDebugBackgroundScroll(layout, sOwBattlePreviewX, sOwBattlePreviewY);
+    else
+        BattleOverworldScene_LoadDebugBackground(layout, sOwBattlePreviewX, sOwBattlePreviewY);
     DrawOwBattlePreviewText();
     sOwBattlePreviewInitialized = TRUE;
 }
