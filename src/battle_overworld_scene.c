@@ -1067,9 +1067,15 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
 static void BattleOverworldScene_SetBaseBackgroundVisibility(bool8 visible)
 {
     if (visible)
-        SetGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_BG2_ON | DISPCNT_BG3_ON);
+    {
+        ShowBg(OW_BG_UPPER_ID);
+        ShowBg(OW_BG_LOWER_ID);
+    }
     else
-        ClearGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_BG2_ON | DISPCNT_BG3_ON);
+    {
+        HideBg(OW_BG_UPPER_ID);
+        HideBg(OW_BG_LOWER_ID);
+    }
 }
 
 bool8 BattleOverworldScene_IsProtectedBg(u8 bgId)
