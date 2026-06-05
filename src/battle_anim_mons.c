@@ -2259,7 +2259,7 @@ u8 GetBattlerSpriteBGPriority(u8 battler)
     if (IsContest())
         return 2;
     else if (BattleOverworldScene_IsEnabled())
-        return GetAnimBgAttribute(1, BG_ANIM_PRIORITY);
+        return 2;
     else if (position == B_POSITION_PLAYER_LEFT || position == B_POSITION_OPPONENT_RIGHT)
         return GetAnimBgAttribute(2, BG_ANIM_PRIORITY);
     else

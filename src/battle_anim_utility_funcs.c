@@ -53,6 +53,8 @@ void AnimTask_BlendBattleAnimPal(u8 taskId)
                                     (gBattleAnimArgs[0] >>  8) & 1,
                                     (gBattleAnimArgs[0] >>  9) & 1,
                                     (gBattleAnimArgs[0] >> 10) & 1);
+    if (gBattleAnimArgs[0] == (F_PAL_BG | F_PAL_BATTLERS_2))
+        selectedPalettes = BattleOverworldScene_ApplyScenePaletteMask(selectedPalettes);
     StartBlendAnimSpriteColor(taskId, selectedPalettes);
 }
 
@@ -202,7 +204,7 @@ static void AnimTask_BlendSpriteColor_Step2(u8 taskId)
 void AnimTask_HardwarePaletteFade(u8 taskId)
 {
     BeginHardwarePaletteFade(
-        gBattleAnimArgs[0],
+        BattleOverworldScene_ApplyBgBlendTargetMask(gBattleAnimArgs[0]),
         gBattleAnimArgs[1],
         gBattleAnimArgs[2],
         gBattleAnimArgs[3],

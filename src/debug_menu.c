@@ -4,6 +4,7 @@
 #include "battle_anim.h"
 #include "battle_gfx_sfx_util.h"
 #include "battle_overworld_scene.h"
+#include "battle_util.h"
 #include "battle_util2.h"
 #include "bg.h"
 #include "data.h"
@@ -901,27 +902,14 @@ static void CopyDebugMonToBattleMon(struct BattlePokemon *dst, struct Pokemon *s
 
 static void CreateOwBattleAnimSprites(void)
 {
-    u8 spriteId;
-
     ResetSpriteData();
     FreeAllSpritePalettes();
     BattleOverworldScene_ResetSpriteReferences();
     gReservedSpritePaletteCount = MAX_BATTLERS_COUNT;
 
-    spriteId = CreateObjectGraphicsSprite(sOwBattleAnimPlayerTrainerGfx, SpriteCallbackDummy, 36, OW_BATTLE_ANIM_BASE_Y, 1);
-    if (spriteId != MAX_SPRITES)
-    {
-        gSprites[spriteId].coordOffsetEnabled = FALSE;
-        StartSpriteAnim(&gSprites[spriteId], GetFaceDirectionAnimNum(DIR_EAST));
-    }
-
-    spriteId = CreateObjectGraphicsSprite(sOwBattleAnimOpponentTrainerGfx, SpriteCallbackDummy, 212, OW_BATTLE_ANIM_BASE_Y, 0);
-    if (spriteId != MAX_SPRITES)
-    {
-        gSprites[spriteId].coordOffsetEnabled = FALSE;
-        StartSpriteAnim(&gSprites[spriteId], GetFaceDirectionAnimNum(DIR_WEST));
-    }
-
+    BattleOverworldScene_CreateDebugTrainerSprites(sOwBattleAnimPlayerTrainerGfx,
+                                                   sOwBattleAnimOpponentTrainerGfx,
+                                                   OW_BATTLE_ANIM_BASE_Y);
     BattleOverworldScene_CreateBattlerSprite(0);
     BattleOverworldScene_CreateBattlerSprite(1);
 }
@@ -1020,18 +1008,18 @@ static void ChangeOwBattleAnimSelection(s16 delta)
 static void PlayOwBattleAnimMove(void)
 {
     u8 attacker = sOwBattleAnimAttacker == B_POSITION_PLAYER_LEFT ? 0 : 1;
-    u8 target = attacker ^ 1;
 
     ClearBattleAnimationVars();
     gActiveBattler = attacker;
     gBattlerAttacker = attacker;
-    gBattlerTarget = target;
     gCurrentMove = sOwBattleAnimMove;
     gChosenMove = sOwBattleAnimMove;
     gChosenMoveByBattler[attacker] = sOwBattleAnimMove;
+    gBattlerTarget = GetMoveTarget(sOwBattleAnimMove, NO_TARGET_OVERRIDE);
     gAnimMovePower = gBattleMoves[sOwBattleAnimMove].power;
     gAnimMoveDmg = 50;
     gAnimMoveTurn = 0;
+    SetBattlerSpriteAffineMode(ST_OAM_AFFINE_OFF);
     DoMoveAnim(sOwBattleAnimMove);
     sOwBattleAnimWasActive = TRUE;
 }
@@ -1042,8 +1030,9 @@ static void RunOwBattleAnimScript(void)
         gAnimScriptCallback();
     if (sOwBattleAnimWasActive && !gAnimScriptActive)
     {
-        BattleOverworldScene_RestoreBattlerSpriteOam(0);
-        BattleOverworldScene_RestoreBattlerSpriteOam(1);
+        SetBattlerSpriteAffineMode(ST_OAM_AFFINE_OFF);
+        Menu_LoadStdPalAt(BG_PLTT_ID(OW_BATTLE_DEBUG_PALETTE));
+        DrawOwBattleAnimText();
         sOwBattleAnimWasActive = FALSE;
     }
 }

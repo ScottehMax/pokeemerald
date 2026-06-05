@@ -45,6 +45,8 @@
 #define OW_MON_BG_CHARBASE 1
 #define OW_MON_BG_SCREENBASE 28
 #define OW_BATTLER_OBJ_PRIORITY 2
+#define OW_PLAYER_TRAINER_SUBPRIORITY 30
+#define OW_OPPONENT_TRAINER_SUBPRIORITY 40
 
 struct BattleOwMonGfx
 {
@@ -273,6 +275,7 @@ static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 t
 static bool8 SetBattleOwMonSpriteTemplate(u16 species, u8 battlerPosition);
 static void Task_BattleOverworldScene_WildShinyAnimations(u8 taskId);
 static void BattleOverworldScene_EnsureVisibilityTask(void);
+static void BattleOverworldScene_RestoreTrainerSpriteOam(u8 spriteId, u8 subpriority);
 
 static u8 sPlayerTrainerSpriteId;
 static u8 sOpponentTrainerSpriteId;
@@ -1140,6 +1143,8 @@ void BattleOverworldScene_RestoreBattlerSpriteOam(u8 battler)
 
     sprite->oam.affineMode = ST_OAM_AFFINE_OFF;
     sprite->oam.objMode = ST_OAM_OBJ_NORMAL;
+    sprite->oam.priority = OW_BATTLER_OBJ_PRIORITY;
+    sprite->subpriority = GetBattlerSpriteSubpriority(battler);
     sprite->hFlip = FALSE;
     sprite->vFlip = FALSE;
     sprite->oam.matrixNum &= ~ST_OAM_MNUM_FLIP_MASK;
@@ -1147,6 +1152,22 @@ void BattleOverworldScene_RestoreBattlerSpriteOam(u8 battler)
     sprite->animPaused = FALSE;
     sprite->affineAnimPaused = FALSE;
     CalcCenterToCornerVec(sprite, sprite->oam.shape, sprite->oam.size, sprite->oam.affineMode);
+}
+
+static void BattleOverworldScene_RestoreTrainerSpriteOam(u8 spriteId, u8 subpriority)
+{
+    struct Sprite *sprite;
+
+    if (spriteId >= MAX_SPRITES)
+        return;
+
+    sprite = &gSprites[spriteId];
+    if (!sprite->inUse)
+        return;
+
+    sprite->oam.priority = OW_BATTLER_OBJ_PRIORITY;
+    sprite->subpriority = subpriority;
+    sprite->subspriteMode = SUBSPRITES_OFF;
 }
 
 void BattleOverworldScene_RestoreBattlerSpriteAnim(u8 battler)
@@ -1253,6 +1274,8 @@ static void Task_BattleOverworldScene_KeepSpritesVisible(u8 taskId)
         {
             if (sOwBattlerHiddenByBall[battler] || sOwBattlerHiddenByMonBg[battler])
                 gSprites[gBattlerSpriteIds[battler]].invisible = TRUE;
+            gSprites[gBattlerSpriteIds[battler]].oam.priority = OW_BATTLER_OBJ_PRIORITY;
+            gSprites[gBattlerSpriteIds[battler]].subpriority = GetBattlerSpriteSubpriority(battler);
             gBattleSpritesDataPtr->battlerData[battler].invisible = FALSE;
         }
 
@@ -1262,10 +1285,16 @@ static void Task_BattleOverworldScene_KeepSpritesVisible(u8 taskId)
     }
 
     if (sPlayerTrainerSpriteId < MAX_SPRITES && gSprites[sPlayerTrainerSpriteId].inUse)
+    {
         gSprites[sPlayerTrainerSpriteId].invisible = FALSE;
+        BattleOverworldScene_RestoreTrainerSpriteOam(sPlayerTrainerSpriteId, OW_PLAYER_TRAINER_SUBPRIORITY);
+    }
 
     if (sOpponentTrainerSpriteId < MAX_SPRITES && gSprites[sOpponentTrainerSpriteId].inUse)
+    {
         gSprites[sOpponentTrainerSpriteId].invisible = FALSE;
+        BattleOverworldScene_RestoreTrainerSpriteOam(sOpponentTrainerSpriteId, OW_OPPONENT_TRAINER_SUBPRIORITY);
+    }
 }
 
 static void BattleOverworldScene_EnsureVisibilityTask(void)
@@ -1310,6 +1339,24 @@ u32 BattleOverworldScene_ApplyBgPaletteMask(u32 selectedPalettes)
         selectedPalettes = (selectedPalettes & ~vanillaBattleBgMask) | BattleOverworldScene_GetBgPaletteMask();
 
     return selectedPalettes;
+}
+
+u32 BattleOverworldScene_ApplyScenePaletteMask(u32 selectedPalettes)
+{
+    const u32 trainerObjPaletteMask = (1 << (16 + OW_TRAINER_PLAYER_PAL_SLOT)) | (1 << (16 + OW_TRAINER_OPPONENT_PAL_SLOT));
+
+    if (!IsBattleOverworldSceneEnabled())
+        return selectedPalettes;
+
+    return BattleOverworldScene_ApplyBgPaletteMask(selectedPalettes) | trainerObjPaletteMask;
+}
+
+u16 BattleOverworldScene_ApplyBgBlendTargetMask(u16 blendCnt)
+{
+    if (IsBattleOverworldSceneEnabled() && (blendCnt & BLDCNT_TGT1_BG3))
+        blendCnt |= BLDCNT_TGT1_BG2;
+
+    return blendCnt;
 }
 
 void BattleOverworldScene_SetMoveBgActive(bool8 active)
@@ -1705,11 +1752,11 @@ void BattleOverworldScene_CreateTrainerSprites(void)
     LoadPalette(gSaveBlock2Ptr->playerGender == FEMALE ? gObjectEventPal_May : gObjectEventPal_Brendan,
                 OBJ_PLTT_ID(OW_TRAINER_PLAYER_PAL_SLOT),
                 PLTT_SIZE_4BPP);
-    sPlayerTrainerSpriteId = CreateSprite(&template, 36, OW_SCENE_BASE_Y, 1);
+    sPlayerTrainerSpriteId = CreateSprite(&template, 36, OW_SCENE_BASE_Y, OW_PLAYER_TRAINER_SUBPRIORITY);
     if (sPlayerTrainerSpriteId != MAX_SPRITES)
     {
         gSprites[sPlayerTrainerSpriteId].oam.paletteNum = OW_TRAINER_PLAYER_PAL_SLOT;
-        gSprites[sPlayerTrainerSpriteId].oam.priority = OW_BATTLER_OBJ_PRIORITY;
+        BattleOverworldScene_RestoreTrainerSpriteOam(sPlayerTrainerSpriteId, OW_PLAYER_TRAINER_SUBPRIORITY);
     }
 
     if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
@@ -1721,14 +1768,60 @@ void BattleOverworldScene_CreateTrainerSprites(void)
         template.images = opponentGraphicsInfo->images;
         template.anims = sAnimTable_BattleTrainerFaceWest;
         PatchObjectPalette(opponentGraphicsInfo->paletteTag, OW_TRAINER_OPPONENT_PAL_SLOT);
-        sOpponentTrainerSpriteId = CreateSprite(&template, 212, GetTrainerBaselineAlignedY(opponentGraphicsInfo), 0);
+        sOpponentTrainerSpriteId = CreateSprite(&template, 212, GetTrainerBaselineAlignedY(opponentGraphicsInfo), OW_OPPONENT_TRAINER_SUBPRIORITY);
         if (sOpponentTrainerSpriteId != MAX_SPRITES)
         {
             gSprites[sOpponentTrainerSpriteId].oam.paletteNum = OW_TRAINER_OPPONENT_PAL_SLOT;
-            gSprites[sOpponentTrainerSpriteId].oam.priority = OW_BATTLER_OBJ_PRIORITY;
+            BattleOverworldScene_RestoreTrainerSpriteOam(sOpponentTrainerSpriteId, OW_OPPONENT_TRAINER_SUBPRIORITY);
         }
     }
 
+    sCreatedTrainerSprites = TRUE;
+    BattleOverworldScene_EnsureVisibilityTask();
+}
+
+static u8 BattleOverworldScene_CreateDebugTrainerSprite(u16 graphicsId, s16 x, s16 y, u8 subpriority, u8 direction, u8 paletteSlot)
+{
+    const struct ObjectEventGraphicsInfo *graphicsInfo = GetObjectEventGraphicsInfo(graphicsId);
+    struct OamData oam = *graphicsInfo->oam;
+    struct SpriteTemplate template =
+    {
+        .tileTag = TAG_NONE,
+        .paletteTag = TAG_NONE,
+        .oam = &oam,
+        .anims = graphicsInfo->anims,
+        .images = graphicsInfo->images,
+        .affineAnims = graphicsInfo->affineAnims,
+        .callback = SpriteCallbackDummy,
+    };
+    u8 spriteId;
+
+    PatchObjectPalette(graphicsInfo->paletteTag, paletteSlot);
+    spriteId = CreateSprite(&template, x, y, subpriority);
+    if (spriteId != MAX_SPRITES)
+    {
+        gSprites[spriteId].coordOffsetEnabled = FALSE;
+        gSprites[spriteId].oam.paletteNum = paletteSlot;
+        BattleOverworldScene_RestoreTrainerSpriteOam(spriteId, subpriority);
+        StartSpriteAnim(&gSprites[spriteId], GetFaceDirectionAnimNum(direction));
+    }
+
+    return spriteId;
+}
+
+void BattleOverworldScene_CreateDebugTrainerSprites(u16 playerGraphicsId, u16 opponentGraphicsId, s16 y)
+{
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+
+    sPlayerTrainerSpriteId = BattleOverworldScene_CreateDebugTrainerSprite(playerGraphicsId, 36, y,
+                                                                           OW_PLAYER_TRAINER_SUBPRIORITY,
+                                                                           DIR_EAST,
+                                                                           OW_TRAINER_PLAYER_PAL_SLOT);
+    sOpponentTrainerSpriteId = BattleOverworldScene_CreateDebugTrainerSprite(opponentGraphicsId, 212, y,
+                                                                             OW_OPPONENT_TRAINER_SUBPRIORITY,
+                                                                             DIR_WEST,
+                                                                             OW_TRAINER_OPPONENT_PAL_SLOT);
     sCreatedTrainerSprites = TRUE;
     BattleOverworldScene_EnsureVisibilityTask();
 }
