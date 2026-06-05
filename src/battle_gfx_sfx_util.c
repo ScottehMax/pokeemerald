@@ -34,6 +34,9 @@ extern const u8 *const gBattleAnims_Special[];
 extern const struct CompressedSpriteSheet gSpriteSheet_EnemyShadow;
 extern const struct SpriteTemplate gSpriteTemplate_EnemyShadow;
 
+#define LOW_HP_SOUND_REPEAT_FRAMES 36
+#define LOW_HP_SOUND_TOTAL_FRAMES (LOW_HP_SOUND_REPEAT_FRAMES * 3 - 1)
+
 // this file's functions
 static u8 GetBattlePalaceMoveGroup(u16 move);
 static u16 GetBattlePalaceTarget(void);
@@ -41,6 +44,9 @@ static void SpriteCB_TrainerSlideVertical(struct Sprite *sprite);
 static bool8 ShouldAnimBeDoneRegardlessOfSubstitute(u8 animId);
 static void Task_ClearBitWhenBattleTableAnimDone(u8 taskId);
 static void Task_ClearBitWhenSpecialAnimDone(u8 taskId);
+static void Task_PlayLowHpSound(u8 taskId);
+static void StartLowHpSound(void);
+static void StopLowHpSoundTask(void);
 static void ClearSpritesBattlerHealthboxAnimData(void);
 
 // const rom data
@@ -100,6 +106,7 @@ void FreeBattleSpritesData(void)
     if (gBattleSpritesDataPtr == NULL)
         return;
 
+    StopLowHpSoundTask();
     FreeOverworldHealthboxTextBuffers();
     FREE_AND_SET_NULL(gBattleSpritesDataPtr->battleBars);
     FREE_AND_SET_NULL(gBattleSpritesDataPtr->animationData);
@@ -1118,8 +1125,7 @@ void HandleLowHpMusicChange(struct Pokemon *mon, u8 battler)
     {
         if (!gBattleSpritesDataPtr->battlerData[battler].lowHpSong)
         {
-            if (!gBattleSpritesDataPtr->battlerData[BATTLE_PARTNER(battler)].lowHpSong)
-                PlaySE(SE_LOW_HEALTH);
+            StartLowHpSound();
             gBattleSpritesDataPtr->battlerData[battler].lowHpSong = 1;
         }
     }
@@ -1128,12 +1134,12 @@ void HandleLowHpMusicChange(struct Pokemon *mon, u8 battler)
         gBattleSpritesDataPtr->battlerData[battler].lowHpSong = 0;
         if (!IsDoubleBattle())
         {
-            m4aSongNumStop(SE_LOW_HEALTH);
+            StopLowHpSoundTask();
             return;
         }
         if (IsDoubleBattle() && !gBattleSpritesDataPtr->battlerData[BATTLE_PARTNER(battler)].lowHpSong)
         {
-            m4aSongNumStop(SE_LOW_HEALTH);
+            StopLowHpSoundTask();
             return;
         }
     }
@@ -1147,8 +1153,51 @@ void BattleStopLowHpSound(void)
     if (IsDoubleBattle())
         gBattleSpritesDataPtr->battlerData[BATTLE_PARTNER(playerBattler)].lowHpSong = 0;
 
-    m4aSongNumStop(SE_LOW_HEALTH);
+    StopLowHpSoundTask();
 }
+
+#define tLowHpSoundTimer data[0]
+
+static void StartLowHpSound(void)
+{
+    u8 taskId;
+
+    if (FuncIsActiveTask(Task_PlayLowHpSound))
+        taskId = FindTaskIdByFunc(Task_PlayLowHpSound);
+    else
+        taskId = CreateTask(Task_PlayLowHpSound, 10);
+
+    if (gTasks[taskId].func != Task_PlayLowHpSound)
+        return;
+
+    m4aSongNumStop(SE_LOW_HEALTH);
+    PlaySE(SE_LOW_HEALTH);
+    gTasks[taskId].tLowHpSoundTimer = LOW_HP_SOUND_TOTAL_FRAMES;
+}
+
+static void StopLowHpSoundTask(void)
+{
+    u8 taskId;
+
+    m4aSongNumStop(SE_LOW_HEALTH);
+
+    if (FuncIsActiveTask(Task_PlayLowHpSound))
+    {
+        taskId = FindTaskIdByFunc(Task_PlayLowHpSound);
+        DestroyTask(taskId);
+    }
+}
+
+static void Task_PlayLowHpSound(u8 taskId)
+{
+    if (--gTasks[taskId].tLowHpSoundTimer > 0)
+        return;
+
+    m4aSongNumStop(SE_LOW_HEALTH);
+    DestroyTask(taskId);
+}
+
+#undef tLowHpSoundTimer
 
 u8 GetMonHPBarLevel(struct Pokemon *mon)
 {
