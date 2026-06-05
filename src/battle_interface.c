@@ -169,6 +169,10 @@ enum
 #define NEW_HPBAR_FILL_TILE_COUNT 8
 #define NEW_HPBAR_FILL_TILE_OFFSET 3
 #define NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN 4
+#define NEW_HPBAR_FILL_LIGHT_COLOR 8
+#define NEW_HPBAR_FILL_DARK_COLOR 9
+#define TAG_HEALTHBAR_PAL_YELLOW 0xD720
+#define TAG_HEALTHBAR_PAL_RED 0xD721
 #define TAG_OW_STATUS_ICON_PAL 0xD715
 #define OW_STATUS_ICON_X_OFFSET (-33)
 #define OW_STATUS_ICON_Y_OFFSET (-19)
@@ -185,6 +189,7 @@ static const u8 *GetHealthboxElementGfxPtr(u8);
 static void ClearHealthboxBackingTiles(u8 healthboxSpriteId);
 static void ApplyOverworldHealthboxTextPalette(u8 healthboxSpriteId);
 static void CopyNewHpBarBase(u8 healthbarSpriteId);
+static void UpdateNewHpBarFillPalette(u8 healthbarSpriteId, s32 hp, s32 maxHp);
 static u8 GetNewHpBarObjTileOffset(u8 column, u8 row);
 static void TryAddPokeballIconToHealthbox(u8 healthboxSpriteId);
 static void RestoreHpBarStatusTileInHealthbox(u8 healthboxSpriteId);
@@ -224,6 +229,14 @@ static EWRAM_DATA u32 sOverworldHealthboxTextMasks[OW_HEALTHBOX_TEXT_OBJ_MAX_HEI
 static EWRAM_DATA u8 (*sOverworldHealthboxTextCopyTiles)[TILE_SIZE_4BPP] = NULL;
 static EWRAM_DATA u8 sOverworldHealthboxTextCopyTileCursor = 0;
 static EWRAM_DATA u8 sOverworldStatusSpriteIds[MAX_BATTLERS_COUNT] = {MAX_SPRITES, MAX_SPRITES, MAX_SPRITES, MAX_SPRITES};
+
+static const u16 sNewHpBarFillColors[][2] =
+{
+    [HP_BAR_GREEN]  = {RGB(14, 31, 21), RGB(11, 26, 16)},
+    [HP_BAR_FULL]   = {RGB(14, 31, 21), RGB(11, 26, 16)},
+    [HP_BAR_YELLOW] = {RGB(31, 25, 13), RGB(26, 20, 12)},
+    [HP_BAR_RED]    = {RGB(31, 12, 12), RGB(21, 10, 10)},
+};
 
 static void SpriteCB_HealthBoxOther(struct Sprite *);
 static void SpriteCB_HealthBar(struct Sprite *);
@@ -1161,6 +1174,59 @@ static void CopyNewHpBarBase(u8 healthbarSpriteId)
                       TILE_SIZE_4BPP);
         }
     }
+}
+
+static u8 LoadNewHpBarPaletteVariant(u8 level)
+{
+    u16 paletteTag;
+    u8 paletteNum;
+    const u16 *colors;
+
+    switch (level)
+    {
+    case HP_BAR_YELLOW:
+        paletteTag = TAG_HEALTHBAR_PAL_YELLOW;
+        break;
+    case HP_BAR_RED:
+    case HP_BAR_EMPTY:
+        paletteTag = TAG_HEALTHBAR_PAL_RED;
+        level = HP_BAR_RED;
+        break;
+    case HP_BAR_GREEN:
+    case HP_BAR_FULL:
+    default:
+        return IndexOfSpritePaletteTag(TAG_HEALTHBAR_PAL);
+    }
+
+    paletteNum = IndexOfSpritePaletteTag(paletteTag);
+
+    if (paletteNum == 0xFF)
+        paletteNum = AllocSpritePalette(paletteTag);
+    if (paletteNum == 0xFF)
+        return IndexOfSpritePaletteTag(TAG_HEALTHBAR_PAL);
+
+    LoadPalette(gBattleInterface_NewHpBarPal, OBJ_PLTT_ID(paletteNum), PLTT_SIZE_4BPP);
+    colors = sNewHpBarFillColors[level];
+    LoadPalette(colors,
+                OBJ_PLTT_ID(paletteNum) + NEW_HPBAR_FILL_LIGHT_COLOR,
+                sizeof(sNewHpBarFillColors[0]));
+    return paletteNum;
+}
+
+static void UpdateNewHpBarFillPalette(u8 healthbarSpriteId, s32 hp, s32 maxHp)
+{
+    u8 level;
+    u8 paletteNum;
+
+    if (hp < 0)
+        hp = 0;
+    if (hp > maxHp)
+        hp = maxHp;
+
+    level = GetHPBarLevel(hp, maxHp);
+    paletteNum = LoadNewHpBarPaletteVariant(level);
+    if (paletteNum != 0xFF)
+        gSprites[healthbarSpriteId].oam.paletteNum = paletteNum;
 }
 
 // Syncs the position of healthbar accordingly with the healthbox.
@@ -2541,6 +2607,7 @@ static void MoveBattleBarGraphically(u8 battler, u8 whichBar)
         u8 healthboxSpriteId = gBattleSpritesDataPtr->battleBars[battler].healthboxSpriteId;
         u8 healthbarSpriteId = gSprites[healthboxSpriteId].hMain_HealthBarSpriteId;
         u16 baseTile = gSprites[healthbarSpriteId].oam.tileNum;
+        s32 displayedHp;
 
         CalcBarFilledPixels(gBattleSpritesDataPtr->battleBars[battler].maxValue,
                             gBattleSpritesDataPtr->battleBars[battler].oldValue,
@@ -2548,6 +2615,12 @@ static void MoveBattleBarGraphically(u8 battler, u8 whichBar)
                             &gBattleSpritesDataPtr->battleBars[battler].currValue,
                             array, B_HEALTHBAR_PIXELS / 8);
 
+        displayedHp = gBattleSpritesDataPtr->battleBars[battler].currValue;
+        if (gBattleSpritesDataPtr->battleBars[battler].maxValue < B_HEALTHBAR_PIXELS)
+            displayedHp = Q_24_8_TO_INT(displayedHp);
+        UpdateNewHpBarFillPalette(healthbarSpriteId,
+                                  displayedHp,
+                                  gBattleSpritesDataPtr->battleBars[battler].maxValue);
         CopyNewHpBarBase(healthbarSpriteId);
         for (i = 0; i < NEW_HPBAR_FILL_TILE_COUNT; i++)
         {
