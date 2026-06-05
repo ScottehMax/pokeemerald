@@ -84,6 +84,8 @@ void SetAnimBgAttribute(u8 bgId, u8 attributeId, u8 value)
         }
 
         SetGpuReg(gBattleAnimBgCntSet[bgId], sBgCnt);
+        if (attributeId == BG_ANIM_PRIORITY)
+            BattleOverworldScene_ApplyAnimBgPriority(bgId, value);
     }
 }
 

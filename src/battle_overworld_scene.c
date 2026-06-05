@@ -40,6 +40,8 @@
 #define OW_BG_UPPER_SCREENBASE 27
 #define OW_BG_LOWER_ID 3
 #define OW_BG_UPPER_ID 2
+#define OW_BG_UPPER_PRIORITY 2
+#define OW_BG_LOWER_PRIORITY 3
 #define OW_BG_BLANK_TILE 0x040
 #define OW_BG_DEBUG_SCROLL_FRAMES 4
 #define OW_MON_BG_CHARBASE 1
@@ -270,6 +272,7 @@ static const union AnimCmd *const sAnimTable_BattleTrainerFaceEast[] =
 
 static bool8 IsBattleOverworldSceneEnabled(void);
 static void BattleOverworldScene_ApplyBgConfig(void);
+static void BattleOverworldScene_ApplyBgCnt(void);
 static void BattleOverworldScene_SetBaseBackgroundVisibility(bool8 visible);
 static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerPic, u8 trainerClass);
 static bool8 SetBattleOwMonSpriteTemplate(u16 species, u8 battlerPosition);
@@ -287,6 +290,7 @@ static bool8 sSceneSuspended;
 static bool8 sSceneVisible;
 static bool8 sShowBaseBgInVBlank;
 static bool8 sMoveBgActive;
+static u8 sBaseUpperBgPriority;
 static EWRAM_DATA u16 sBattleOwBgTileMap[NUM_TILES_TOTAL] = {0};
 static EWRAM_DATA u8 sBattleOwBgPalMap[16] = {0};
 static EWRAM_DATA u32 sBattleOwBgPaletteMask = 0;
@@ -674,16 +678,26 @@ static void LoadMappedMapTiles(void)
 
 static void BattleOverworldScene_ApplyBgConfig(void)
 {
+    u8 upperPriority = sBaseUpperBgPriority == 0 ? OW_BG_UPPER_PRIORITY : sBaseUpperBgPriority;
+
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_CHARBASEINDEX, OW_BG_CHARBASE);
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_MAPBASEINDEX, OW_BG_LOWER_SCREENBASE);
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_SCREENSIZE, 0);
     SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_PALETTEMODE, 0);
-    SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_PRIORITY, 3);
+    SetBgAttribute(OW_BG_LOWER_ID, BG_ATTR_PRIORITY, OW_BG_LOWER_PRIORITY);
     SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_CHARBASEINDEX, OW_BG_CHARBASE);
     SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_MAPBASEINDEX, OW_BG_UPPER_SCREENBASE);
     SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_SCREENSIZE, 0);
     SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_PALETTEMODE, 0);
-    SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_PRIORITY, 2);
+    SetBgAttribute(OW_BG_UPPER_ID, BG_ATTR_PRIORITY, upperPriority);
+}
+
+static void BattleOverworldScene_ApplyBgCnt(void)
+{
+    u8 upperPriority = sBaseUpperBgPriority == 0 ? OW_BG_UPPER_PRIORITY : sBaseUpperBgPriority;
+
+    SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(upperPriority) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_UPPER_SCREENBASE) | BGCNT_TXT256x256);
+    SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(OW_BG_LOWER_PRIORITY) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
 }
 
 void BattleOverworldScene_SetBackgroundLayout(const struct MapLayout *layout, u16 x, u16 y)
@@ -785,8 +799,7 @@ static void BattleOverworldScene_DrawBackground(bool8 visible)
         HideBg(OW_BG_UPPER_ID);
         HideBg(OW_BG_LOWER_ID);
     }
-    SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(2) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_UPPER_SCREENBASE) | BGCNT_TXT256x256);
-    SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
+    BattleOverworldScene_ApplyBgCnt();
     SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
     SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
     SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
@@ -1000,8 +1013,7 @@ void BattleOverworldScene_TryShowBaseBackgroundInVBlank(void)
     gBattle_BG3_X = 0;
     gBattle_BG3_Y = 0;
     BattleOverworldScene_ApplyBgConfig();
-    SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(2) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_UPPER_SCREENBASE) | BGCNT_TXT256x256);
-    SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
+    BattleOverworldScene_ApplyBgCnt();
     SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
     SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
     SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
@@ -1052,8 +1064,7 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
     gBattle_BG3_X = 0;
     gBattle_BG3_Y = 0;
     BattleOverworldScene_ApplyBgConfig();
-    SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(2) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_UPPER_SCREENBASE) | BGCNT_TXT256x256);
-    SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
+    BattleOverworldScene_ApplyBgCnt();
     SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
     SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
     SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
@@ -1359,6 +1370,20 @@ u16 BattleOverworldScene_ApplyBgBlendTargetMask(u16 blendCnt)
     return blendCnt;
 }
 
+void BattleOverworldScene_ApplyAnimBgPriority(u8 bgId, u8 priority)
+{
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+    if (sMoveBgActive)
+        return;
+    if (bgId != 1)
+        return;
+
+    sBaseUpperBgPriority = priority == OW_BG_LOWER_PRIORITY ? OW_BG_LOWER_PRIORITY : OW_BG_UPPER_PRIORITY;
+    BattleOverworldScene_ApplyBgConfig();
+    BattleOverworldScene_ApplyBgCnt();
+}
+
 void BattleOverworldScene_SetMoveBgActive(bool8 active)
 {
     if (!IsBattleOverworldSceneEnabled())
@@ -1389,6 +1414,7 @@ void BattleOverworldScene_Reset(void)
     sSceneVisible = FALSE;
     sShowBaseBgInVBlank = FALSE;
     sMoveBgActive = FALSE;
+    sBaseUpperBgPriority = OW_BG_UPPER_PRIORITY;
     sBattleOwBgDebugScrollActive = FALSE;
     sBattleOwBgTilesetAnimsActive = FALSE;
     for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)

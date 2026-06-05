@@ -15,6 +15,7 @@ u32 BattleOverworldScene_GetBgPaletteMask(void);
 u32 BattleOverworldScene_ApplyBgPaletteMask(u32 selectedPalettes);
 u32 BattleOverworldScene_ApplyScenePaletteMask(u32 selectedPalettes);
 u16 BattleOverworldScene_ApplyBgBlendTargetMask(u16 blendCnt);
+void BattleOverworldScene_ApplyAnimBgPriority(u8 bgId, u8 priority);
 void BattleOverworldScene_SetMoveBgActive(bool8 active);
 bool8 BattleOverworldScene_IsMoveBgActive(void);
 bool8 BattleOverworldScene_IsBattlerFacingRight(u8 battler);
