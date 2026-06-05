@@ -297,8 +297,8 @@ static EWRAM_DATA u32 sBattleOwBgPaletteMask = 0;
 // BG palettes 8 and 9 are used as battle-animation scratch palettes for battler BG masks.
 static const u8 sBattleOwBgFreePalSlots[] = {2, 3, 4, 7, 10, 11, 12, 13, 14, 15};
 static EWRAM_DATA const struct MapLayout *sBattleOwBgLayout = 0;
-static EWRAM_DATA u16 sBattleOwBgMapX = 0;
-static EWRAM_DATA u16 sBattleOwBgMapY = 0;
+static EWRAM_DATA s16 sBattleOwBgMapX = 0;
+static EWRAM_DATA s16 sBattleOwBgMapY = 0;
 static EWRAM_DATA u16 sBattleOwBgNextTile = 0;
 static EWRAM_DATA u8 sBattleOwBgNextPalSlot = 0;
 static EWRAM_DATA u8 sBattleOwBgTilemapX = 0;
@@ -368,6 +368,12 @@ static const struct BattleOwBgLayoutOffset sBattleOwBgLayoutOffsets[] =
     {LAYOUT_ROUTE134, 42, 12},
 
     {LAYOUT_DEWFORD_TOWN_GYM, 2, 18},
+
+    {LAYOUT_SLATEPORT_CITY_OCEANIC_MUSEUM_2F, 4, 1},
+
+    {LAYOUT_FORTREE_CITY_GYM, 3, 0},
+
+    {LAYOUT_SOOTOPOLIS_CITY_GYM_B1F, 1, 4},
 
     {LAYOUT_METEOR_FALLS_1F_1R, 14, 14},
     {LAYOUT_METEOR_FALLS_1F_2R, 11, 16},
@@ -510,11 +516,11 @@ static const u16 *GetMapMetatile(u16 metatileId)
 
 static u16 GetMapMetatileIdAt(u8 x, u8 y)
 {
-    u16 mapX = sBattleOwBgMapX + x;
-    u16 mapY = sBattleOwBgMapY + y;
+    s16 mapX = sBattleOwBgMapX + x;
+    s16 mapY = sBattleOwBgMapY + y;
     u16 metatileId;
 
-    if (mapX >= sBattleOwBgLayout->width || mapY >= sBattleOwBgLayout->height)
+    if (mapX < 0 || mapX >= sBattleOwBgLayout->width || mapY < 0 || mapY >= sBattleOwBgLayout->height)
         return 0;
 
     metatileId = sBattleOwBgLayout->map[mapY * sBattleOwBgLayout->width + mapX] & MAPGRID_METATILE_ID_MASK;
@@ -620,21 +626,25 @@ static void BuildMapTileAndPaletteMaps(void)
     }
 }
 
-static void AssignMapSliceToTileAndPaletteMapsAbs(u16 x, u16 y, u8 width, u8 height)
+static void AssignMapSliceToTileAndPaletteMapsAbs(s16 x, s16 y, u8 width, u8 height)
 {
     u8 i;
     u8 j;
+    s16 mapX;
+    s16 mapY;
     u16 metatileId;
 
     for (j = 0; j < height; j++)
     {
         for (i = 0; i < width; i++)
         {
-            if (x + i >= sBattleOwBgLayout->width || y + j >= sBattleOwBgLayout->height)
+            mapX = x + i;
+            mapY = y + j;
+            if (mapX < 0 || mapX >= sBattleOwBgLayout->width || mapY < 0 || mapY >= sBattleOwBgLayout->height)
                 metatileId = 0;
             else
             {
-                metatileId = sBattleOwBgLayout->map[(y + j) * sBattleOwBgLayout->width + x + i] & MAPGRID_METATILE_ID_MASK;
+                metatileId = sBattleOwBgLayout->map[mapY * sBattleOwBgLayout->width + mapX] & MAPGRID_METATILE_ID_MASK;
                 if (metatileId >= NUM_METATILES_TOTAL)
                     metatileId = 0;
             }
@@ -700,20 +710,12 @@ static void BattleOverworldScene_ApplyBgCnt(void)
     SetGpuReg(REG_OFFSET_BG3CNT, BGCNT_PRIORITY(OW_BG_LOWER_PRIORITY) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256);
 }
 
-void BattleOverworldScene_SetBackgroundLayout(const struct MapLayout *layout, u16 x, u16 y)
+void BattleOverworldScene_SetBackgroundLayout(const struct MapLayout *layout, s16 x, s16 y)
 {
     if (layout == NULL)
         layout = &Route101_Layout;
 
     sBattleOwBgLayout = layout;
-    if (layout->width <= OW_BG_MAP_WIDTH)
-        x = 0;
-    else if (x > layout->width - OW_BG_MAP_WIDTH)
-        x = layout->width - OW_BG_MAP_WIDTH;
-    if (layout->height <= OW_BG_MAP_HEIGHT)
-        y = 0;
-    else if (y > layout->height - OW_BG_MAP_HEIGHT)
-        y = layout->height - OW_BG_MAP_HEIGHT;
     sBattleOwBgMapX = x;
     sBattleOwBgMapY = y;
 }
@@ -827,7 +829,7 @@ void BattleOverworldScene_RestoreBackground(void)
     BattleOverworldScene_DrawBackground(sSceneVisible);
 }
 
-void BattleOverworldScene_LoadDebugBackground(const struct MapLayout *layout, u16 x, u16 y)
+void BattleOverworldScene_LoadDebugBackground(const struct MapLayout *layout, s16 x, s16 y)
 {
     sBattleOwBgDebugScrollActive = FALSE;
     BattleOverworldScene_SetBackgroundLayout(layout, x, y);
@@ -843,11 +845,11 @@ static u8 WrapBgTilemapCoord(s16 coord)
     return coord & 31;
 }
 
-static u16 GetMapMetatileIdAtAbs(u16 mapX, u16 mapY)
+static u16 GetMapMetatileIdAtAbs(s16 mapX, s16 mapY)
 {
     u16 metatileId;
 
-    if (mapX >= sBattleOwBgLayout->width || mapY >= sBattleOwBgLayout->height)
+    if (mapX < 0 || mapX >= sBattleOwBgLayout->width || mapY < 0 || mapY >= sBattleOwBgLayout->height)
         return 0;
 
     metatileId = sBattleOwBgLayout->map[mapY * sBattleOwBgLayout->width + mapX] & MAPGRID_METATILE_ID_MASK;
@@ -857,7 +859,7 @@ static u16 GetMapMetatileIdAtAbs(u16 mapX, u16 mapY)
     return metatileId;
 }
 
-static void DrawDebugMapSliceAbs(u16 mapX, u16 mapY, u8 bgTileX, u8 bgTileY, u8 width, u8 height)
+static void DrawDebugMapSliceAbs(s16 mapX, s16 mapY, u8 bgTileX, u8 bgTileY, u8 width, u8 height)
 {
     u8 x;
     u8 y;
@@ -877,10 +879,10 @@ static void DrawDebugMapSliceAbs(u16 mapX, u16 mapY, u8 bgTileX, u8 bgTileY, u8 
     }
 }
 
-static void PrepareDebugMapScrollSlices(u16 x, u16 y, s8 deltaX, s8 deltaY)
+static void PrepareDebugMapScrollSlices(s16 x, s16 y, s8 deltaX, s8 deltaY)
 {
-    u16 sliceMapX;
-    u16 sliceMapY;
+    s16 sliceMapX;
+    s16 sliceMapY;
     s16 sliceDelta;
     u8 sliceBgTileX;
     u8 sliceBgTileY;
@@ -898,7 +900,7 @@ static void PrepareDebugMapScrollSlices(u16 x, u16 y, s8 deltaX, s8 deltaY)
             sliceBgTileX = WrapBgTilemapCoord(sBattleOwBgTilemapX - 2);
         }
         sliceMapY = y;
-        sliceDelta = (s16)sliceMapY - (s16)sBattleOwBgMapY;
+        sliceDelta = sliceMapY - sBattleOwBgMapY;
         sliceBgTileY = WrapBgTilemapCoord(sBattleOwBgTilemapY + sliceDelta * 2);
         AssignMapSliceToTileAndPaletteMapsAbs(sliceMapX, sliceMapY, 1, OW_BG_MAP_HEIGHT);
         DrawDebugMapSliceAbs(sliceMapX, sliceMapY, sliceBgTileX, sliceBgTileY, 1, OW_BG_MAP_HEIGHT);
@@ -917,14 +919,14 @@ static void PrepareDebugMapScrollSlices(u16 x, u16 y, s8 deltaX, s8 deltaY)
             sliceBgTileY = WrapBgTilemapCoord(sBattleOwBgTilemapY - 2);
         }
         sliceMapX = x;
-        sliceDelta = (s16)sliceMapX - (s16)sBattleOwBgMapX;
+        sliceDelta = sliceMapX - sBattleOwBgMapX;
         sliceBgTileX = WrapBgTilemapCoord(sBattleOwBgTilemapX + sliceDelta * 2);
         AssignMapSliceToTileAndPaletteMapsAbs(sliceMapX, sliceMapY, OW_BG_MAP_WIDTH, 1);
         DrawDebugMapSliceAbs(sliceMapX, sliceMapY, sliceBgTileX, sliceBgTileY, OW_BG_MAP_WIDTH, 1);
     }
 }
 
-bool8 BattleOverworldScene_BeginDebugBackgroundScroll(const struct MapLayout *layout, u16 x, u16 y)
+bool8 BattleOverworldScene_BeginDebugBackgroundScroll(const struct MapLayout *layout, s16 x, s16 y)
 {
     s16 deltaX;
     s16 deltaY;

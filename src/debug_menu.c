@@ -24,6 +24,7 @@
 #include "text.h"
 #include "window.h"
 #include "constants/battle.h"
+#include "constants/characters.h"
 #include "constants/event_objects.h"
 #include "constants/layouts.h"
 #include "constants/moves.h"
@@ -76,6 +77,7 @@ static void ClampOwBattlePreviewOffset(void);
 static const struct MapLayout *GetOwBattlePreviewLayout(void);
 static const u8 *GetOwBattlePreviewLayoutName(u16 layoutId);
 static void ResetOwBattlePreviewOffset(void);
+static void ConvertSignedPreviewOffsetToDecimalString(u8 *text, s16 value);
 static void CreateOwBattlePreviewSprites(void);
 static void SetupOwBattleAnimBattleState(void);
 static void FreeOwBattleAnimBattleState(void);
@@ -88,8 +90,8 @@ static void PlayOwBattleAnimMove(void);
 static void RunOwBattleAnimScript(void);
 
 static EWRAM_DATA u16 sOwBattlePreviewLayoutId = 0;
-static EWRAM_DATA u16 sOwBattlePreviewX = 0;
-static EWRAM_DATA u16 sOwBattlePreviewY = 0;
+static EWRAM_DATA s16 sOwBattlePreviewX = 0;
+static EWRAM_DATA s16 sOwBattlePreviewY = 0;
 static EWRAM_DATA bool8 sOwBattlePreviewInitialized = FALSE;
 static EWRAM_DATA bool8 sOwBattlePreviewHelpVisible = FALSE;
 static EWRAM_DATA bool8 sOwBattlePreviewScrollActive = FALSE;
@@ -532,7 +534,7 @@ static void Task_OwBattlePreviewInput(u8 taskId)
         ResetOwBattlePreviewOffset();
         changed = TRUE;
     }
-    if (JOY_NEW(DPAD_LEFT) && sOwBattlePreviewX != 0)
+    if (JOY_NEW(DPAD_LEFT))
     {
         sOwBattlePreviewX--;
         changed = TRUE;
@@ -542,7 +544,7 @@ static void Task_OwBattlePreviewInput(u8 taskId)
         sOwBattlePreviewX++;
         changed = TRUE;
     }
-    if (JOY_NEW(DPAD_UP) && sOwBattlePreviewY != 0)
+    if (JOY_NEW(DPAD_UP))
     {
         sOwBattlePreviewY--;
         changed = TRUE;
@@ -573,22 +575,26 @@ static void RefreshOwBattlePreview(void)
 static void ClampOwBattlePreviewOffset(void)
 {
     const struct MapLayout *layout = GetOwBattlePreviewLayout();
+    s16 minX = -OW_BATTLE_PREVIEW_MAP_WIDTH;
+    s16 maxX = layout->width;
+    s16 minY = -OW_BATTLE_PREVIEW_MAP_HEIGHT;
+    s16 maxY = layout->height;
 
-    if (layout->width <= OW_BATTLE_PREVIEW_MAP_WIDTH)
-        sOwBattlePreviewX = 0;
-    else if (sOwBattlePreviewX > layout->width - OW_BATTLE_PREVIEW_MAP_WIDTH)
-        sOwBattlePreviewX = layout->width - OW_BATTLE_PREVIEW_MAP_WIDTH;
+    if (sOwBattlePreviewX < minX)
+        sOwBattlePreviewX = minX;
+    else if (sOwBattlePreviewX > maxX)
+        sOwBattlePreviewX = maxX;
 
-    if (layout->height <= OW_BATTLE_PREVIEW_MAP_HEIGHT)
-        sOwBattlePreviewY = 0;
-    else if (sOwBattlePreviewY > layout->height - OW_BATTLE_PREVIEW_MAP_HEIGHT)
-        sOwBattlePreviewY = layout->height - OW_BATTLE_PREVIEW_MAP_HEIGHT;
+    if (sOwBattlePreviewY < minY)
+        sOwBattlePreviewY = minY;
+    else if (sOwBattlePreviewY > maxY)
+        sOwBattlePreviewY = maxY;
 }
 
 static void DrawOwBattlePreviewText(void)
 {
     const struct MapLayout *layout = GetOwBattlePreviewLayout();
-    u8 text[4];
+    u8 text[5];
     u8 y;
 
     if (!sOwBattlePreviewHelpVisible)
@@ -614,10 +620,10 @@ static void DrawOwBattlePreviewText(void)
 
     y += OW_BATTLE_DEBUG_ROW_HEIGHT;
     PrintOwBattleDebugText(sText_X, 0, y);
-    ConvertIntToDecimalStringN(text, sOwBattlePreviewX, STR_CONV_MODE_LEFT_ALIGN, 3);
+    ConvertSignedPreviewOffsetToDecimalString(text, sOwBattlePreviewX);
     PrintOwBattleDebugText(text, 16, y);
     PrintOwBattleDebugText(sText_Y, 48, y);
-    ConvertIntToDecimalStringN(text, sOwBattlePreviewY, STR_CONV_MODE_LEFT_ALIGN, 3);
+    ConvertSignedPreviewOffsetToDecimalString(text, sOwBattlePreviewY);
     PrintOwBattleDebugText(text, 64, y);
     PrintOwBattleDebugText(sText_Size, 96, y);
     ConvertIntToDecimalStringN(text, layout->width, STR_CONV_MODE_LEFT_ALIGN, 3);
@@ -644,9 +650,28 @@ static const u8 *GetOwBattlePreviewLayoutName(u16 layoutId)
     return sOwBattlePreviewLayoutNames[layoutId - 1];
 }
 
+static void ConvertSignedPreviewOffsetToDecimalString(u8 *text, s16 value)
+{
+    if (value < 0)
+    {
+        *text++ = CHAR_HYPHEN;
+        value = -value;
+    }
+
+    ConvertIntToDecimalStringN(text, value, STR_CONV_MODE_LEFT_ALIGN, 3);
+}
+
 static void ResetOwBattlePreviewOffset(void)
 {
-    if (!BattleOverworldScene_GetBackgroundOffsetForLayout(sOwBattlePreviewLayoutId, &sOwBattlePreviewX, &sOwBattlePreviewY))
+    u16 x;
+    u16 y;
+
+    if (BattleOverworldScene_GetBackgroundOffsetForLayout(sOwBattlePreviewLayoutId, &x, &y))
+    {
+        sOwBattlePreviewX = x;
+        sOwBattlePreviewY = y;
+    }
+    else
     {
         sOwBattlePreviewX = 0;
         sOwBattlePreviewY = 0;
