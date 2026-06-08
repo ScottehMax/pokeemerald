@@ -39,6 +39,27 @@ If you're new to git and GitHub, [Team Aqua's Asset Repo](https://github.com/Paw
 ## 🚚 [Migrating from **`pokeemerald`**](INSTALL.md#Migrating-from-pokeemerald)
 ## 🚀 [Updating **`pokeemerald-expansion`**](INSTALL.md#Updating-pokeemerald-expansion)
 
+## Docker Build
+
+To build the ROM without installing the toolchain on your host:
+
+```bash
+docker build -t pokeemerald-expansion-builder .
+docker run --rm -v "$PWD:/workspace" pokeemerald-expansion-builder
+```
+
+The built ROM is written to `pokeemerald.gba`. You can pass make arguments after the image name:
+
+```bash
+docker run --rm -v "$PWD:/workspace" pokeemerald-expansion-builder make -j"$(nproc)"
+```
+
+The same workflow is available with Docker Compose:
+
+```bash
+docker compose run --rm builder
+```
+
 # [Documentation](https://rh-hideout.github.io/pokeemerald-expansion/)
 
 For detailed documentation, visit the [pokeemerald-expansion documentation page](https://rh-hideout.github.io/pokeemerald-expansion/).
