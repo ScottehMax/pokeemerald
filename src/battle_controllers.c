@@ -3134,6 +3134,8 @@ void AnimateMonAfterPokeBallFail(enum BattlerId battler)
 {
     if (B_ANIMATE_MON_AFTER_FAILED_POKEBALL == FALSE)
         return;
+    if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
+        return;
 
     LaunchKOAnimation(battler, ReturnAnimIdForBattler(TRUE, battler), TRUE);
     TryShinyAnimation(gBattlerTarget, GetBattlerMon(gBattlerTarget));
