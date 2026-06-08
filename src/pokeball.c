@@ -440,8 +440,8 @@ static void Task_DoPokeballSendOutAnim(u8 taskId)
         gBattlerTarget = battler;
         if (overworldBattler)
         {
-            gSprites[ballSpriteId].x = GetBattlerSpriteCoord(battler, BATTLER_COORD_X);
-            gSprites[ballSpriteId].y = GetBattlerSpriteCoord(battler, BATTLER_COORD_Y) + OW_BALL_Y_OFFSET;
+            gSprites[ballSpriteId].x = BattleOverworldScene_GetBattlerSpriteX(battler);
+            gSprites[ballSpriteId].y = BattleOverworldScene_GetBattlerSpriteY(battler) + OW_BALL_Y_OFFSET;
             gSprites[ballSpriteId].data[0] = 0;
             gSprites[ballSpriteId].callback = SpriteCB_OpponentMonSendOut;
         }
@@ -454,14 +454,15 @@ static void Task_DoPokeballSendOutAnim(u8 taskId)
         DoPokeballSendOutSoundEffect(battler);
         break;
     case POKEBALL_OPPONENT_SENDOUT:
-        gSprites[ballSpriteId].x = GetBattlerSpriteCoord(battler, BATTLER_COORD_X);
-        gSprites[ballSpriteId].y = GetBattlerSpriteCoord(battler, BATTLER_COORD_Y);
         if (overworldBattler)
         {
-            gSprites[ballSpriteId].y += OW_BALL_Y_OFFSET;
+            gSprites[ballSpriteId].x = BattleOverworldScene_GetBattlerSpriteX(battler);
+            gSprites[ballSpriteId].y = BattleOverworldScene_GetBattlerSpriteY(battler) + OW_BALL_Y_OFFSET;
         }
         else
         {
+            gSprites[ballSpriteId].x = GetBattlerSpriteCoord(battler, BATTLER_COORD_X);
+            gSprites[ballSpriteId].y = GetBattlerSpriteCoord(battler, BATTLER_COORD_Y);
             gSprites[ballSpriteId].x += throwXoffset;
             gSprites[ballSpriteId].y += throwYoffset;
         }

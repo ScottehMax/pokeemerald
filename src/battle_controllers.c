@@ -2003,6 +2003,8 @@ void StartSendOutAnim(enum BattlerId battler, bool32 dontClearTransform, bool32 
     struct Pokemon *mon = GetBattlerMon(battler);
     u32 sendoutType;
     bool8 overworldSprite;
+    s16 spriteX;
+    s16 spriteY;
 
     if (IsOnPlayerSide(battler))
     {
@@ -2027,9 +2029,20 @@ void StartSendOutAnim(enum BattlerId battler, bool32 dontClearTransform, bool32 
     if (!overworldSprite)
         SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
 
+    if (overworldSprite)
+    {
+        spriteX = BattleOverworldScene_GetBattlerSpriteX(battler);
+        spriteY = BattleOverworldScene_GetBattlerSpriteY(battler);
+    }
+    else
+    {
+        spriteX = GetBattlerSpriteCoord(battler, BATTLER_COORD_X_2);
+        spriteY = GetBattlerSpriteCoord(battler, BATTLER_COORD_Y);
+    }
+
     gBattlerSpriteIds[battler] = CreateSprite(&gMultiuseSpriteTemplate,
-                                        GetBattlerSpriteCoord(battler, BATTLER_COORD_X_2),
-                                        GetBattlerSpriteCoord(battler, BATTLER_COORD_Y),
+                                        spriteX,
+                                        spriteY,
                                         GetBattlerSpriteSubpriority(battler));
 
     gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
@@ -2348,7 +2361,8 @@ void BtlController_HandleSetRawMonData(enum BattlerId battler)
 
 void BtlController_HandleLoadMonSprite(enum BattlerId battler)
 {
-    u32 y;
+    s16 x;
+    s16 y;
     struct Pokemon *mon = GetBattlerMon(battler);
     enum Species species = GetBattlerVisualSpecies(battler);
     bool8 overworldSprite;
@@ -2369,12 +2383,23 @@ void BtlController_HandleLoadMonSprite(enum BattlerId battler)
     if (!overworldSprite)
         SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
 
+    if (overworldSprite)
+    {
+        x = BattleOverworldScene_GetBattlerSpriteX(battler);
+        y = BattleOverworldScene_GetBattlerSpriteY(battler);
+    }
+    else
+    {
+        x = GetBattlerSpriteCoord(battler, BATTLER_COORD_X_2);
+    }
+
     gBattlerSpriteIds[battler] = CreateSprite(&gMultiuseSpriteTemplate,
-                                               GetBattlerSpriteCoord(battler, BATTLER_COORD_X_2),
+                                               x,
                                                y,
                                                GetBattlerSpriteSubpriority(battler));
 
-    gSprites[gBattlerSpriteIds[battler]].x2 = -DISPLAY_WIDTH;
+    if (!overworldSprite)
+        gSprites[gBattlerSpriteIds[battler]].x2 = -DISPLAY_WIDTH;
     gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
     gSprites[gBattlerSpriteIds[battler]].data[2] = species;
     gSprites[gBattlerSpriteIds[battler]].oam.paletteNum = battler;

@@ -797,8 +797,16 @@ void AnimTask_SwitchOutBallEffect(u8 taskId)
     switch (gTasks[taskId].data[0])
     {
     case 0:
-        x = GetBattlerSpriteCoord(gBattleAnimAttacker, BATTLER_COORD_X);
-        y = GetBattlerSpriteCoord(gBattleAnimAttacker, BATTLER_COORD_Y);
+        if (isOwSprite)
+        {
+            x = BattleOverworldScene_GetBattlerSpriteX(gBattleAnimAttacker);
+            y = BattleOverworldScene_GetBattlerSpriteY(gBattleAnimAttacker);
+        }
+        else
+        {
+            x = GetBattlerSpriteCoord(gBattleAnimAttacker, BATTLER_COORD_X);
+            y = GetBattlerSpriteCoord(gBattleAnimAttacker, BATTLER_COORD_Y);
+        }
         priority = gSprites[spriteId].oam.priority;
         subpriority = gSprites[spriteId].subpriority;
         if (isOwSprite)
