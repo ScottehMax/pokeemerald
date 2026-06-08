@@ -1498,13 +1498,31 @@ void SwapHpBarsWithHpText(void)
 u8 CreatePartyStatusSummarySprites(enum BattlerId battler, struct HpAndStatus *partyInfo, bool8 skipPlayer, bool8 isBattleStart)
 {
     bool8 isOpponent;
+    bool8 overworldScene = BattleOverworldScene_IsEnabled();
     s16 bar_X, bar_Y, bar_pos2_X, bar_data0;
     s32 i, j, var;
     u8 summaryBarSpriteId;
     u8 ballIconSpritesIds[PARTY_SIZE];
     u8 taskId;
 
-    if (!skipPlayer)
+    if (overworldScene)
+    {
+        if (IsOnPlayerSide(battler))
+        {
+            isOpponent = TRUE;
+            bar_X = 104, bar_Y = 96;
+            bar_pos2_X = -100;
+            bar_data0 = 5;
+        }
+        else
+        {
+            isOpponent = FALSE;
+            bar_X = 136, bar_Y = 96;
+            bar_pos2_X = 100;
+            bar_data0 = -5;
+        }
+    }
+    else if (!skipPlayer)
     {
         if (IsOnPlayerSide(battler))
         {
@@ -1749,6 +1767,7 @@ void Task_HidePartyStatusSummary(u8 taskId)
 
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT2_ALL | BLDCNT_EFFECT_BLEND);
     SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(16, 0));
+    BattleOverworldScene_AddBg3BlendRef();
 
     gTasks[taskId].tBlend = 16;
 
@@ -1836,6 +1855,7 @@ static void Task_HidePartyStatusSummary_BattleStart_2(u8 taskId)
         gBattleSpritesDataPtr->healthBoxesData[battler].partyStatusSummaryShown = 0;
         SetGpuReg(REG_OFFSET_BLDCNT, 0);
         SetGpuReg(REG_OFFSET_BLDALPHA, 0);
+        BattleOverworldScene_RemoveBg3BlendRef();
         DestroyTask(taskId);
     }
 }
@@ -1868,6 +1888,7 @@ static void Task_HidePartyStatusSummary_DuringBattle(u8 taskId)
         gBattleSpritesDataPtr->healthBoxesData[battler].partyStatusSummaryShown = 0;
         SetGpuReg(REG_OFFSET_BLDCNT, 0);
         SetGpuReg(REG_OFFSET_BLDALPHA, 0);
+        BattleOverworldScene_RemoveBg3BlendRef();
         DestroyTask(taskId);
     }
 }

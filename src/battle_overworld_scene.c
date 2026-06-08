@@ -211,6 +211,7 @@ static bool8 sSceneSuspended;
 static bool8 sReshowTransitionAllowsBg3Blend;
 static bool8 sBg3BlendFadeStarted;
 static bool8 sSceneVisible;
+static u8 sBg3BlendRefCount;
 static u16 sCompositeLowerTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
 static u16 sCompositeUpperTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
 static u16 sCompositeDestTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
@@ -721,12 +722,30 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
         sBg3BlendFadeStarted = FALSE;
     }
 
-    if (!sReshowTransitionAllowsBg3Blend)
+    if (!sReshowTransitionAllowsBg3Blend && sBg3BlendRefCount == 0)
     {
         bldCnt = GetGpuReg(REG_OFFSET_BLDCNT);
         if (bldCnt & (BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3))
             SetGpuReg(REG_OFFSET_BLDCNT, bldCnt & ~(BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3));
     }
+}
+
+void BattleOverworldScene_AddBg3BlendRef(void)
+{
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+
+    if (sBg3BlendRefCount != 0xFF)
+        sBg3BlendRefCount++;
+}
+
+void BattleOverworldScene_RemoveBg3BlendRef(void)
+{
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+
+    if (sBg3BlendRefCount != 0)
+        sBg3BlendRefCount--;
 }
 
 void BattleOverworldScene_BeginReshowBlackout(void)
@@ -909,6 +928,7 @@ void BattleOverworldScene_Reset(void)
     sReshowTransitionAllowsBg3Blend = FALSE;
     sBg3BlendFadeStarted = FALSE;
     sSceneVisible = FALSE;
+    sBg3BlendRefCount = 0;
     sCompositeCount = 0;
     sCompositePalCount = 0;
 }
