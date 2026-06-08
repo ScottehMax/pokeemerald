@@ -1137,7 +1137,8 @@ static void Task_InitUpdateMonBg(u8 taskId)
 
     s16 *data = gTasks[taskId].data;
     u8 battlerSpriteId = gBattlerSpriteIds[tBattlerId];
-    gSprites[battlerSpriteId].invisible = TRUE;
+    if (!BattleOverworldScene_IsBattlerSprite(tBattlerId, battlerSpriteId))
+        gSprites[battlerSpriteId].invisible = TRUE;
 
     if (!tActive)
     {
@@ -1299,7 +1300,7 @@ void MoveBattlerSpriteToBG(enum BattlerId battler, bool8 toBG_2, bool8 setSprite
             gBattle_BG1_X--;
 
         gBattle_BG1_Y =  -(gSprites[battlerSpriteId].y + gSprites[battlerSpriteId].y2) + 0x20;
-        if (setSpriteInvisible)
+        if (setSpriteInvisible && !BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
             gSprites[gBattlerSpriteIds[battler]].invisible = TRUE;
 
         SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
@@ -1334,7 +1335,7 @@ void MoveBattlerSpriteToBG(enum BattlerId battler, bool8 toBG_2, bool8 setSprite
         gBattle_BG2_X =  -(gSprites[battlerSpriteId].x + gSprites[battlerSpriteId].x2) + 0x20;
         gBattle_BG2_Y =  -(gSprites[battlerSpriteId].y + gSprites[battlerSpriteId].y2) + 0x20;
 
-        if (setSpriteInvisible)
+        if (setSpriteInvisible && !BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
             gSprites[gBattlerSpriteIds[battler]].invisible = TRUE;
 
         SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
