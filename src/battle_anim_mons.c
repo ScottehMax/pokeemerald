@@ -84,6 +84,21 @@ u8 GetBattlerSpriteCoord(enum BattlerId battler, u8 coordType)
     struct Pokemon *mon, *illusionMon;
     struct BattleSpriteInfo *spriteInfo;
 
+    if (BattleOverworldScene_IsEnabled())
+    {
+        switch (coordType)
+        {
+        case BATTLER_COORD_X:
+        case BATTLER_COORD_X_2:
+            return BattleOverworldScene_GetBattlerSpriteX(battler);
+        case BATTLER_COORD_Y:
+        case BATTLER_COORD_Y_PIC_OFFSET:
+        case BATTLER_COORD_Y_PIC_OFFSET_DEFAULT:
+        default:
+            return BattleOverworldScene_GetBattlerSpriteY(battler);
+        }
+    }
+
     if (IsContest())
     {
         if (coordType == BATTLER_COORD_Y_PIC_OFFSET && battler == 3)

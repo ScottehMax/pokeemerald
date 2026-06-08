@@ -30,6 +30,10 @@ COMMON_DATA u16 gMonShrinkDelta = 0;
 COMMON_DATA u16 gMonShrinkDistance = 0;
 
 #define OW_BALL_Y_OFFSET 8
+#define BALL_BOUNCE_AMPLITUDE 40
+#define BALL_BOUNCE_DECAY 10
+#define OW_BALL_BOUNCE_AMPLITUDE 20
+#define OW_BALL_BOUNCE_DECAY 5
 
 enum {
     BALL_ROLL_1,
@@ -87,6 +91,11 @@ static void PremierBallOpenParticleAnimation_Step1(struct Sprite *);
 static void Task_FadeMon_ToBallColor(u8);
 static void Task_FadeMon_ToNormal(u8);
 static void Task_FadeMon_ToNormal_Step(u8);
+static bool8 IsBattleAnimTargetOverworldSprite(void);
+static s16 GetBallThrowTargetY(enum BattlerId battler);
+static s16 GetBallBounceAmplitude(void);
+static s16 GetBallBounceDecay(void);
+static void SetBallThrowStartCoords(struct Sprite *sprite);
 static void Task_ShinyStars(u8);
 static void SpriteCB_ShinyStars_Encircle(struct Sprite *);
 static void SpriteCB_ShinyStars_Diagonal(struct Sprite *);
@@ -882,15 +891,58 @@ void AnimTask_IsBallBlockedByTrainer(u8 taskId)
 #define sTargetX  data[1]
 #define sTargetY  data[2]
 
+static bool8 IsBattleAnimTargetOverworldSprite(void)
+{
+    return BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, gBattlerSpriteIds[gBattleAnimTarget]);
+}
+
+static s16 GetBallThrowTargetY(enum BattlerId battler)
+{
+    if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
+        return GetBattlerSpriteCoord(battler, BATTLER_COORD_Y) + OW_BALL_Y_OFFSET - OW_BALL_BOUNCE_AMPLITUDE;
+
+    return GetBattlerSpriteCoord(battler, BATTLER_COORD_Y) - 16;
+}
+
+static s16 GetBallBounceAmplitude(void)
+{
+    if (IsBattleAnimTargetOverworldSprite())
+        return OW_BALL_BOUNCE_AMPLITUDE;
+
+    return BALL_BOUNCE_AMPLITUDE;
+}
+
+static s16 GetBallBounceDecay(void)
+{
+    if (IsBattleAnimTargetOverworldSprite())
+        return OW_BALL_BOUNCE_DECAY;
+
+    return BALL_BOUNCE_DECAY;
+}
+
+static void SetBallThrowStartCoords(struct Sprite *sprite)
+{
+    s16 x;
+    s16 y;
+
+    if (IsBattleAnimTargetOverworldSprite()
+     && BattleOverworldScene_GetPlayerTrainerSpriteCoords(&x, &y))
+    {
+        sprite->x = x + 8;
+        sprite->y = y + OW_BALL_Y_OFFSET;
+    }
+}
+
 void AnimTask_ThrowBall(u8 taskId)
 {
     u8 spriteId;
 
     enum PokeBall ballId = ItemIdToBallId(gLastUsedItem);
     spriteId = CreateSprite(&gPokeBalls[ballId].spriteTemplate, 32, 80, 29);
+    SetBallThrowStartCoords(&gSprites[spriteId]);
     gSprites[spriteId].sDuration = 34;
     gSprites[spriteId].sTargetX = GetBattlerSpriteCoord(gBattleAnimTarget, BATTLER_COORD_X);
-    gSprites[spriteId].sTargetY = GetBattlerSpriteCoord(gBattleAnimTarget, BATTLER_COORD_Y) - 16;
+    gSprites[spriteId].sTargetY = GetBallThrowTargetY(gBattleAnimTarget);
     gSprites[spriteId].callback = SpriteCB_Ball_Throw;
     gBattleSpritesDataPtr->animationData->wildMonInvisible = gSprites[gBattlerSpriteIds[gBattleAnimTarget]].invisible;
     gTasks[taskId].tSpriteId = spriteId;
@@ -928,7 +980,7 @@ void AnimTask_ThrowBall_StandingTrainer(u8 taskId)
     spriteId = CreateSprite(&gPokeBalls[ballId].spriteTemplate, x + 32, y | 80, subpriority);
     gSprites[spriteId].sDuration = 34;
     gSprites[spriteId].sTargetX = GetBattlerSpriteCoord(gBattleAnimTarget, BATTLER_COORD_X);
-    gSprites[spriteId].sTargetY = GetBattlerSpriteCoord(gBattleAnimTarget, BATTLER_COORD_Y) - 16;
+    gSprites[spriteId].sTargetY = GetBallThrowTargetY(gBattleAnimTarget);
     gSprites[spriteId].callback = SpriteCallbackDummy;
     gSprites[gBattlerSpriteIds[GetBattlerAtPosition(B_POSITION_PLAYER_LEFT)]].callback = SpriteCB_TrainerThrowObject;
     gTasks[taskId].tSpriteId = spriteId;
@@ -1046,6 +1098,7 @@ static void SpriteCB_Ball_MonShrink(struct Sprite *sprite)
 #define tState  data[0]
 #define sTimer  data[1]
 #define sTaskId data[5]
+#define tMatrix data[14]
 
 static void SpriteCB_Ball_MonShrink_Step(struct Sprite *sprite)
 {
@@ -1061,7 +1114,32 @@ static void SpriteCB_Ball_MonShrink_Step(struct Sprite *sprite)
     switch (gTasks[taskId].tState)
     {
     case MON_SHRINK:
-        PrepareBattlerSpriteForRotScale(spriteId, ST_OAM_OBJ_NORMAL);
+        gTasks[taskId].tMatrix = 0xFF;
+        if (IsBattleAnimTargetOverworldSprite())
+        {
+            u8 matrixNum = AllocOamMatrix();
+
+            if (matrixNum != 0xFF)
+            {
+                struct Sprite *monSprite = &gSprites[spriteId];
+
+                gTasks[taskId].tMatrix = matrixNum;
+                monSprite->oam.objMode = ST_OAM_OBJ_NORMAL;
+                monSprite->oam.matrixNum = matrixNum;
+                monSprite->oam.affineMode = ST_OAM_AFFINE_DOUBLE;
+                monSprite->hFlip = FALSE;
+                monSprite->vFlip = FALSE;
+                monSprite->animPaused = TRUE;
+                monSprite->affineAnimPaused = TRUE;
+                monSprite->affineAnimBeginning = FALSE;
+                monSprite->affineAnimEnded = FALSE;
+                CalcCenterToCornerVec(monSprite, monSprite->oam.shape, monSprite->oam.size, monSprite->oam.affineMode);
+            }
+        }
+        else
+        {
+            PrepareBattlerSpriteForRotScale(spriteId, ST_OAM_OBJ_NORMAL);
+        }
         gTasks[taskId].data[10] = 256;
         gMonShrinkDuration = 28;
         gMonShrinkDistance = (gSprites[spriteId].y + gSprites[spriteId].y2) - (sprite->y + sprite->y2);
@@ -1070,15 +1148,33 @@ static void SpriteCB_Ball_MonShrink_Step(struct Sprite *sprite)
         gTasks[taskId].tState++; // MON_SHRINK_STEP
         break;
     case MON_SHRINK_STEP:
+    {
+        s16 xScale;
+
         gTasks[taskId].data[10] += 32;
-        SetSpriteRotScale(spriteId, gTasks[taskId].data[10], gTasks[taskId].data[10], 0);
+        xScale = gTasks[taskId].data[10];
+        if (BattleOverworldScene_IsBattlerFacingRight(gBattleAnimTarget))
+            xScale = -xScale;
+        if (!IsBattleAnimTargetOverworldSprite() || gTasks[taskId].tMatrix != 0xFF)
+            SetSpriteRotScale(spriteId, xScale, gTasks[taskId].data[10], 0);
         gTasks[taskId].data[3] += gTasks[taskId].data[2];
         gSprites[spriteId].y2 = -gTasks[taskId].data[3] >> 8;
         if (gTasks[taskId].data[10] >= 1152)
             gTasks[taskId].tState++; // MON_SHRINK_INVISIBLE
         break;
+    }
     case MON_SHRINK_INVISIBLE:
-        ResetSpriteRotScale(spriteId);
+        if (BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, spriteId))
+        {
+            BattleOverworldScene_SetBattlerHiddenByBall(gBattleAnimTarget, TRUE);
+            if (gTasks[taskId].tMatrix != 0xFF)
+                FreeOamMatrix(gSprites[spriteId].oam.matrixNum);
+            BattleOverworldScene_RestoreBattlerSpriteAnim(gBattleAnimTarget);
+        }
+        else
+        {
+            ResetSpriteRotScale(spriteId);
+        }
         gSprites[spriteId].invisible = TRUE;
         gTasks[taskId].tState++; // MON_SHRINK_FREE
         break;
@@ -1098,6 +1194,7 @@ static void SpriteCB_Ball_MonShrink_Step(struct Sprite *sprite)
 #undef sTimer
 #undef tState
 #undef sTaskId
+#undef tMatrix
 
 #define sState     data[3]
 #define sAmplitude data[4]
@@ -1108,9 +1205,9 @@ static void SpriteCB_Ball_Bounce(struct Sprite *sprite)
     if (sprite->animEnded)
     {
         sprite->sState = 0;
-        sprite->sAmplitude = 40;
+        sprite->sAmplitude = GetBallBounceAmplitude();
         sprite->sPhase = 0;
-        sprite->y += Cos(0, 40);
+        sprite->y += Cos(0, sprite->sAmplitude);
         sprite->y2 = -Cos(0, sprite->sAmplitude);
         if (IsCriticalCapture())
             sprite->callback = CB_CriticalCaptureThrownBallMovement;
@@ -1153,7 +1250,7 @@ static void SpriteCB_Ball_Bounce_Step(struct Sprite *sprite)
         // Once the ball touches the ground
         if (sprite->sPhase >= 64)
         {
-            sprite->sAmplitude -= 10;
+            sprite->sAmplitude -= GetBallBounceDecay();
             RISE_FASTER(sprite->sState);
 
             bounceCount = BOUNCES(sprite->sState);
@@ -1465,7 +1562,8 @@ static void SpriteCB_Ball_Capture_Step(struct Sprite *sprite)
     }
     else if (sprite->sTimer == 315)
     {
-        FreeOamMatrix(gSprites[gBattlerSpriteIds[*battler]].oam.matrixNum);
+        if (!BattleOverworldScene_IsBattlerSprite(*battler, gBattlerSpriteIds[*battler]))
+            FreeOamMatrix(gSprites[gBattlerSpriteIds[*battler]].oam.matrixNum);
         DestroySprite(&gSprites[gBattlerSpriteIds[*battler]]);
 
         sprite->sState = 0;
@@ -1608,11 +1706,21 @@ static void SpriteCB_Ball_Release_Step(struct Sprite *sprite)
     LaunchBallFadeMonTask(TRUE, gBattleAnimTarget, GetBattlePalettesMask(TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE), ballId);
 
     // Animate Pokémon emerging from Poké Ball
+    if (BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, gBattlerSpriteIds[gBattleAnimTarget]))
+        BattleOverworldScene_SetBattlerHiddenByBall(gBattleAnimTarget, FALSE);
     gSprites[gBattlerSpriteIds[gBattleAnimTarget]].invisible = FALSE;
     if (!BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, gBattlerSpriteIds[gBattleAnimTarget]))
         StartSpriteAffineAnim(&gSprites[gBattlerSpriteIds[gBattleAnimTarget]], BATTLER_AFFINE_EMERGE);
     AnimateSprite(&gSprites[gBattlerSpriteIds[gBattleAnimTarget]]);
-    gSprites[gBattlerSpriteIds[gBattleAnimTarget]].sOffsetY = 4096;
+    if (BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, gBattlerSpriteIds[gBattleAnimTarget]))
+    {
+        gSprites[gBattlerSpriteIds[gBattleAnimTarget]].y2 = 0;
+        gSprites[gBattlerSpriteIds[gBattleAnimTarget]].sOffsetY = 0;
+    }
+    else
+    {
+        gSprites[gBattlerSpriteIds[gBattleAnimTarget]].sOffsetY = 4096;
+    }
 }
 
 static void SpriteCB_Ball_Release_Wait(struct Sprite *sprite)
@@ -1642,6 +1750,11 @@ static void SpriteCB_Ball_Release_Wait(struct Sprite *sprite)
     {
         gSprites[gBattlerSpriteIds[gBattleAnimTarget]].y2 = 0;
         gSprites[gBattlerSpriteIds[gBattleAnimTarget]].invisible = gBattleSpritesDataPtr->animationData->wildMonInvisible;
+        if (BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, gBattlerSpriteIds[gBattleAnimTarget]))
+        {
+            BattleOverworldScene_RestoreBattlerSpriteAnim(gBattleAnimTarget);
+            SetHealthboxSpriteVisible(gHealthboxSpriteIds[gBattleAnimTarget]);
+        }
         sprite->sFrame = 0;
         sprite->callback = DestroySpriteAfterOneFrame;
         gDoingBattleAnim = 0;
@@ -2698,7 +2811,7 @@ static void CB_CriticalCaptureThrownBallMovement(struct Sprite *sprite)
     if (lastBounce)
     {
         sprite->data[3] = 0;
-        sprite->data[4] = 40;   //starting max height
+        sprite->data[4] = GetBallBounceAmplitude();   // starting max height
         sprite->data[5] = 0;
         sprite->callback = SpriteCB_Ball_Bounce_Step;
     }

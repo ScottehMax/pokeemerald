@@ -1284,6 +1284,12 @@ void SpriteCB_EnemyShadow(struct Sprite *shadowSprite)
     struct Sprite *battlerSprite = &gSprites[gBattlerSpriteIds[battler]];
     enum Species transformSpecies = SanitizeSpeciesId(gBattleSpritesDataPtr->battlerData[battler].transformSpecies);
 
+    if (BattleOverworldScene_IsEnabled())
+    {
+        shadowSprite->callback = SpriteCB_SetInvisible;
+        return;
+    }
+
     if (!battlerSprite->inUse || !IsBattlerSpritePresent(battler))
     {
         shadowSprite->callback = SpriteCB_SetInvisible;
@@ -1339,6 +1345,12 @@ void SpriteCB_SetInvisible(struct Sprite *sprite)
 
 void SetBattlerShadowSpriteCallback(enum BattlerId battler, enum Species species)
 {
+    if (BattleOverworldScene_IsEnabled())
+    {
+        HideBattlerShadowSprite(battler);
+        return;
+    }
+
     if (B_ENEMY_MON_SHADOW_STYLE >= GEN_4 && P_GBA_STYLE_SPECIES_GFX == FALSE)
     {
         if (IsOnPlayerSide(battler) || gBattleScripting.monCaught)
