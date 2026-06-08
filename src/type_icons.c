@@ -251,7 +251,10 @@ void LoadTypeIcons(enum BattlerId battler)
 
 static void LoadTypeSpritesAndPalettes(void)
 {
-    if (IndexOfSpritePaletteTag(TYPE_ICON_TAG) != UCHAR_MAX)
+    if (IndexOfSpriteTileTag(TYPE_ICON_TAG) != UCHAR_MAX
+     && IndexOfSpriteTileTag(TYPE_ICON_TAG_2) != UCHAR_MAX
+     && IndexOfSpritePaletteTag(TYPE_ICON_TAG) != UCHAR_MAX
+     && IndexOfSpritePaletteTag(TYPE_ICON_TAG_2) != UCHAR_MAX)
         return;
 
     LoadCompressedSpriteSheet(&sSpriteSheet_TypeIcons1);
@@ -453,7 +456,7 @@ static void DestroyTypeIcon(struct Sprite* sprite)
 {
     u32 spriteId, tag;
 
-    DestroySpriteAndFreeResources(sprite);
+    DestroySprite(sprite);
 
     for (spriteId = 0; spriteId < MAX_SPRITES; ++spriteId)
     {

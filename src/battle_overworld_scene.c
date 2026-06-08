@@ -837,6 +837,12 @@ static void Task_BattleOverworldScene_KeepSpritesVisible(u8 taskId)
         return;
     }
 
+    if (gMain.callback2 != BattleMainCB2)
+        return;
+
+    if (!sSceneVisible)
+        return;
+
     for (battler = 0; battler < MAX_BATTLERS_COUNT && battler < gBattlersCount; battler++)
     {
         if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler])
@@ -1309,6 +1315,9 @@ static void LoadBattleOwOpponentTrainerPalette(u16 objectPaletteTag)
 
 static void RestoreBattleOwTrainerPalettes(void)
 {
+    if (!sSceneVisible)
+        return;
+
     if (gPaletteFade.active)
         return;
 
