@@ -1164,7 +1164,7 @@ void SetBattlerSpriteAffineMode(u8 affineMode)
             {
                 gSprites[gBattlerSpriteIds[i]].oam.matrixNum = gBattleSpritesDataPtr->healthBoxesData[i].matrixNum;
             }
-            BattleOverworldScene_FixBattlerSpriteOrientation(i);
+            BattleOverworldScene_RestoreBattlerSpriteAnim(i);
         }
     }
 

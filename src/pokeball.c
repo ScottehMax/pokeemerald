@@ -78,6 +78,9 @@ static enum PokeBall GetBattlerPokeballItemId(enum BattlerId battler);
 #define GFX_TAG_PARK_BALL    55025
 #define GFX_TAG_BEAST_BALL   55026
 #define GFX_TAG_CHERISH_BALL 55027
+#define OW_BALL_Y_OFFSET 8
+#define OW_SEND_OUT_START_SCALE 0x2D0
+#define OW_SEND_OUT_SCALE_STEP  0x30
 
 static const struct OamData sBallOamData =
 {
@@ -388,6 +391,7 @@ u8 DoPokeballSendOutAnimation(enum BattlerId battler, s16 pan, u8 kindOfThrow)
 
     gDoingBattleAnim = TRUE;
     gBattleSpritesDataPtr->healthBoxesData[battler].ballAnimActive = TRUE;
+    BattleOverworldScene_SetBattlerHiddenByBall(battler, TRUE);
 
     taskId = CreateTask(Task_DoPokeballSendOutAnim, 5);
     gTasks[taskId].tPan = pan;
@@ -405,6 +409,7 @@ static void Task_DoPokeballSendOutAnim(u8 taskId)
     enum PokeBall ballId;
     enum BattlerId battler;
     bool32 notSendOut = FALSE;
+    bool8 overworldBattler;
     u32 throwXoffset = (B_ENEMY_THROW_BALLS >= GEN_6 && !gTestRunnerHeadless) ? 24 : 0;
     s32 throwYoffset = (B_ENEMY_THROW_BALLS >= GEN_6 && !gTestRunnerHeadless) ? -16 : 24;
 
@@ -417,6 +422,7 @@ static void Task_DoPokeballSendOutAnim(u8 taskId)
     throwCaseId = gTasks[taskId].tThrowId;
     battler = gTasks[taskId].tBattler;
     ballId = GetBattlerPokeballItemId(battler);
+    overworldBattler = BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]);
     LoadBallGfx(ballId);
     ballSpriteId = CreateSprite(&gPokeBalls[ballId].spriteTemplate, 32, 80, 29);
     gSprites[ballSpriteId].data[0] = 0x80;
@@ -432,17 +438,36 @@ static void Task_DoPokeballSendOutAnim(u8 taskId)
         break;
     case POKEBALL_PLAYER_SENDOUT:
         gBattlerTarget = battler;
-        gSprites[ballSpriteId].x = 24;
-        gSprites[ballSpriteId].y = 68;
-        gSprites[ballSpriteId].callback = SpriteCB_MonSendOut_1;
+        if (overworldBattler)
+        {
+            gSprites[ballSpriteId].x = GetBattlerSpriteCoord(battler, BATTLER_COORD_X);
+            gSprites[ballSpriteId].y = GetBattlerSpriteCoord(battler, BATTLER_COORD_Y) + OW_BALL_Y_OFFSET;
+            gSprites[ballSpriteId].data[0] = 0;
+            gSprites[ballSpriteId].callback = SpriteCB_OpponentMonSendOut;
+        }
+        else
+        {
+            gSprites[ballSpriteId].x = 24;
+            gSprites[ballSpriteId].y = 68;
+            gSprites[ballSpriteId].callback = SpriteCB_MonSendOut_1;
+        }
         DoPokeballSendOutSoundEffect(battler);
         break;
     case POKEBALL_OPPONENT_SENDOUT:
-        gSprites[ballSpriteId].x = GetBattlerSpriteCoord(battler, BATTLER_COORD_X) + throwXoffset;
-        gSprites[ballSpriteId].y = GetBattlerSpriteCoord(battler, BATTLER_COORD_Y) + throwYoffset;
+        gSprites[ballSpriteId].x = GetBattlerSpriteCoord(battler, BATTLER_COORD_X);
+        gSprites[ballSpriteId].y = GetBattlerSpriteCoord(battler, BATTLER_COORD_Y);
+        if (overworldBattler)
+        {
+            gSprites[ballSpriteId].y += OW_BALL_Y_OFFSET;
+        }
+        else
+        {
+            gSprites[ballSpriteId].x += throwXoffset;
+            gSprites[ballSpriteId].y += throwYoffset;
+        }
         gBattlerTarget = battler;
         gSprites[ballSpriteId].data[0] = 0;
-        gSprites[ballSpriteId].callback = GetOpponentMonSendOutCallback();
+        gSprites[ballSpriteId].callback = overworldBattler ? SpriteCB_OpponentMonSendOut : GetOpponentMonSendOutCallback();
         DoPokeballSendOutSoundEffect(battler);
         break;
     default:
@@ -884,8 +909,35 @@ static void SpriteCB_ReleaseMonFromBall(struct Sprite *sprite)
 
     if (BattleOverworldScene_IsBattlerSprite(sprite->sBattler, gBattlerSpriteIds[sprite->sBattler]))
     {
-        gSprites[gBattlerSpriteIds[sprite->sBattler]].callback = SpriteCallbackDummy;
-        BattleOverworldScene_FixBattlerSpriteOrientation(sprite->sBattler);
+        u8 matrixNum = AllocOamMatrix();
+        struct Sprite *monSprite = &gSprites[gBattlerSpriteIds[sprite->sBattler]];
+
+        if (matrixNum != 0xFF)
+        {
+            s16 xScale = OW_SEND_OUT_START_SCALE;
+
+            if (BattleOverworldScene_IsBattlerFacingRight(sprite->sBattler))
+                xScale = -xScale;
+
+            monSprite->oam.objMode = ST_OAM_OBJ_NORMAL;
+            monSprite->oam.matrixNum = matrixNum;
+            monSprite->oam.affineMode = ST_OAM_AFFINE_DOUBLE;
+            monSprite->hFlip = FALSE;
+            monSprite->vFlip = FALSE;
+            monSprite->animPaused = TRUE;
+            monSprite->affineAnimPaused = TRUE;
+            monSprite->affineAnimBeginning = FALSE;
+            monSprite->affineAnimEnded = FALSE;
+            CalcCenterToCornerVec(monSprite, monSprite->oam.shape, monSprite->oam.size, monSprite->oam.affineMode);
+            SetSpriteRotScale(gBattlerSpriteIds[sprite->sBattler], xScale, OW_SEND_OUT_START_SCALE, 0);
+            monSprite->data[1] = OW_SEND_OUT_START_SCALE;
+        }
+        else
+        {
+            monSprite->data[1] = 0x100;
+        }
+
+        monSprite->callback = SpriteCallbackDummy;
     }
     else if (!IsOnPlayerSide(sprite->sBattler))
         gSprites[gBattlerSpriteIds[sprite->sBattler]].callback = SpriteCB_OpponentMonFromBall;
@@ -893,7 +945,8 @@ static void SpriteCB_ReleaseMonFromBall(struct Sprite *sprite)
         gSprites[gBattlerSpriteIds[sprite->sBattler]].callback = SpriteCB_PlayerMonFromBall;
 
     AnimateSprite(&gSprites[gBattlerSpriteIds[sprite->sBattler]]);
-    gSprites[gBattlerSpriteIds[sprite->sBattler]].data[1] = 0x1000;
+    if (!BattleOverworldScene_IsBattlerSprite(sprite->sBattler, gBattlerSpriteIds[sprite->sBattler]))
+        gSprites[gBattlerSpriteIds[sprite->sBattler]].data[1] = 0x1000;
 }
 
 #undef tCryTaskSpecies
@@ -920,15 +973,25 @@ static void HandleBallAnimEnd(struct Sprite *sprite)
     bool8 affineAnimEnded = FALSE;
     enum BattlerId battler = sprite->sBattler;
     bool8 overworldBattler = BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]);
+    bool8 slideIn = sprite->data[7] == POKEBALL_PLAYER_SLIDEIN;
 
-    if (sprite->data[7] == POKEBALL_PLAYER_SLIDEIN)
+    if (overworldBattler)
+        BattleOverworldScene_SetBattlerHiddenByBall(battler, FALSE);
+
+    if (slideIn)
     {
         if (overworldBattler)
+        {
             gSprites[gBattlerSpriteIds[battler]].callback = SpriteCallbackDummy;
+            BattleOverworldScene_RestoreBattlerSpriteAnim(battler);
+            gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
+        }
         else
+        {
             gSprites[gBattlerSpriteIds[battler]].callback = SpriteCB_PlayerMonSlideIn;
+        }
         AnimateSprite(&gSprites[gBattlerSpriteIds[battler]]);
-        gSprites[gBattlerSpriteIds[battler]].data[1] = 0x1000;
+        gSprites[gBattlerSpriteIds[battler]].data[1] = overworldBattler ? 0 : 0x1000;
     }
     else
     {
@@ -937,9 +1000,31 @@ static void HandleBallAnimEnd(struct Sprite *sprite)
 
     if (sprite->animEnded)
         sprite->invisible = TRUE;
-    if (overworldBattler && gSprites[gBattlerSpriteIds[battler]].data[1] <= 0)
+    if (overworldBattler)
     {
-        affineAnimEnded = TRUE;
+        struct Sprite *monSprite = &gSprites[gBattlerSpriteIds[battler]];
+        s16 xScale;
+
+        if (slideIn)
+        {
+            affineAnimEnded = TRUE;
+        }
+        else if (monSprite->data[1] > 0x100)
+        {
+            monSprite->data[1] -= OW_SEND_OUT_SCALE_STEP;
+            if (monSprite->data[1] < 0x100)
+                monSprite->data[1] = 0x100;
+
+            xScale = monSprite->data[1];
+            if (BattleOverworldScene_IsBattlerFacingRight(battler))
+                xScale = -xScale;
+            SetSpriteRotScale(gBattlerSpriteIds[battler], xScale, monSprite->data[1], 0);
+            monSprite->y2 = 0;
+        }
+        else
+        {
+            affineAnimEnded = TRUE;
+        }
     }
     else if (gSprites[gBattlerSpriteIds[battler]].affineAnimEnded)
     {
@@ -956,6 +1041,21 @@ static void HandleBallAnimEnd(struct Sprite *sprite)
         s32 i, doneBattlers;
 
         gSprites[gBattlerSpriteIds[battler]].y2 = 0;
+        if (overworldBattler)
+        {
+            u8 matrixNum = gSprites[gBattlerSpriteIds[battler]].oam.matrixNum;
+            bool8 hasMatrix = gSprites[gBattlerSpriteIds[battler]].oam.affineMode & ST_OAM_AFFINE_ON_MASK;
+
+            if (!slideIn)
+            {
+                if (hasMatrix)
+                {
+                    ResetSpriteRotScale(gBattlerSpriteIds[battler]);
+                    FreeOamMatrix(matrixNum);
+                }
+            }
+            BattleOverworldScene_RestoreBattlerSpriteAnim(battler);
+        }
         gDoingBattleAnim = FALSE;
         gBattleSpritesDataPtr->healthBoxesData[battler].ballAnimActive = FALSE;
         FreeSpriteOamMatrix(sprite);

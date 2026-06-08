@@ -130,8 +130,10 @@ static const struct ObjectEventGraphicsInfo *GetBattleOwMonGraphicsInfo(struct P
 static u8 sPlayerTrainerSpriteId;
 static u8 sOpponentTrainerSpriteId;
 static u8 sOwBattlerSpriteIds[MAX_BATTLERS_COUNT];
+static bool8 sOwBattlerHiddenByBall[MAX_BATTLERS_COUNT];
 static bool8 sCreatedTrainerSprites;
 static bool8 sSceneSuspended;
+static bool8 sReshowTransitionAllowsBg3Blend;
 static u16 sCompositeLowerTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
 static u16 sCompositeUpperTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
 static u16 sCompositeDestTiles[OW_BG_COMPOSITE_TILE_CAPACITY];
@@ -644,14 +646,29 @@ void BattleOverworldScene_KeepBaseBackgroundVisible(void)
     SetGpuReg(REG_OFFSET_WININ, winIn | WININ_WIN0_BG3 | WININ_WIN1_BG3);
     SetGpuReg(REG_OFFSET_WINOUT, winOut | WINOUT_WIN01_BG3 | WINOUT_WINOBJ_BG3);
 
-    bldCnt = GetGpuReg(REG_OFFSET_BLDCNT);
-    if (bldCnt & (BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3))
-        SetGpuReg(REG_OFFSET_BLDCNT, bldCnt & ~(BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3));
+    if (sReshowTransitionAllowsBg3Blend && !gPaletteFade.active)
+        sReshowTransitionAllowsBg3Blend = FALSE;
+
+    if (!sReshowTransitionAllowsBg3Blend)
+    {
+        bldCnt = GetGpuReg(REG_OFFSET_BLDCNT);
+        if (bldCnt & (BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3))
+            SetGpuReg(REG_OFFSET_BLDCNT, bldCnt & ~(BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3));
+    }
 }
 
-void BattleOverworldScene_FixBattlerSpriteOrientation(u8 battler)
+void BattleOverworldScene_BeginReshowBlackout(void)
 {
-    bool8 hFlip;
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+
+    sReshowTransitionAllowsBg3Blend = TRUE;
+    SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_ALL | BLDCNT_EFFECT_DARKEN);
+    SetGpuReg(REG_OFFSET_BLDY, 16);
+}
+
+void BattleOverworldScene_RestoreBattlerSpriteAnim(u8 battler)
+{
     struct Sprite *sprite;
 
     if (!IsBattleOverworldSceneEnabled() || battler >= gBattlersCount)
@@ -663,26 +680,24 @@ void BattleOverworldScene_FixBattlerSpriteOrientation(u8 battler)
     if (!sprite->inUse)
         return;
 
-    hFlip = IsPlayerBattlerPosition(GetBattlerPosition(battler));
-    sprite->hFlip = hFlip;
-
-    if (!(sprite->oam.affineMode & ST_OAM_AFFINE_ON_MASK))
-    {
-        sprite->oam.matrixNum &= 0x7;
-        if (hFlip)
-            sprite->oam.matrixNum |= ST_OAM_HFLIP;
-    }
+    sprite->oam.affineMode = ST_OAM_AFFINE_OFF;
+    sprite->oam.objMode = ST_OAM_OBJ_NORMAL;
+    sprite->hFlip = FALSE;
+    sprite->vFlip = FALSE;
+    sprite->oam.matrixNum &= ~ST_OAM_MNUM_FLIP_MASK;
+    sprite->animPaused = FALSE;
+    sprite->affineAnimPaused = FALSE;
+    CalcCenterToCornerVec(sprite, sprite->oam.shape, sprite->oam.size, sprite->oam.affineMode);
+    StartSpriteAnim(sprite, BattleOverworldScene_GetBattlerAnimNum(battler));
+    AnimateSprite(sprite);
 }
 
-void BattleOverworldScene_FixBattlerSpriteOrientations(void)
+bool8 BattleOverworldScene_IsBattlerFacingRight(u8 battler)
 {
-    u8 battler;
+    if (!IsBattleOverworldSceneEnabled() || battler >= gBattlersCount)
+        return FALSE;
 
-    if (!IsBattleOverworldSceneEnabled())
-        return;
-
-    for (battler = 0; battler < gBattlersCount; battler++)
-        BattleOverworldScene_FixBattlerSpriteOrientation(battler);
+    return IsPlayerBattlerPosition(GetBattlerPosition(battler));
 }
 
 void BattleOverworldScene_RegisterBattlerSprite(u8 battler, u8 spriteId)
@@ -714,6 +729,14 @@ bool8 BattleOverworldScene_IsBattlerSprite(u8 battler, u8 spriteId)
     return sOwBattlerSpriteIds[battler] == spriteId && spriteId < MAX_SPRITES;
 }
 
+void BattleOverworldScene_SetBattlerHiddenByBall(u8 battler, bool8 hidden)
+{
+    if (!IsBattleOverworldSceneEnabled() || battler >= MAX_BATTLERS_COUNT)
+        return;
+
+    sOwBattlerHiddenByBall[battler] = hidden;
+}
+
 static void Task_BattleOverworldScene_KeepSpritesVisible(u8 taskId)
 {
     u8 battler;
@@ -728,8 +751,8 @@ static void Task_BattleOverworldScene_KeepSpritesVisible(u8 taskId)
     {
         if (gBattlerSpriteIds[battler] < MAX_SPRITES && gSprites[gBattlerSpriteIds[battler]].inUse)
         {
-            gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
-            BattleOverworldScene_FixBattlerSpriteOrientation(battler);
+            if (!sOwBattlerHiddenByBall[battler])
+                gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
             gBattleSpritesDataPtr->battlerData[battler].invisible = FALSE;
         }
     }
@@ -939,9 +962,13 @@ void BattleOverworldScene_Reset(void)
     sPlayerTrainerSpriteId = SPRITE_NONE;
     sOpponentTrainerSpriteId = SPRITE_NONE;
     for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
+    {
         sOwBattlerSpriteIds[battler] = SPRITE_NONE;
+        sOwBattlerHiddenByBall[battler] = FALSE;
+    }
     sCreatedTrainerSprites = FALSE;
     sSceneSuspended = FALSE;
+    sReshowTransitionAllowsBg3Blend = FALSE;
     sCompositeCount = 0;
     sCompositePalCount = 0;
 }
@@ -1124,9 +1151,11 @@ bool8 BattleOverworldScene_CreateBattlerSprite(u8 battler)
         gSprites[gBattlerSpriteIds[battler]].oam.paletteNum = battler;
         gSprites[gBattlerSpriteIds[battler]].oam.priority = 0;
         gSprites[gBattlerSpriteIds[battler]].callback = SpriteCallbackDummy;
-        gSprites[gBattlerSpriteIds[battler]].invisible = gBattleSpritesDataPtr->battlerData[battler].invisible;
+        gSprites[gBattlerSpriteIds[battler]].invisible = sOwBattlerHiddenByBall[battler];
+        gBattleSpritesDataPtr->battlerData[battler].invisible = FALSE;
         StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], BattleOverworldScene_GetBattlerAnimNum(battler));
-        BattleOverworldScene_FixBattlerSpriteOrientation(battler);
+        BattleOverworldScene_RestoreBattlerSpriteAnim(battler);
+        BattleOverworldScene_EnsureVisibilityTask();
     }
 
     return TRUE;
