@@ -890,7 +890,7 @@ void GetBattleAnimBgData(struct BattleAnimBgData *out, u32 bgId)
         out->tilesOffset = 0;
         out->unused = 0;
     }
-    else if (bgId == 1)
+    else if (bgId == 1 || BattleOverworldScene_IsEnabled())
     {
         GetBattleAnimBg1Data(out);
     }
@@ -916,7 +916,7 @@ void GetBgDataForTransform(struct BattleAnimBgData *out, enum BattlerId battler)
         out->tilesOffset = 0;
         out->unused = 0;
     }
-    else if (GetBattlerSpriteBGPriorityRank(gBattleAnimAttacker) == 1)
+    else if (BattleOverworldScene_IsEnabled() || GetBattlerSpriteBGPriorityRank(gBattleAnimAttacker) == 1)
     {
         out->paletteId = BG_ANIM_PAL_1;
         out->bgId = 1;
@@ -1403,7 +1403,9 @@ u32 GetBattlePalettesMask(bool8 battleBackground, bool8 attacker, bool8 target, 
     }
     if (anim2)
     {
-        if (!IsContest())
+        if (BattleOverworldScene_IsEnabled())
+            selectedPalettes |= 1 << BG_ANIM_PAL_1;
+        else if (!IsContest())
             selectedPalettes |= 1 << BG_ANIM_PAL_2;
     }
     return selectedPalettes;
@@ -2044,6 +2046,8 @@ u8 GetBattlerSpriteBGPriority(enum BattlerId battler)
 
     if (IsContest())
         return 2;
+    else if (BattleOverworldScene_IsEnabled())
+        return GetAnimBgAttribute(1, BG_ANIM_PRIORITY);
     else if (position == B_POSITION_PLAYER_LEFT || position == B_POSITION_OPPONENT_RIGHT)
         return GetAnimBgAttribute(2, BG_ANIM_PRIORITY);
     else
@@ -2052,7 +2056,11 @@ u8 GetBattlerSpriteBGPriority(enum BattlerId battler)
 
 u8 GetBattlerSpriteBGPriorityRank(enum BattlerId battler)
 {
-    if (!IsContest())
+    if (BattleOverworldScene_IsEnabled())
+    {
+        return 1;
+    }
+    else if (!IsContest())
     {
         enum BattlerPosition position = GetBattlerPosition(battler);
         if (position == B_POSITION_PLAYER_LEFT || position == B_POSITION_OPPONENT_RIGHT)

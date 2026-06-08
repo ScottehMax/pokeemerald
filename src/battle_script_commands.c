@@ -334,6 +334,8 @@ static bool32 IsMonGettingExpSentOut(void);
 static void InitLevelUpBanner(void);
 static bool8 SlideInLevelUpBanner(void);
 static bool8 SlideOutLevelUpBanner(void);
+static u16 *GetLevelUpBannerBgXPtr(void);
+static u16 *GetLevelUpBannerBgYPtr(void);
 static void DrawLevelUpWindow1(void);
 static void DrawLevelUpWindow2(void);
 static void PutMonIconOnLvlUpBanner(void);
@@ -6273,9 +6275,9 @@ static void Cmd_drawlvlupbox(void)
     {
     case 1:
         // Start level up banner
-        gBattle_BG2_Y = 96;
-        SetBgAttribute(2, BG_ATTR_PRIORITY, 0);
-        ShowBg(2);
+        *GetLevelUpBannerBgYPtr() = 96;
+        SetBgAttribute(BattleOverworldScene_IsEnabled() ? 1 : 2, BG_ATTR_PRIORITY, 0);
+        ShowBg(BattleOverworldScene_IsEnabled() ? 1 : 2);
         InitLevelUpBanner();
         gBattleScripting.drawlvlupboxState = 2;
         break;
@@ -6338,8 +6340,13 @@ static void Cmd_drawlvlupbox(void)
             ClearWindowTilemap(B_WIN_LEVEL_UP_BOX);
             CopyWindowToVram(B_WIN_LEVEL_UP_BOX, COPYWIN_MAP);
 
-            SetBgAttribute(2, BG_ATTR_PRIORITY, 2);
-            ShowBg(2);
+            if (BattleOverworldScene_IsEnabled())
+                BattleOverworldScene_KeepBaseBackgroundVisible();
+            else
+            {
+                SetBgAttribute(2, BG_ATTR_PRIORITY, 2);
+                ShowBg(2);
+            }
 
             gBattleScripting.drawlvlupboxState = 10;
         }
@@ -6375,8 +6382,8 @@ static void DrawLevelUpWindow2(void)
 
 static void InitLevelUpBanner(void)
 {
-    gBattle_BG2_Y = 0;
-    gBattle_BG2_X = LEVEL_UP_BANNER_START;
+    *GetLevelUpBannerBgYPtr() = 0;
+    *GetLevelUpBannerBgXPtr() = LEVEL_UP_BANNER_START;
 
     LoadPalette(sLevelUpBanner_Pal, BG_PLTT_ID(6), sizeof(sLevelUpBanner_Pal));
     CopyToWindowPixelBuffer(B_WIN_LEVEL_UP_BANNER, sLevelUpBanner_Gfx, 0, 0);
@@ -6386,22 +6393,34 @@ static void InitLevelUpBanner(void)
     PutMonIconOnLvlUpBanner();
 }
 
+static u16 *GetLevelUpBannerBgXPtr(void)
+{
+    return BattleOverworldScene_IsEnabled() ? &gBattle_BG1_X : &gBattle_BG2_X;
+}
+
+static u16 *GetLevelUpBannerBgYPtr(void)
+{
+    return BattleOverworldScene_IsEnabled() ? &gBattle_BG1_Y : &gBattle_BG2_Y;
+}
+
 static bool8 SlideInLevelUpBanner(void)
 {
+    u16 *bgX = GetLevelUpBannerBgXPtr();
+
     if (IsDma3ManagerBusyWithBgCopy())
         return TRUE;
 
-    if (gBattle_BG2_X == LEVEL_UP_BANNER_END)
+    if (*bgX == LEVEL_UP_BANNER_END)
         return FALSE;
 
-    if (gBattle_BG2_X == LEVEL_UP_BANNER_START)
+    if (*bgX == LEVEL_UP_BANNER_START)
         DrawLevelUpBannerText();
 
-    gBattle_BG2_X += 8;
-    if (gBattle_BG2_X >= LEVEL_UP_BANNER_END)
-        gBattle_BG2_X = LEVEL_UP_BANNER_END;
+    *bgX += 8;
+    if (*bgX >= LEVEL_UP_BANNER_END)
+        *bgX = LEVEL_UP_BANNER_END;
 
-    return (gBattle_BG2_X != LEVEL_UP_BANNER_END);
+    return (*bgX != LEVEL_UP_BANNER_END);
 }
 
 static void DrawLevelUpBannerText(void)
@@ -6467,15 +6486,17 @@ static void DrawLevelUpBannerText(void)
 
 static bool8 SlideOutLevelUpBanner(void)
 {
-    if (gBattle_BG2_X == LEVEL_UP_BANNER_START)
+    u16 *bgX = GetLevelUpBannerBgXPtr();
+
+    if (*bgX == LEVEL_UP_BANNER_START)
         return FALSE;
 
-    if (gBattle_BG2_X - 16 < LEVEL_UP_BANNER_START)
-        gBattle_BG2_X = LEVEL_UP_BANNER_START;
+    if (*bgX - 16 < LEVEL_UP_BANNER_START)
+        *bgX = LEVEL_UP_BANNER_START;
     else
-        gBattle_BG2_X -= 16;
+        *bgX -= 16;
 
-    return (gBattle_BG2_X != LEVEL_UP_BANNER_START);
+    return (*bgX != LEVEL_UP_BANNER_START);
 }
 
 #define sDestroy data[0]
@@ -6503,12 +6524,12 @@ static void PutMonIconOnLvlUpBanner(void)
 
     spriteId = CreateSprite(&sSpriteTemplate_MonIconOnLvlUpBanner, 256, 10, 0);
     gSprites[spriteId].sDestroy = FALSE;
-    gSprites[spriteId].sXOffset = gBattle_BG2_X;
+    gSprites[spriteId].sXOffset = *GetLevelUpBannerBgXPtr();
 }
 
 static void SpriteCB_MonIconOnLvlUpBanner(struct Sprite *sprite)
 {
-    sprite->x2 = sprite->sXOffset - gBattle_BG2_X;
+    sprite->x2 = sprite->sXOffset - *GetLevelUpBannerBgXPtr();
 
     if (sprite->x2 != 0)
     {

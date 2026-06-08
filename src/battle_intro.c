@@ -27,7 +27,7 @@ static const u8 sBattleAnimBgCnts[] = {REG_OFFSET_BG0CNT, REG_OFFSET_BG1CNT, REG
 
 void SetAnimBgAttribute(u8 bgId, u8 attributeId, u8 value)
 {
-    if (BattleOverworldScene_IsEnabled() && bgId == 3)
+    if (BattleOverworldScene_IsProtectedBg(bgId))
     {
         BattleOverworldScene_KeepBaseBackgroundVisible();
         return;

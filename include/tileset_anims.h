@@ -2,6 +2,7 @@
 #define GUARD_TILESET_ANIMS_H
 
 void InitTilesetAnimations(void);
+void InitTilesetAnimationsForLayout(const struct MapLayout *layout);
 void InitSecondaryTilesetAnimation(void);
 void UpdateTilesetAnimations(void);
 void TransferTilesetAnimsBuffer(void);

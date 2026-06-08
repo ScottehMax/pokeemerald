@@ -2439,7 +2439,10 @@ void BtlController_HandleSwitchInAnim(enum BattlerId battler)
         ClearTemporarySpeciesSpriteData(battler, gBattleResources->bufferA[battler][2], gBattleResources->bufferA[battler][3]);
     gBattlerPartyIndexes[battler] = gBattleResources->bufferA[battler][1];
     if (isPlayerSide)
+    {
         BattleLoadMonSpriteGfx(GetBattlerMon(battler), battler);
+        BattleOverworldScene_PrepareHealthbox(battler, GetBattlerMon(battler), gBattlerPartyIndexes[battler]);
+    }
     StartSendOutAnim(battler, gBattleResources->bufferA[battler][2], gBattleResources->bufferA[battler][3], FALSE);
     gBattlerControllerFuncs[battler] = BtlController_HandleSwitchInTryShinyAnim;
 }
@@ -3290,7 +3293,9 @@ void BtlController_HandleSwitchInShowHealthbox(enum BattlerId battler)
             StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], BattleOverworldScene_GetBattlerAnimNum(battler));
         else
             StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
-        UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], GetBattlerMon(battler), HEALTHBOX_ALL);
+        if (!BattleOverworldScene_IsHealthboxPrepared(battler, gBattlerPartyIndexes[battler]))
+            UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], GetBattlerMon(battler), HEALTHBOX_ALL);
+        BattleOverworldScene_ClearPreparedHealthbox(battler);
         StartHealthboxSlideIn(battler);
         SetHealthboxSpriteVisible(gHealthboxSpriteIds[battler]);
 
@@ -3337,7 +3342,9 @@ void BtlController_HandleSwitchInTryShinyAnim(enum BattlerId battler)
 
         if (IsControllerPlayer(battler))
         {
-            UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], GetBattlerMon(battler), HEALTHBOX_ALL);
+            if (!BattleOverworldScene_IsHealthboxPrepared(battler, gBattlerPartyIndexes[battler]))
+                UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], GetBattlerMon(battler), HEALTHBOX_ALL);
+            BattleOverworldScene_ClearPreparedHealthbox(battler);
             StartHealthboxSlideIn(battler);
             SetHealthboxSpriteVisible(gHealthboxSpriteIds[battler]);
             gBattlerControllerFuncs[battler] = SwitchIn_CleanShinyAnimShowSubstitute;

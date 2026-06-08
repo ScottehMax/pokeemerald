@@ -2,16 +2,18 @@
 #include "graphics.h"
 #include "palette.h"
 #include "util.h"
+#include "battle_overworld_scene.h"
 #include "battle_transition.h"
 #include "task.h"
 #include "battle_transition.h"
 #include "fieldmap.h"
+#include "tileset_anims.h"
 
 static EWRAM_DATA struct {
     const u16 *src;
     u16 *dest;
     u16 size;
-} sTilesetDMA3TransferBuffer[20] = {0};
+} sTilesetDMA3TransferBuffer[64] = {0};
 
 static u8 sTilesetDMA3TransferBufferSize;
 static u16 sPrimaryTilesetAnimCounter;
@@ -23,6 +25,10 @@ static void (*sSecondaryTilesetAnimCallback)(u16);
 
 static void _InitPrimaryTilesetAnimation(void);
 static void _InitSecondaryTilesetAnimation(void);
+static void InitPrimaryTilesetAnimationForLayout(const struct MapLayout *layout);
+static void InitSecondaryTilesetAnimationForLayout(const struct MapLayout *layout);
+static void AppendTilesetAnimTransfer(const u16 *src, u16 *dest, u16 size);
+static bool8 TryAppendBattleOwTilesetAnimToBuffer(const u16 *src, u16 *dest, u16 size);
 static void TilesetAnim_General(u16);
 static void TilesetAnim_Building(u16);
 static void TilesetAnim_Rustboro(u16);
@@ -552,13 +558,76 @@ static void ResetTilesetAnimBuffer(void)
 
 static void AppendTilesetAnimToBuffer(const u16 *src, u16 *dest, u16 size)
 {
-    if (sTilesetDMA3TransferBufferSize < 20)
+    if (TryAppendBattleOwTilesetAnimToBuffer(src, dest, size))
+        return;
+
+    AppendTilesetAnimTransfer(src, dest, size);
+}
+
+static void AppendTilesetAnimTransfer(const u16 *src, u16 *dest, u16 size)
+{
+    if (sTilesetDMA3TransferBufferSize < ARRAY_COUNT(sTilesetDMA3TransferBuffer))
     {
         sTilesetDMA3TransferBuffer[sTilesetDMA3TransferBufferSize].src = src;
         sTilesetDMA3TransferBuffer[sTilesetDMA3TransferBufferSize].dest = dest;
         sTilesetDMA3TransferBuffer[sTilesetDMA3TransferBufferSize].size = size;
         sTilesetDMA3TransferBufferSize ++;
     }
+}
+
+static bool8 TryAppendBattleOwTilesetAnimToBuffer(const u16 *src, u16 *dest, u16 size)
+{
+    u16 i;
+    u16 tileCount;
+    u16 sourceTile;
+    u16 *mappedDest;
+    u16 *runDest = NULL;
+    const u16 *runSrc = NULL;
+    u16 runSize = 0;
+    const u8 *destBytes;
+
+    if (!BattleOverworldScene_IsTilesetAnimActive())
+        return FALSE;
+
+    destBytes = (const u8 *)dest;
+    if (destBytes < (const u8 *)BG_VRAM)
+        return TRUE;
+
+    sourceTile = (destBytes - (const u8 *)BG_VRAM) / TILE_SIZE_4BPP;
+    tileCount = size / TILE_SIZE_4BPP;
+
+    for (i = 0; i < tileCount; i++)
+    {
+        if (BattleOverworldScene_GetTilesetAnimDestination(sourceTile + i, &mappedDest))
+        {
+            const u16 *tileSrc = src + (i * TILE_SIZE_4BPP / sizeof(*src));
+
+            if (runSize != 0 && mappedDest == runDest + (runSize / sizeof(*runDest)))
+            {
+                runSize += TILE_SIZE_4BPP;
+            }
+            else
+            {
+                if (runSize != 0)
+                    AppendTilesetAnimTransfer(runSrc, runDest, runSize);
+                runSrc = tileSrc;
+                runDest = mappedDest;
+                runSize = TILE_SIZE_4BPP;
+            }
+        }
+        else if (runSize != 0)
+        {
+            AppendTilesetAnimTransfer(runSrc, runDest, runSize);
+            runSrc = NULL;
+            runDest = NULL;
+            runSize = 0;
+        }
+    }
+
+    if (runSize != 0)
+        AppendTilesetAnimTransfer(runSrc, runDest, runSize);
+
+    return TRUE;
 }
 
 void TransferTilesetAnimsBuffer(void)
@@ -576,6 +645,13 @@ void InitTilesetAnimations(void)
     ResetTilesetAnimBuffer();
     _InitPrimaryTilesetAnimation();
     _InitSecondaryTilesetAnimation();
+}
+
+void InitTilesetAnimationsForLayout(const struct MapLayout *layout)
+{
+    ResetTilesetAnimBuffer();
+    InitPrimaryTilesetAnimationForLayout(layout);
+    InitSecondaryTilesetAnimationForLayout(layout);
 }
 
 void InitSecondaryTilesetAnimation(void)
@@ -599,20 +675,30 @@ void UpdateTilesetAnimations(void)
 
 static void _InitPrimaryTilesetAnimation(void)
 {
-    sPrimaryTilesetAnimCounter = 0;
-    sPrimaryTilesetAnimCounterMax = 0;
-    sPrimaryTilesetAnimCallback = NULL;
-    if (gMapHeader.mapLayout->primaryTileset && gMapHeader.mapLayout->primaryTileset->callback)
-        gMapHeader.mapLayout->primaryTileset->callback();
+    InitPrimaryTilesetAnimationForLayout(gMapHeader.mapLayout);
 }
 
 static void _InitSecondaryTilesetAnimation(void)
 {
+    InitSecondaryTilesetAnimationForLayout(gMapHeader.mapLayout);
+}
+
+static void InitPrimaryTilesetAnimationForLayout(const struct MapLayout *layout)
+{
+    sPrimaryTilesetAnimCounter = 0;
+    sPrimaryTilesetAnimCounterMax = 0;
+    sPrimaryTilesetAnimCallback = NULL;
+    if (layout && layout->primaryTileset && layout->primaryTileset->callback)
+        layout->primaryTileset->callback();
+}
+
+static void InitSecondaryTilesetAnimationForLayout(const struct MapLayout *layout)
+{
     sSecondaryTilesetAnimCounter = 0;
     sSecondaryTilesetAnimCounterMax = 0;
     sSecondaryTilesetAnimCallback = NULL;
-    if (gMapHeader.mapLayout->secondaryTileset && gMapHeader.mapLayout->secondaryTileset->callback)
-        gMapHeader.mapLayout->secondaryTileset->callback();
+    if (layout && layout->secondaryTileset && layout->secondaryTileset->callback)
+        layout->secondaryTileset->callback();
 }
 
 void InitTilesetAnim_General(void)
@@ -1431,4 +1517,3 @@ void InitTilesetAnim_CeladonGym(void)
     sSecondaryTilesetAnimCounterMax = 256;
     sSecondaryTilesetAnimCallback = TilesetAnim_CeladonGym;
 }
-
