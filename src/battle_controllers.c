@@ -2597,21 +2597,37 @@ void BtlController_HandleFaintAnimation(enum BattlerId battler)
             if (IsOnPlayerSide(battler))
             {
                 HandleLowHpMusicChange(GetBattlerMon(battler), battler);
-                gSprites[gBattlerSpriteIds[battler]].sSpeedX = 0;
-                gSprites[gBattlerSpriteIds[battler]].sSpeedY = 5;
                 PlaySE12WithPanning(SE_FAINT, SOUND_PAN_ATTACKER);
-                gSprites[gBattlerSpriteIds[battler]].callback = SpriteCB_FaintSlideAnim;
-                gBattlerControllerFuncs[battler] = Controller_FaintPlayerMon;
+                if (BattleOverworldScene_IsEnabled())
+                {
+                    InitAndLaunchSpecialAnimation(battler, battler, battler, B_ANIM_SWITCH_OUT_PLAYER_MON);
+                    gBattlerControllerFuncs[battler] = Controller_ReturnMonToBall2;
+                }
+                else
+                {
+                    gSprites[gBattlerSpriteIds[battler]].sSpeedX = 0;
+                    gSprites[gBattlerSpriteIds[battler]].sSpeedY = 5;
+                    gSprites[gBattlerSpriteIds[battler]].callback = SpriteCB_FaintSlideAnim;
+                    gBattlerControllerFuncs[battler] = Controller_FaintPlayerMon;
+                }
             }
             else
             {
                 PlaySE12WithPanning(SE_FAINT, SOUND_PAN_TARGET);
-                gSprites[gBattlerSpriteIds[battler]].callback = SpriteCB_FaintOpponentMon;
-                gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
-                gBattlerControllerFuncs[battler] = Controller_FaintOpponentMon;
+                if (BattleOverworldScene_IsEnabled() && (gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+                {
+                    InitAndLaunchSpecialAnimation(battler, battler, battler, B_ANIM_SWITCH_OUT_OPPONENT_MON);
+                    gBattlerControllerFuncs[battler] = Controller_ReturnMonToBall2;
+                }
+                else
+                {
+                    gSprites[gBattlerSpriteIds[battler]].callback = SpriteCB_FaintOpponentMon;
+                    gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
+                    gBattlerControllerFuncs[battler] = Controller_FaintOpponentMon;
+                }
             }
-            // The player's sprite callback just slides the mon, the opponent's removes the sprite.
-            // The player's sprite is removed in Controller_FaintPlayerMon. Controller_FaintOpponentMon only removes the healthbox once the sprite is removed by SpriteCB_FaintOpponentMon.
+            // Non-overworld player fainting slides the sprite offscreen, while opponent fainting destroys it in the sprite callback.
+            // Overworld trainer fainting uses the normal switch-out animation and frees the sprite when that animation finishes.
         }
     }
     AnimateMonAfterKnockout(battler);
