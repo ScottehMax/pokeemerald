@@ -2022,8 +2022,8 @@ void StartSendOutAnim(enum BattlerId battler, bool32 dontClearTransform, bool32 
     gBattlerPartyIndexes[battler] = gBattleResources->bufferA[battler][1];
     species = GetBattlerVisualSpecies(battler);
     gBattleControllerData[battler] = CreateInvisibleSpriteWithCallback(SpriteCB_WaitForBattlerBallReleaseAnim);
-    // Load sprite for opponent only, player sprite is expected to be already loaded.
-    if (!IsOnPlayerSide(battler))
+    // Normal player sprites are loaded by the trainer slide callback. OW intro skips that callback.
+    if (!IsOnPlayerSide(battler) || BattleOverworldScene_IsEnabled())
         BattleLoadMonSpriteGfx(mon, battler);
     overworldSprite = BattleOverworldScene_SetMonSpriteTemplate(species, battler);
     if (!overworldSprite)
@@ -2892,6 +2892,21 @@ void BtlController_HandleIntroTrainerBallThrow(enum BattlerId battler, u16 tagTr
 {
     u8 taskId;
     enum BattleSide side = GetBattlerSide(battler);
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        taskId = CreateTask(Task_StartSendOutAnim, 5);
+        gTasks[taskId].tBattlerId = battler;
+        gTasks[taskId].tFramesToWait = framesToWait;
+        SetWordTaskArg(taskId, tControllerFunc_1, (uint32_t)(controllerCallback));
+
+        if (gBattleSpritesDataPtr->healthBoxesData[battler].partyStatusSummaryShown)
+            gTasks[gBattlerStatusSummaryTaskId[battler]].func = Task_HidePartyStatusSummary;
+
+        gBattleSpritesDataPtr->animationData->introAnimActive = TRUE;
+        gBattlerControllerFuncs[battler] = BattleControllerDummy;
+        return;
+    }
 
     SetSpritePrimaryCoordsFromSecondaryCoords(&gSprites[gBattleStruct->trainerSlideSpriteIds[battler]]);
     if (side == B_SIDE_PLAYER)

@@ -151,6 +151,7 @@ static void HandleIntroSlideInstant(void)
     gBattle_WIN0V = 0;
     ScanlineEffect_Stop();
     ScanlineEffect_Clear();
+    BattleOverworldScene_BeginReshowBlackout();
 
     CpuFill32(0, (void *)BG_SCREEN_ADDR(28), BG_SCREEN_SIZE);
     CpuFill32(0, (void *)BG_SCREEN_ADDR(30), BG_SCREEN_SIZE);
@@ -160,9 +161,8 @@ static void HandleIntroSlideInstant(void)
     SetGpuReg(REG_OFFSET_BG2CNT, BGCNT_PRIORITY(0) | BGCNT_CHARBASE(0) | BGCNT_16COLOR | BGCNT_SCREENBASE(30) | BGCNT_TXT512x256);
     BattleOverworldScene_LoadBackground();
     LoadBattleMenuWindowGfx();
-    SetGpuReg(REG_OFFSET_BLDCNT, 0);
     SetGpuReg(REG_OFFSET_BLDALPHA, 0);
-    SetGpuReg(REG_OFFSET_BLDY, 0);
+    BattleOverworldScene_BeginReshowBlackout();
     SetGpuReg(REG_OFFSET_WININ, WININ_WIN0_BG_ALL | WININ_WIN0_OBJ | WININ_WIN0_CLR | WININ_WIN1_BG_ALL | WININ_WIN1_OBJ | WININ_WIN1_CLR);
     SetGpuReg(REG_OFFSET_WINOUT, WINOUT_WIN01_BG_ALL | WINOUT_WIN01_OBJ | WINOUT_WIN01_CLR | WINOUT_WINOBJ_BG_ALL | WINOUT_WINOBJ_OBJ | WINOUT_WINOBJ_CLR);
     CreateTask(Task_ClearInstantIntroSlideFlag, 0);

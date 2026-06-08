@@ -1051,6 +1051,7 @@ static void HandleBallAnimEnd(struct Sprite *sprite)
             {
                 if (hasMatrix)
                 {
+                    gSprites[gBattlerSpriteIds[battler]].affineAnimEnded = TRUE;
                     ResetSpriteRotScale(gBattlerSpriteIds[battler]);
                     FreeOamMatrix(matrixNum);
                 }
