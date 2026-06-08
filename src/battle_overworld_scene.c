@@ -26,6 +26,8 @@
 
 #define OW_TRAINER_PLAYER_PAL_SLOT 12
 #define OW_TRAINER_OPPONENT_PAL_SLOT 13
+#define TAG_OW_TRAINER_PLAYER_PAL 0xD719
+#define TAG_OW_TRAINER_OPPONENT_PAL 0xD71A
 #define OW_SCENE_BASE_Y 56
 #define OW_BG_ROUTE101_X 3
 #define OW_BG_ROUTE101_Y 7
@@ -162,9 +164,15 @@ static enum TrainerClassID GetBattleOwOpponentTrainerClass(void);
 static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerClass);
 static const struct ObjectEventGraphicsInfo *GetBattleOwMonGraphicsInfo(struct Pokemon *mon, u8 battler, u16 *species, u16 *graphicsId);
 static void Task_BattleOverworldScene_WildShinyAnimations(u8 taskId);
+static const u16 *GetBattleOwPlayerTrainerPalette(void);
+static void LoadBattleOwPlayerTrainerPalette(void);
+static void ReserveLoadedBattleOwTrainerPalette(u8 paletteSlot, u16 paletteTag);
+static void LoadBattleOwOpponentTrainerPalette(u16 objectPaletteTag);
+static void RestoreBattleOwTrainerPalettes(void);
 
 static u8 sPlayerTrainerSpriteId;
 static u8 sOpponentTrainerSpriteId;
+static u16 sOpponentTrainerPaletteTag;
 static u8 sOwBattlerSpriteIds[MAX_BATTLERS_COUNT];
 static bool8 sOwBattlerHiddenByBall[MAX_BATTLERS_COUNT];
 static bool8 sCreatedTrainerSprites;
@@ -817,6 +825,8 @@ static void Task_BattleOverworldScene_KeepSpritesVisible(u8 taskId)
 
     if (sOpponentTrainerSpriteId < MAX_SPRITES && gSprites[sOpponentTrainerSpriteId].inUse)
         gSprites[sOpponentTrainerSpriteId].invisible = FALSE;
+
+    RestoreBattleOwTrainerPalettes();
 }
 
 static void BattleOverworldScene_EnsureVisibilityTask(void)
@@ -878,6 +888,7 @@ void BattleOverworldScene_ResetSpriteReferences(void)
 
     sPlayerTrainerSpriteId = SPRITE_NONE;
     sOpponentTrainerSpriteId = SPRITE_NONE;
+    sOpponentTrainerPaletteTag = TAG_NONE;
     for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
     {
         sOwBattlerSpriteIds[battler] = SPRITE_NONE;
@@ -1012,6 +1023,51 @@ static enum TrainerClassID GetBattleOwOpponentTrainerClass(void)
     return GetTrainerClassFromId(TRAINER_BATTLE_PARAM.opponentA);
 }
 
+static const u16 *GetBattleOwPlayerTrainerPalette(void)
+{
+    return gSaveBlock2Ptr->playerGender == FEMALE ? gObjectEventPal_May : gObjectEventPal_Brendan;
+}
+
+static void LoadBattleOwPlayerTrainerPalette(void)
+{
+    const struct SpritePalette palette =
+    {
+        .data = GetBattleOwPlayerTrainerPalette(),
+        .tag = TAG_OW_TRAINER_PLAYER_PAL,
+    };
+
+    LoadSpritePaletteInSlot(&palette, OW_TRAINER_PLAYER_PAL_SLOT);
+}
+
+static void ReserveLoadedBattleOwTrainerPalette(u8 paletteSlot, u16 paletteTag)
+{
+    const struct SpritePalette palette =
+    {
+        .data = &gPlttBufferUnfaded[OBJ_PLTT_ID(paletteSlot)],
+        .tag = paletteTag,
+    };
+
+    LoadSpritePaletteInSlot(&palette, paletteSlot);
+}
+
+static void LoadBattleOwOpponentTrainerPalette(u16 objectPaletteTag)
+{
+    PatchObjectPalette(objectPaletteTag, OW_TRAINER_OPPONENT_PAL_SLOT);
+    ReserveLoadedBattleOwTrainerPalette(OW_TRAINER_OPPONENT_PAL_SLOT, TAG_OW_TRAINER_OPPONENT_PAL);
+}
+
+static void RestoreBattleOwTrainerPalettes(void)
+{
+    if (gPaletteFade.active)
+        return;
+
+    if (sPlayerTrainerSpriteId < MAX_SPRITES && gSprites[sPlayerTrainerSpriteId].inUse)
+        LoadBattleOwPlayerTrainerPalette();
+
+    if (sOpponentTrainerSpriteId < MAX_SPRITES && gSprites[sOpponentTrainerSpriteId].inUse)
+        LoadBattleOwOpponentTrainerPalette(sOpponentTrainerPaletteTag);
+}
+
 void BattleOverworldScene_CreateTrainerSprites(void)
 {
     struct SpriteTemplate template;
@@ -1032,9 +1088,7 @@ void BattleOverworldScene_CreateTrainerSprites(void)
     template = sTrainerTemplate;
     template.images = (gSaveBlock2Ptr->playerGender == FEMALE) ? sPicTable_BattleMay : sPicTable_BattleBrendan;
     template.anims = sAnimTable_BattleTrainerFaceEast;
-    LoadPalette(gSaveBlock2Ptr->playerGender == FEMALE ? gObjectEventPal_May : gObjectEventPal_Brendan,
-                OBJ_PLTT_ID(OW_TRAINER_PLAYER_PAL_SLOT),
-                PLTT_SIZE_4BPP);
+    LoadBattleOwPlayerTrainerPalette();
     sPlayerTrainerSpriteId = CreateSprite(&template, 36, OW_SCENE_BASE_Y, 1);
     if (sPlayerTrainerSpriteId != MAX_SPRITES)
     {
@@ -1049,7 +1103,8 @@ void BattleOverworldScene_CreateTrainerSprites(void)
         template.oam = opponentGraphicsInfo->oam;
         template.images = opponentGraphicsInfo->images;
         template.anims = sAnimTable_BattleTrainerFaceWest;
-        PatchObjectPalette(opponentGraphicsInfo->paletteTag, OW_TRAINER_OPPONENT_PAL_SLOT);
+        sOpponentTrainerPaletteTag = opponentGraphicsInfo->paletteTag;
+        LoadBattleOwOpponentTrainerPalette(sOpponentTrainerPaletteTag);
         sOpponentTrainerSpriteId = CreateSprite(&template, 212, OW_SCENE_BASE_Y, 0);
         if (sOpponentTrainerSpriteId != MAX_SPRITES)
         {
