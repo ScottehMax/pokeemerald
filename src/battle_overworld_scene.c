@@ -770,6 +770,19 @@ u32 BattleOverworldScene_GetBgPaletteMask(void)
     return sBattleOwBgPaletteMask;
 }
 
+u32 BattleOverworldScene_ApplyBgPaletteMask(u32 selectedPalettes)
+{
+    const u32 vanillaBattleBgMask = 0xE; // BG palettes 1, 2, and 3.
+
+    if (!IsBattleOverworldSceneEnabled())
+        return selectedPalettes;
+
+    if (selectedPalettes & vanillaBattleBgMask)
+        selectedPalettes = (selectedPalettes & ~vanillaBattleBgMask) | sBattleOwBgPaletteMask;
+
+    return selectedPalettes;
+}
+
 void BattleOverworldScene_TraceBg3(u16 phase)
 {
     u16 bg3Cnt;
