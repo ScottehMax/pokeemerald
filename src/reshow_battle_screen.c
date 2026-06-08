@@ -445,6 +445,9 @@ static void CreateHealthboxSprite(enum BattlerId battler)
             if (!IsValidForBattle(GetBattlerMon(battler)) || gBattleStruct->battlerState[battler].notOnField)
                 SetHealthboxSpriteInvisible(healthboxSpriteId);
         }
+
+        if (BattleOverworldScene_IsEnabled())
+            FlushOverworldHealthboxTextTileCopies();
     }
 }
 

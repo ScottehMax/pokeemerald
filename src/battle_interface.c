@@ -6,6 +6,7 @@
 #include "battle_interface.h"
 #include "battle_overworld_scene.h"
 #include "battle_z_move.h"
+#include "fonts.h"
 #include "graphics.h"
 #include "sprite.h"
 #include "window.h"
@@ -188,6 +189,11 @@ enum
 #define OW_STATUS_ICON_OPPONENT_Y_OFFSET 8
 #define OW_HEALTHBOX_TEXT_OUTLINE_COLOR 1
 #define OW_HEALTHBOX_TEXT_FILL_COLOR 2
+#define OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH 8
+#define OW_HEALTHBOX_TEXT_MAX_TILE_COLS (OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH * 2 + 2)
+#define OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT (5 * TILE_SIZE_1BPP)
+#define OW_HEALTHBOX_TEXT_MASK_WORDS 4
+#define OW_HEALTHBOX_TEXT_COPY_TILE_COUNT 64
 
 static const u8 *GetHealthboxElementGfxPtr(u8);
 static void ClearHealthboxBackingTiles(u8 healthboxSpriteId);
@@ -197,6 +203,7 @@ static u8 GetNewHpBarObjTileOffset(u8 column, u8 row);
 static void RestoreHpBarStatusTileInHealthbox(u8 healthboxSpriteId);
 
 static void UpdateHpTextInHealthboxInDoubles(u32 healthboxSpriteId, u32 maxOrCurrent, s16 currHp, s16 maxHp);
+static void UpdateOverworldHpTextInHealthboxSingles(u32 healthboxSpriteId, u32 maxOrCurrent, s16 currHp, s16 maxHp);
 static void UpdateStatusIconInHealthbox(u8);
 
 static void FillHealthboxObject(void *, u32, u32);
@@ -206,6 +213,19 @@ static void DestroyOverworldStatusIconSprite(u8);
 static void SetOverworldStatusIconSpriteCoords(u8);
 static void SpriteCB_OverworldStatusIcon(struct Sprite *);
 static void CopyStatusIconToHealthboxObject(void *dest, const u8 *src);
+static u8 *AddTextPrinterAndCreateWindowForOverworldHealthbox(const u8 *str, u8 fontId, u32 x, u32 y, u32 windowWidth, u32 windowHeight, u32 *windowId);
+static void RemoveWindowOnOverworldHealthbox(u32 windowId);
+static s16 DivFloorBy8(s16 value);
+static u8 ModFloorBy8(s16 value);
+static u8 *GetHealthboxObjectPixelAddress(u8 *tileData, u8 tileWidth, s16 x, s16 y, u8 *shift);
+static u8 GetComposedHealthboxTextPixel(const u8 *tileData, u8 tileWidth, u8 x, u8 y);
+static void SetComposedHealthboxTextPixel(u8 *tileData, u8 tileWidth, u8 x, u8 y, u8 color);
+static void SetOverworldHealthboxTextPixelIfVisible(u8 *tileData, u8 tileWidth, s16 x, s16 y, u8 color);
+static bool8 ComposedHealthboxTextTileIsEmpty(const u8 *tileData, u8 tileWidth, u8 tileX, u8 tileY);
+static void QueueOverworldHealthboxTextTileCopy(const u8 *src, u8 *dest);
+static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 sourceTileWidth, u8 copyTileWidth, u8 objectTileWidth, u8 firstRow, u8 rowCount, s8 srcYOffset, s8 destYOffset, bool8 copyEmptyCoreTiles);
+static void DrawOverworldHealthboxTextString(void *dest, const u8 *str, u8 tileWidth, s16 textX, s16 textY, u8 firstRow, u8 rowCount, s8 destYOffset);
+static void AddHealthboxSpriteTextPrinter(u8 spriteId, u8 nextSpriteId, u8 fontId, s16 left, s16 top, u8 letterSpacing, u8 lineSpacing, const union TextColor color, const u8 *str);
 
 static void Task_HidePartyStatusSummary_BattleStart_1(u8);
 static void Task_HidePartyStatusSummary_BattleStart_2(u8);
@@ -249,6 +269,10 @@ static const struct OamData sOamData_64x32 =
     .affineParam = 0,
 };
 
+static EWRAM_DATA u8 ALIGNED(4) sOverworldHealthboxTextTiles[OW_HEALTHBOX_TEXT_MAX_TILE_COLS * 4 * TILE_SIZE_4BPP] = {};
+static EWRAM_DATA u32 ALIGNED(4) sOverworldHealthboxTextMasks[OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT][OW_HEALTHBOX_TEXT_MASK_WORDS] = {};
+static EWRAM_DATA u8 (*sOverworldHealthboxTextCopyTiles)[TILE_SIZE_4BPP] = NULL;
+static EWRAM_DATA u8 sOverworldHealthboxTextCopyTileCursor = 0;
 static EWRAM_DATA u8 sOverworldStatusSpriteIds[MAX_BATTLERS_COUNT] = {0};
 static EWRAM_DATA bool8 sOverworldStatusSpriteIdsInitialized = FALSE;
 
@@ -829,6 +853,19 @@ u8 CreateSafariPlayerHealthboxSprites(void)
     return healthboxLeftSpriteId;
 }
 
+void FreeOverworldHealthboxTextBuffers(void)
+{
+    TRY_FREE_AND_SET_NULL(sOverworldHealthboxTextCopyTiles);
+    sOverworldHealthboxTextCopyTileCursor = 0;
+}
+
+void FlushOverworldHealthboxTextTileCopies(void)
+{
+    BuildOamBuffer();
+    ProcessSpriteCopyRequests();
+    sOverworldHealthboxTextCopyTileCursor = 0;
+}
+
 static const u8 *GetHealthboxElementGfxPtr(u8 elementId)
 {
     return gHealthboxElementsGfxTable[elementId];
@@ -1055,13 +1092,12 @@ static void UpdateLvlInHealthbox(u8 healthboxSpriteId, u8 lvl)
     u8 text[16];
     enum BattlerId battler = gSprites[healthboxSpriteId].hMain_Battler;
     u32 spriteId = gSprites[healthboxSpriteId].oam.affineParam;
-    u32 bgColor = BattleOverworldScene_IsEnabled() ? 0 : HEALTHBOX_BG_INDEX;
-    const union TextColor textColor = BattleOverworldScene_IsEnabled() ? sOverworldHealthBoxTextColor : sHealthBoxTextColor;
+    u8 *txtPtr;
 
     // Don't print Lv char if mon has a gimmick with an indicator active.
     if (GetIndicatorPalTag(battler) != TAG_NONE)
     {
-        ConvertIntToDecimalStringN(text, lvl, STR_CONV_MODE_LEFT_ALIGN, 3);
+        txtPtr = ConvertIntToDecimalStringN(text, lvl, STR_CONV_MODE_LEFT_ALIGN, 3);
         UpdateIndicatorLevelData(healthboxSpriteId, lvl);
         UpdateIndicatorVisibilityAndType(healthboxSpriteId, FALSE);
     }
@@ -1070,21 +1106,47 @@ static void UpdateLvlInHealthbox(u8 healthboxSpriteId, u8 lvl)
         text[0] = CHAR_EXTRA_SYMBOL;
         text[1] = CHAR_LV_2;
 
-        ConvertIntToDecimalStringN(text + 2, lvl, STR_CONV_MODE_LEFT_ALIGN, 3);
+        txtPtr = ConvertIntToDecimalStringN(text + 2, lvl, STR_CONV_MODE_LEFT_ALIGN, 3);
         UpdateIndicatorVisibilityAndType(healthboxSpriteId, TRUE);
     }
 
     u32 width = GetStringWidth(FONT_SMALL, text, 0);
 
+    if (BattleOverworldScene_IsEnabled())
+    {
+        u32 windowId;
+        u8 *windowTileData;
+        u32 spriteTileNum = gSprites[healthboxSpriteId].oam.tileNum * TILE_SIZE_4BPP;
+        u32 xPos = 5 * (3 - min(3, txtPtr - (GetIndicatorPalTag(battler) != TAG_NONE ? text : text + 2)));
+        void *objVram = (void *)(OBJ_VRAM0);
+
+        if (IsOnPlayerSide(battler))
+        {
+            if (GetBattlerCoordsIndex(battler) == BATTLE_COORDS_SINGLES)
+                objVram += spriteTileNum + 0x820;
+            else
+                objVram += spriteTileNum + 0x420;
+        }
+        else
+        {
+            objVram += spriteTileNum + 0x400;
+        }
+
+        windowTileData = AddTextPrinterAndCreateWindowForOverworldHealthbox(text, FONT_SMALL, xPos, 3, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, &windowId);
+        DrawOverworldHealthboxWindowText(objVram, windowTileData, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 3, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 5, TILE_SIZE_1BPP + 3, 0, 0, TRUE);
+        RemoveWindowOnOverworldHealthbox(windowId);
+        return;
+    }
+
     if (IsOnPlayerSide(battler))
     {
-        FillSpriteRectColor(spriteId, 8, 5, 24, 11, bgColor);
-        AddSpriteTextPrinterParameterized6(spriteId, FONT_SMALL, 32 - width, 3, 0, 0, textColor, 0, text);
+        FillSpriteRectColor(spriteId, 8, 5, 24, 11, HEALTHBOX_BG_INDEX);
+        AddHealthboxSpriteTextPrinter(spriteId, SPRITE_NONE, FONT_SMALL, 32 - width, 3, 0, 0, sHealthBoxTextColor, text);
     }
     else
     {
-        FillSpriteRectColor(spriteId, 0, 5, 24, 11, bgColor);
-        AddSpriteTextPrinterParameterized6(spriteId, FONT_SMALL, 24 - width, 3, 0, 0, textColor, 0, text);
+        FillSpriteRectColor(spriteId, 0, 5, 24, 11, HEALTHBOX_BG_INDEX);
+        AddHealthboxSpriteTextPrinter(spriteId, SPRITE_NONE, FONT_SMALL, 24 - width, 3, 0, 0, sHealthBoxTextColor, text);
     }
 }
 
@@ -1096,10 +1158,6 @@ static void PrintHpOnHealthbox(u32 spriteId, s16 currHp, s16 maxHp, u32 bgColor,
 {
     u32 width;
     u8 text[2 * HP_MAX_DIGITS + 2], *txtPtr;
-
-    if (BattleOverworldScene_IsEnabled())
-        bgColor = 0;
-    const union TextColor textColor = BattleOverworldScene_IsEnabled() ? sOverworldHealthBoxTextColor : sHealthBoxTextColor;
 
     // To fit 4 digit HP values we need to modify a bit the way hp is printed on Healthbox.
     // HP_RIGHT_SPRITE_CHARS chars can fit on the right healthbox, the rest goes to the left one
@@ -1121,12 +1179,43 @@ static void PrintHpOnHealthbox(u32 spriteId, s16 currHp, s16 maxHp, u32 bgColor,
 
     width = GetStringWidth(HP_FONT, text, -1) + GetFontAttribute(HP_FONT, FONTATTR_LETTER_SPACING);
     if (width < 32)
-        AddSpriteTextPrinterParameterized6(spriteId2, HP_FONT, 32 - width, yOffset + 5, 0, 0, textColor, 0, text);
+        AddHealthboxSpriteTextPrinter(spriteId2, SPRITE_NONE, HP_FONT, 32 - width, yOffset + 5, 0, 0, sHealthBoxTextColor, text);
     else
-        AddSpriteTextPrinterParameterized6(spriteId, HP_FONT, 64 - (width - 32), yOffset + 5, 0, 0, textColor, 0, text);
+        AddHealthboxSpriteTextPrinter(spriteId, spriteId2, HP_FONT, 64 - (width - 32), yOffset + 5, 0, 0, sHealthBoxTextColor, text);
 
     gSprites[spriteId].data[1] = savedValue1;
     gSprites[spriteId2].data[1] = savedValue2;
+}
+
+static void UpdateOverworldHpTextInHealthboxSingles(u32 healthboxSpriteId, u32 maxOrCurrent, s16 currHp, s16 maxHp)
+{
+    u32 windowId;
+    u8 *windowTileData;
+    u8 text[HP_MAX_DIGITS + 2];
+    u32 spriteTileNum = gSprites[healthboxSpriteId].oam.tileNum * TILE_SIZE_4BPP;
+    void *objVram;
+
+    if (maxOrCurrent == HP_MAX || maxOrCurrent == HP_BOTH)
+    {
+        ConvertIntToDecimalStringN(text, maxHp, STR_CONV_MODE_RIGHT_ALIGN, 3);
+        windowTileData = AddTextPrinterAndCreateWindowForOverworldHealthbox(text, HP_FONT, 0, 5, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, &windowId);
+        objVram = (void *)(OBJ_VRAM0 + spriteTileNum + 0xB40);
+        DrawOverworldHealthboxWindowText(objVram, windowTileData, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, 2, TILE_SIZE_1BPP - 1, TILE_SIZE_1BPP + 1, 0, -TILE_SIZE_1BPP, TRUE);
+        RemoveWindowOnOverworldHealthbox(windowId);
+    }
+
+    if (maxOrCurrent == HP_CURRENT || maxOrCurrent == HP_BOTH)
+    {
+        ConvertIntToDecimalStringN(text, currHp, STR_CONV_MODE_RIGHT_ALIGN, 3);
+        text[3] = CHAR_SLASH;
+        text[4] = EOS;
+        windowTileData = AddTextPrinterAndCreateWindowForOverworldHealthbox(text, HP_FONT, 4, 5, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, &windowId);
+        objVram = (void *)(OBJ_VRAM0 + spriteTileNum + 0x3E0);
+        DrawOverworldHealthboxWindowText(objVram, windowTileData, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 1, 1, TILE_SIZE_1BPP - 1, TILE_SIZE_1BPP + 1, 0, -TILE_SIZE_1BPP, TRUE);
+        objVram = (void *)(OBJ_VRAM0 + spriteTileNum + 0xB00);
+        DrawOverworldHealthboxWindowText(objVram, windowTileData + TILE_SIZE_4BPP, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, 2, TILE_SIZE_1BPP - 1, TILE_SIZE_1BPP + 1, 0, -TILE_SIZE_1BPP, TRUE);
+        RemoveWindowOnOverworldHealthbox(windowId);
+    }
 }
 
 // Note: this is only possible to trigger via debug, it was an unused GF function.
@@ -1219,7 +1308,10 @@ void UpdateHpTextInHealthbox(u32 healthboxSpriteId, u32 maxOrCurrent, s16 currHp
     {
         if (IsOnPlayerSide(battler)) // Player
         {
-            PrintHpOnHealthbox(healthboxSpriteId, currHp, maxHp, HEALTHBOX_BG_INDEX, 16);
+            if (BattleOverworldScene_IsEnabled())
+                UpdateOverworldHpTextInHealthboxSingles(healthboxSpriteId, maxOrCurrent, currHp, maxHp);
+            else
+                PrintHpOnHealthbox(healthboxSpriteId, currHp, maxHp, HEALTHBOX_BG_INDEX, 16);
         }
         else // Opponent
         {
@@ -1918,6 +2010,32 @@ void UpdateNickInHealthbox(u8 healthboxSpriteId, struct Pokemon *mon)
         break;
     }
 
+    if (BattleOverworldScene_IsEnabled())
+    {
+        u32 spriteTileNum = gSprites[healthboxSpriteId].oam.tileNum * TILE_SIZE_4BPP;
+
+        if (IsOnPlayerSide(gSprites[healthboxSpriteId].hMain_Battler))
+        {
+            void *leftTextObj = (void *)(OBJ_VRAM0 + 0x40 + spriteTileNum);
+            void *rightTextObj;
+
+            ptr = (void *)(OBJ_VRAM0);
+            if (GetBattlerCoordsIndex(gSprites[healthboxSpriteId].hMain_Battler) == BATTLE_COORDS_SINGLES)
+                ptr += spriteTileNum + 0x800;
+            else
+                ptr += spriteTileNum + 0x400;
+            rightTextObj = ptr;
+
+            DrawOverworldHealthboxTextString(rightTextObj, gDisplayedStringBattle, 1, -48, 3, 5, TILE_SIZE_1BPP + 3, 0);
+            DrawOverworldHealthboxTextString(leftTextObj, gDisplayedStringBattle, 6, 0, 3, 5, TILE_SIZE_1BPP + 3, 0);
+        }
+        else
+        {
+            DrawOverworldHealthboxTextString((void *)(OBJ_VRAM0 + 0x20 + spriteTileNum), gDisplayedStringBattle, 7, 0, 3, 5, TILE_SIZE_1BPP + 3, 0);
+        }
+        return;
+    }
+
     //  Don't assume that healthbox sprites don't have data in the fields used for sprite printing
     //  and set up temporary values with what's needed
     s16 savedValue1 = gSprites[healthboxSpriteId].data[1];
@@ -1926,18 +2044,16 @@ void UpdateNickInHealthbox(u8 healthboxSpriteId, struct Pokemon *mon)
     gSprites[healthboxSpriteId2].data[1] = SPRITE_NONE;
 
     u32 fontId = GetFontIdToFit(gDisplayedStringBattle, FONT_SMALL, 0, 55);
-    u32 bgColor = BattleOverworldScene_IsEnabled() ? 0 : HEALTHBOX_BG_INDEX;
-    const union TextColor textColor = BattleOverworldScene_IsEnabled() ? sOverworldHealthBoxTextColor : sHealthBoxTextColor;
 
     if (IsOnPlayerSide(gSprites[healthboxSpriteId].data[6]))
     {
-        FillSpriteRectColor(healthboxSpriteId, 16, 5, 55, 11, bgColor);
-        AddSpriteTextPrinterParameterized6(healthboxSpriteId, fontId, 16, 3, 0, 0, textColor, 0, gDisplayedStringBattle);
+        FillSpriteRectColor(healthboxSpriteId, 16, 5, 55, 11, HEALTHBOX_BG_INDEX);
+        AddHealthboxSpriteTextPrinter(healthboxSpriteId, healthboxSpriteId2, fontId, 16, 3, 0, 0, sHealthBoxTextColor, gDisplayedStringBattle);
     }
     else
     {
-        FillSpriteRectColor(healthboxSpriteId, 8, 5, 55, 11, bgColor);
-        AddSpriteTextPrinterParameterized6(healthboxSpriteId, fontId, 8, 3, 0, 0, textColor, 0, gDisplayedStringBattle);
+        FillSpriteRectColor(healthboxSpriteId, 8, 5, 55, 11, HEALTHBOX_BG_INDEX);
+        AddHealthboxSpriteTextPrinter(healthboxSpriteId, healthboxSpriteId2, fontId, 8, 3, 0, 0, sHealthBoxTextColor, gDisplayedStringBattle);
     }
 
     gSprites[healthboxSpriteId].data[1] = savedValue1;
@@ -2319,6 +2435,7 @@ static void MoveBattleBarGraphically(enum BattlerId battler, u8 whichBar)
         u8 healthboxSpriteId = gBattleSpritesDataPtr->battleBars[battler].healthboxSpriteId;
         u8 healthbarSpriteId = gSprites[healthboxSpriteId].hMain_HealthBarSpriteId;
         u16 baseTile = gSprites[healthbarSpriteId].oam.tileNum;
+        bool8 isOverworld = BattleOverworldScene_IsEnabled();
 
         CalcBarFilledPixels(gBattleSpritesDataPtr->battleBars[battler].maxValue,
                             gBattleSpritesDataPtr->battleBars[battler].oldValue,
@@ -2326,7 +2443,11 @@ static void MoveBattleBarGraphically(enum BattlerId battler, u8 whichBar)
                             &gBattleSpritesDataPtr->battleBars[battler].currValue,
                             array, B_HEALTHBAR_PIXELS / 8);
 
-        CopyNewHpBarBase(healthbarSpriteId);
+        // Expansion draws the new HP bar as its own sprite. In OW battles the base
+        // is already installed when the healthbox is created; rewriting it here can
+        // expose an empty bar before the filled tiles are copied.
+        if (!isOverworld)
+            CopyNewHpBarBase(healthbarSpriteId);
         for (i = 0; i < NEW_HPBAR_FILL_TILE_COUNT; i++)
         {
             u8 tileStart = (i == NEW_HPBAR_FILL_TILE_COUNT - 1) ? NEW_HPBAR_END_TILE_START : NEW_HPBAR_STRAIGHT_TILE_START;
@@ -2334,7 +2455,7 @@ static void MoveBattleBarGraphically(enum BattlerId battler, u8 whichBar)
                       (void *)(OBJ_VRAM0 + (baseTile + GetNewHpBarObjTileOffset(NEW_HPBAR_FILL_TILE_OFFSET + i, 0)) * TILE_SIZE_4BPP),
                       TILE_SIZE_4BPP);
         }
-        if (BattleOverworldScene_IsEnabled())
+        if (isOverworld)
             TryAddPokeballIconToHealthbox(healthboxSpriteId, TRUE);
         break;
     }
@@ -2537,6 +2658,553 @@ u8 GetHPBarLevel(s16 hp, s16 maxhp)
 static void FillHealthboxObject(void *dest, u32 valMult, u32 numTiles)
 {
     CpuFill32(0x11111111 * valMult, dest, numTiles * TILE_SIZE_4BPP);
+}
+
+static u8 *AddTextPrinterAndCreateWindowForOverworldHealthbox(const u8 *str, u8 fontId, u32 x, u32 y, u32 windowWidth, u32 windowHeight, u32 *windowId)
+{
+    static const union TextColor textColor =
+    {
+        .background = 0,
+        .foreground = OW_HEALTHBOX_TEXT_FILL_COLOR,
+        .shadow = 0,
+        .accent = 0,
+    };
+    struct WindowTemplate winTemplate = sHealthboxWindowTemplate;
+
+    winTemplate.width = windowWidth;
+    winTemplate.height = windowHeight;
+
+    *windowId = AddWindow(&winTemplate);
+    FillWindowPixelBuffer(*windowId, PIXEL_FILL(0));
+    AddTextPrinterParameterized6(*windowId, fontId, x, y, 0, 0, textColor, TEXT_SKIP_DRAW, str);
+
+    return (u8 *)GetWindowAttribute(*windowId, WINDOW_TILE_DATA);
+}
+
+static void RemoveWindowOnOverworldHealthbox(u32 windowId)
+{
+    RemoveWindow(windowId);
+}
+
+static void AddHealthboxSpriteTextPrinter(u8 spriteId, u8 nextSpriteId, u8 fontId, s16 left, s16 top, u8 letterSpacing, u8 lineSpacing, const union TextColor color, const u8 *str)
+{
+    s16 savedNextX = gSprites[spriteId].data[1];
+    s16 savedNextY = gSprites[spriteId].data[2];
+    s16 savedLinkedNextX = 0;
+    s16 savedLinkedNextY = 0;
+
+    gSprites[spriteId].data[1] = nextSpriteId;
+    gSprites[spriteId].data[2] = SPRITE_NONE;
+
+    if (nextSpriteId != SPRITE_NONE)
+    {
+        savedLinkedNextX = gSprites[nextSpriteId].data[1];
+        savedLinkedNextY = gSprites[nextSpriteId].data[2];
+        gSprites[nextSpriteId].data[1] = SPRITE_NONE;
+        gSprites[nextSpriteId].data[2] = SPRITE_NONE;
+    }
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        u32 windowId;
+        u8 *windowTileData;
+        u8 firstRow = top > 0 ? top - 1 : 0;
+        u8 rowCount = min(OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT - firstRow, 14);
+        u8 windowWidth = nextSpriteId == SPRITE_NONE ? OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH : 12;
+        u8 windowHeight = OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT / TILE_SIZE_1BPP;
+
+        windowTileData = AddTextPrinterAndCreateWindowForOverworldHealthbox(str, fontId, left, top, windowWidth, windowHeight, &windowId);
+        DrawOverworldHealthboxWindowText((void *)(OBJ_VRAM0 + gSprites[spriteId].oam.tileNum * TILE_SIZE_4BPP),
+                                         windowTileData,
+                                         windowWidth,
+                                         windowWidth,
+                                         OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH,
+                                         firstRow,
+                                         rowCount,
+                                         0,
+                                         0,
+                                         FALSE);
+        RemoveWindowOnOverworldHealthbox(windowId);
+    }
+    else
+    {
+        AddSpriteTextPrinterParameterized6(spriteId, fontId, left, top, letterSpacing, lineSpacing, color, 0, str);
+    }
+
+    gSprites[spriteId].data[1] = savedNextX;
+    gSprites[spriteId].data[2] = savedNextY;
+
+    if (nextSpriteId != SPRITE_NONE)
+    {
+        gSprites[nextSpriteId].data[1] = savedLinkedNextX;
+        gSprites[nextSpriteId].data[2] = savedLinkedNextY;
+    }
+}
+
+static s16 DivFloorBy8(s16 value)
+{
+    if (value < 0)
+        return (value - 7) / 8;
+    return value / 8;
+}
+
+static u8 ModFloorBy8(s16 value)
+{
+    return value - DivFloorBy8(value) * TILE_SIZE_1BPP;
+}
+
+static u8 *GetHealthboxObjectPixelAddress(u8 *tileData, u8 tileWidth, s16 x, s16 y, u8 *shift)
+{
+    u16 destTile = ((u32)tileData - OBJ_VRAM0) / TILE_SIZE_4BPP;
+    s16 tileX = DivFloorBy8(x);
+    s16 tileY = DivFloorBy8(y);
+    s16 destCol;
+    s16 destRow;
+    s16 targetCol;
+    s16 targetRow;
+    u16 targetBase;
+    u16 targetTile;
+    u8 i;
+    u8 pixelX;
+    u8 pixelY;
+    s32 offset;
+
+    if (tileX < -1 || tileX >= tileWidth * 2)
+        return NULL;
+    if (tileY < -1 || tileY >= OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT / TILE_SIZE_1BPP)
+        return NULL;
+
+    pixelX = ModFloorBy8(x);
+    pixelY = ModFloorBy8(y);
+
+    for (i = 0; i < gBattlersCount; i++)
+    {
+        u8 healthboxLeftSpriteId = gHealthboxSpriteIds[i];
+        u8 healthboxRightSpriteId = gSprites[healthboxLeftSpriteId].oam.affineParam;
+        u16 leftBase = gSprites[healthboxLeftSpriteId].oam.tileNum;
+        u16 rightBase = gSprites[healthboxRightSpriteId].oam.tileNum;
+        bool8 isLeftHalf = FALSE;
+        bool8 isRightHalf = FALSE;
+
+        if (destTile >= leftBase && destTile < leftBase + 64)
+            isLeftHalf = TRUE;
+        else if (destTile >= rightBase && destTile < rightBase + 64)
+            isRightHalf = TRUE;
+        else
+            continue;
+
+        targetBase = isLeftHalf ? leftBase : rightBase;
+        destCol = (destTile - targetBase) % OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH;
+        destRow = (destTile - targetBase) / OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH;
+        targetCol = destCol + tileX;
+        targetRow = destRow + tileY;
+
+        if (targetCol < 0)
+        {
+            if (isRightHalf)
+            {
+                targetBase = leftBase;
+                targetCol += OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH;
+            }
+            else
+            {
+                return NULL;
+            }
+        }
+        else if (targetCol >= OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH)
+        {
+            if (isLeftHalf)
+            {
+                targetBase = rightBase;
+                targetCol -= OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH;
+            }
+            else
+            {
+                return NULL;
+            }
+        }
+
+        if (targetRow < 0 || targetRow >= 8)
+            return NULL;
+
+        targetTile = targetBase + targetRow * OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH + targetCol;
+        offset = targetTile * TILE_SIZE_4BPP + pixelY * 4 + pixelX / 2;
+        *shift = ((offset & 1) * 8) + ((pixelX & 1) * 4);
+        return (u8 *)(OBJ_VRAM0 + (offset & ~1));
+    }
+
+    return NULL;
+}
+
+static u8 GetComposedHealthboxTextPixel(const u8 *tileData, u8 tileWidth, u8 x, u8 y)
+{
+    u16 offset = ((y / TILE_SIZE_1BPP) * tileWidth + (x / TILE_SIZE_1BPP)) * TILE_SIZE_4BPP
+               + (y % TILE_SIZE_1BPP) * 4
+               + (x % TILE_SIZE_1BPP) / 2;
+
+    if (x & 1)
+        return tileData[offset] >> 4;
+    else
+        return tileData[offset] & 0xF;
+}
+
+static void SetComposedHealthboxTextPixel(u8 *tileData, u8 tileWidth, u8 x, u8 y, u8 color)
+{
+    u16 offset = ((y / TILE_SIZE_1BPP) * tileWidth + (x / TILE_SIZE_1BPP)) * TILE_SIZE_4BPP
+               + (y % TILE_SIZE_1BPP) * 4
+               + (x % TILE_SIZE_1BPP) / 2;
+
+    if (x & 1)
+        tileData[offset] = (tileData[offset] & 0x0F) | (color << 4);
+    else
+        tileData[offset] = (tileData[offset] & 0xF0) | color;
+}
+
+static void SetOverworldHealthboxTextPixelIfVisible(u8 *tileData, u8 tileWidth, s16 x, s16 y, u8 color)
+{
+    if (x < 0 || y < 0 || x >= tileWidth * TILE_SIZE_1BPP || y >= OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+        return;
+
+    SetComposedHealthboxTextPixel(tileData, tileWidth, x, y, color);
+}
+
+static bool8 ComposedHealthboxTextTileIsEmpty(const u8 *tileData, u8 tileWidth, u8 tileX, u8 tileY)
+{
+    const u32 *tile = (const u32 *)(tileData + (tileY * tileWidth + tileX) * TILE_SIZE_4BPP);
+    u8 i;
+
+    for (i = 0; i < TILE_SIZE_4BPP / sizeof(u32); i++)
+    {
+        if (tile[i] != 0)
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
+static void QueueOverworldHealthboxTextTileCopy(const u8 *src, u8 *dest)
+{
+    u8 *copySrc;
+
+    if (sOverworldHealthboxTextCopyTiles == NULL)
+        sOverworldHealthboxTextCopyTiles = AllocZeroed(OW_HEALTHBOX_TEXT_COPY_TILE_COUNT * TILE_SIZE_4BPP);
+    if (sOverworldHealthboxTextCopyTiles == NULL)
+        return;
+
+    copySrc = sOverworldHealthboxTextCopyTiles[sOverworldHealthboxTextCopyTileCursor];
+    CpuCopy32(src, copySrc, TILE_SIZE_4BPP);
+    RequestSpriteCopy(copySrc, dest, TILE_SIZE_4BPP);
+
+    sOverworldHealthboxTextCopyTileCursor++;
+    if (sOverworldHealthboxTextCopyTileCursor >= OW_HEALTHBOX_TEXT_COPY_TILE_COUNT)
+        sOverworldHealthboxTextCopyTileCursor = 0;
+}
+
+static void SetOverworldHealthboxTextMaskBit(u32 *rowMask, u8 bit)
+{
+    rowMask[bit / 32] |= 1u << (bit & 31);
+}
+
+static u32 GetOverworldHealthboxTextValidMaskWord(u8 word, u8 lastBit)
+{
+    u8 firstBit = word * 32;
+    u8 bitCount;
+
+    if (lastBit < firstBit)
+        return 0;
+
+    bitCount = lastBit - firstBit + 1;
+    if (bitCount >= 32)
+        return 0xFFFFFFFF;
+
+    return (1u << bitCount) - 1;
+}
+
+static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 sourceTileWidth, u8 copyTileWidth, u8 objectTileWidth, u8 firstRow, u8 rowCount, s8 srcYOffset, s8 destYOffset, bool8 copyEmptyCoreTiles)
+{
+    s16 x;
+    s16 y;
+    s16 width = copyTileWidth * TILE_SIZE_1BPP;
+    s16 lastRow = firstRow + rowCount;
+    s16 firstTileX = -1;
+    s16 lastTileX = copyTileWidth;
+    s16 firstTileY = DivFloorBy8(firstRow + destYOffset - 1);
+    s16 lastTileY = DivFloorBy8(firstRow + destYOffset + rowCount);
+    u8 tileCols = lastTileX - firstTileX + 1;
+    u8 tileRows = lastTileY - firstTileY + 1;
+    u8 *tileData;
+    u8 shift;
+    u8 tileX;
+    u8 tileY;
+    s16 objectTileX;
+    bool8 isCoreTile;
+    u8 word;
+    u8 bit;
+    u8 bitInWord;
+    u8 lastBit = width + 1;
+    u8 pixelPair;
+    u8 colorPair;
+    u8 color;
+    u8 srcY;
+    const u8 *srcRow;
+    u32 combined[OW_HEALTHBOX_TEXT_MASK_WORDS];
+    u32 inflated[OW_HEALTHBOX_TEXT_MASK_WORDS];
+    u32 outline[OW_HEALTHBOX_TEXT_MASK_WORDS];
+
+    CpuFill32(0, sOverworldHealthboxTextTiles, sizeof(sOverworldHealthboxTextTiles));
+    CpuFill32(0, sOverworldHealthboxTextMasks, sizeof(sOverworldHealthboxTextMasks));
+
+    for (y = firstRow; y < lastRow; y++)
+    {
+        srcY = y + srcYOffset;
+        if (srcY >= OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+            continue;
+
+        for (tileX = 0; tileX < copyTileWidth; tileX++)
+        {
+            srcRow = windowTileData
+                   + ((srcY / TILE_SIZE_1BPP) * sourceTileWidth + tileX) * TILE_SIZE_4BPP
+                   + (srcY % TILE_SIZE_1BPP) * 4;
+
+            for (pixelPair = 0; pixelPair < 4; pixelPair++)
+            {
+                colorPair = srcRow[pixelPair];
+                x = tileX * TILE_SIZE_1BPP + pixelPair * 2;
+
+                color = colorPair & 0xF;
+                if (color != 0)
+                {
+                    SetOverworldHealthboxTextMaskBit(sOverworldHealthboxTextMasks[y], x + 1);
+                    SetComposedHealthboxTextPixel(sOverworldHealthboxTextTiles,
+                                                  tileCols,
+                                                  x - firstTileX * TILE_SIZE_1BPP,
+                                                  y + destYOffset - firstTileY * TILE_SIZE_1BPP,
+                                                  color);
+                }
+
+                color = colorPair >> 4;
+                if (color != 0)
+                {
+                    SetOverworldHealthboxTextMaskBit(sOverworldHealthboxTextMasks[y], x + 2);
+                    SetComposedHealthboxTextPixel(sOverworldHealthboxTextTiles,
+                                                  tileCols,
+                                                  x + 1 - firstTileX * TILE_SIZE_1BPP,
+                                                  y + destYOffset - firstTileY * TILE_SIZE_1BPP,
+                                                  color);
+                }
+            }
+        }
+    }
+
+    for (y = firstRow - 1; y <= lastRow; y++)
+    {
+        for (word = 0; word < OW_HEALTHBOX_TEXT_MASK_WORDS; word++)
+        {
+            combined[word] = 0;
+            if (y > 0 && y - 1 < OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+                combined[word] |= sOverworldHealthboxTextMasks[y - 1][word];
+            if (y >= 0 && y < OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+                combined[word] |= sOverworldHealthboxTextMasks[y][word];
+            if (y + 1 >= 0 && y + 1 < OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+                combined[word] |= sOverworldHealthboxTextMasks[y + 1][word];
+        }
+
+        for (word = 0; word < OW_HEALTHBOX_TEXT_MASK_WORDS; word++)
+        {
+            inflated[word] = combined[word];
+            inflated[word] |= combined[word] << 1;
+            inflated[word] |= combined[word] >> 1;
+            if (word > 0)
+                inflated[word] |= combined[word - 1] >> 31;
+            if (word + 1 < OW_HEALTHBOX_TEXT_MASK_WORDS)
+                inflated[word] |= combined[word + 1] << 31;
+
+            outline[word] = inflated[word];
+            if (y >= 0 && y < OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT)
+                outline[word] &= ~sOverworldHealthboxTextMasks[y][word];
+            outline[word] &= GetOverworldHealthboxTextValidMaskWord(word, lastBit);
+        }
+
+        for (word = 0; word < OW_HEALTHBOX_TEXT_MASK_WORDS; word++)
+        {
+            u32 wordBits = outline[word];
+
+            for (bitInWord = 0; wordBits != 0 && bitInWord < 32; bitInWord++, wordBits >>= 1)
+            {
+                if (!(wordBits & 1))
+                    continue;
+
+                bit = word * 32 + bitInWord;
+                SetComposedHealthboxTextPixel(sOverworldHealthboxTextTiles,
+                                              tileCols,
+                                              bit - 1 - firstTileX * TILE_SIZE_1BPP,
+                                              y + destYOffset - firstTileY * TILE_SIZE_1BPP,
+                                              OW_HEALTHBOX_TEXT_OUTLINE_COLOR);
+            }
+        }
+    }
+
+    for (tileY = 0; tileY < tileRows; tileY++)
+    {
+        for (tileX = 0; tileX < tileCols; tileX++)
+        {
+            objectTileX = firstTileX + tileX;
+            isCoreTile = objectTileX >= 0 && objectTileX < copyTileWidth;
+            if ((!isCoreTile || !copyEmptyCoreTiles) && ComposedHealthboxTextTileIsEmpty(sOverworldHealthboxTextTiles, tileCols, tileX, tileY))
+                continue;
+
+            tileData = GetHealthboxObjectPixelAddress(dest,
+                                                      objectTileWidth,
+                                                      objectTileX * TILE_SIZE_1BPP,
+                                                      (firstTileY + tileY) * TILE_SIZE_1BPP,
+                                                      &shift);
+
+            if (tileData != NULL)
+            {
+                QueueOverworldHealthboxTextTileCopy(sOverworldHealthboxTextTiles + (tileY * tileCols + tileX) * TILE_SIZE_4BPP,
+                                                    tileData);
+            }
+        }
+    }
+}
+
+static void DrawOverworldHealthboxTextString(void *dest, const u8 *str, u8 tileWidth, s16 textX, s16 textY, u8 firstRow, u8 rowCount, s8 destYOffset)
+{
+    s16 y;
+    s16 lastRow = firstRow + rowCount;
+    s16 firstTileX = -1;
+    s16 lastTileX = tileWidth;
+    s16 firstTileY = DivFloorBy8(firstRow + destYOffset - 1);
+    s16 lastTileY = DivFloorBy8(firstRow + destYOffset + rowCount);
+    u8 tileCols = lastTileX - firstTileX + 1;
+    u8 tileRows = lastTileY - firstTileY + 1;
+    u8 tileX;
+    u8 tileY;
+    u8 tileDataShift;
+    u8 glyphWidth;
+    u8 glyphX;
+    u8 glyphY;
+    s16 destX;
+    s16 destY;
+    s16 objectTileX;
+    bool8 isCoreTile;
+    u16 glyphId;
+    u8 fgColor = OW_HEALTHBOX_TEXT_FILL_COLOR;
+    const u8 *glyphPixels;
+    const u8 *text = str;
+    u8 *tileData;
+
+    CpuFill32(0, sOverworldHealthboxTextTiles, sizeof(sOverworldHealthboxTextTiles));
+
+    while ((glyphId = *text++) != EOS)
+    {
+        switch (glyphId)
+        {
+        case EXT_CTRL_CODE_BEGIN:
+            switch (*text++)
+            {
+            case EXT_CTRL_CODE_COLOR:
+                fgColor = *text++;
+                break;
+            case EXT_CTRL_CODE_HIGHLIGHT:
+                text++;
+                break;
+            case EXT_CTRL_CODE_SHADOW:
+                text++;
+                break;
+            case EXT_CTRL_CODE_COLOR_HIGHLIGHT_SHADOW:
+                fgColor = *text++;
+                text++;
+                text++;
+                break;
+            case EXT_CTRL_CODE_PALETTE:
+            case EXT_CTRL_CODE_PAUSE:
+            case EXT_CTRL_CODE_ESCAPE:
+            case EXT_CTRL_CODE_SHIFT_RIGHT:
+            case EXT_CTRL_CODE_SHIFT_DOWN:
+            case EXT_CTRL_CODE_CLEAR:
+            case EXT_CTRL_CODE_SKIP:
+            case EXT_CTRL_CODE_CLEAR_TO:
+            case EXT_CTRL_CODE_MIN_LETTER_SPACING:
+            case EXT_CTRL_CODE_FONT:
+                text++;
+                break;
+            case EXT_CTRL_CODE_PLAY_BGM:
+            case EXT_CTRL_CODE_PLAY_SE:
+                text += 2;
+                break;
+            default:
+                break;
+            }
+            continue;
+        case CHAR_EXTRA_SYMBOL:
+        case EXT_CTRL_CODE_ESCAPE:
+            glyphId = *text++ | 0x100;
+            break;
+        case CHAR_NEWLINE:
+        case PLACEHOLDER_BEGIN:
+        case CHAR_KEYPAD_ICON:
+            if (glyphId == PLACEHOLDER_BEGIN || glyphId == CHAR_KEYPAD_ICON)
+                text++;
+            continue;
+        }
+
+        glyphWidth = gFontSmallLatinGlyphWidths[glyphId];
+        if (textX + glyphWidth < -1 || textX > tileWidth * TILE_SIZE_1BPP)
+        {
+            textX += glyphWidth;
+            continue;
+        }
+
+        glyphPixels = (const u8 *)(gFontSmallLatinGlyphs_OWOutline + glyphId * 32);
+
+        for (glyphY = 0; glyphY < 16; glyphY++)
+        {
+            y = textY + glyphY - 1;
+            if (y < firstRow - 1 || y > lastRow)
+                continue;
+
+            for (glyphX = 0; glyphX < 16; glyphX++)
+            {
+                u8 glyphPixel = GetComposedHealthboxTextPixel(glyphPixels, 2, glyphX, glyphY);
+
+                if (glyphPixel == 0)
+                    continue;
+
+                destX = textX + glyphX - 1 - firstTileX * TILE_SIZE_1BPP;
+                destY = y + destYOffset - firstTileY * TILE_SIZE_1BPP;
+
+                if (glyphPixel == OW_HEALTHBOX_TEXT_FILL_COLOR)
+                    glyphPixel = fgColor;
+                SetOverworldHealthboxTextPixelIfVisible(sOverworldHealthboxTextTiles, tileCols, destX, destY, glyphPixel);
+            }
+        }
+
+        textX += glyphWidth;
+    }
+
+    for (tileY = 0; tileY < tileRows; tileY++)
+    {
+        for (tileX = 0; tileX < tileCols; tileX++)
+        {
+            objectTileX = firstTileX + tileX;
+            isCoreTile = objectTileX >= 0 && objectTileX < tileWidth;
+            if (!isCoreTile && ComposedHealthboxTextTileIsEmpty(sOverworldHealthboxTextTiles, tileCols, tileX, tileY))
+                continue;
+
+            tileData = GetHealthboxObjectPixelAddress(dest,
+                                                      tileWidth,
+                                                      objectTileX * TILE_SIZE_1BPP,
+                                                      (firstTileY + tileY) * TILE_SIZE_1BPP,
+                                                      &tileDataShift);
+
+            if (tileData != NULL)
+            {
+                QueueOverworldHealthboxTextTileCopy(sOverworldHealthboxTextTiles + (tileY * tileCols + tileX) * TILE_SIZE_4BPP,
+                                                    tileData);
+            }
+        }
+    }
 }
 
 static void InitOverworldStatusSpriteIds(void)
