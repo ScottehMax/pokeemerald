@@ -1,4 +1,5 @@
 #include "global.h"
+#include "battle.h"
 #include "battle_main.h"
 #include "battle_script_commands.h"
 #include "bg.h"
@@ -4030,11 +4031,17 @@ static void LoadDexMonPalette(u32 taskId, bool32 isShiny)
     LoadPalette(paletteData, OBJ_PLTT_ID(paletteNum), PLTT_SIZE_4BPP);
 }
 
-u32 Pokedex_CreateCaughtMonSprite(enum Species species, s32 x, s32 y)
+u32 Pokedex_CreateCaughtMonSprite(enum Species species, u32 personality, s32 x, s32 y)
 {
+    enum BattlerId caughtBattler = GetCatchingBattler();
+    enum BattlerPosition position = GetBattlerPosition(caughtBattler);
     u32 spriteId;
 
-    SetMultiuseSpriteTemplateToPokemon(species, GetCatchingBattler());
+    if (gMonSpritesGfxPtr == NULL)
+        return CreateMonPicSprite(species, FALSE, personality, TRUE, x, y, 0, TAG_NONE);
+
+    HandleLoadSpecialPokePic(TRUE, gMonSpritesGfxPtr->spritesGfx[position], species, personality);
+    SetMultiuseSpriteTemplateToPokemon(species, position);
     spriteId = CreateSprite(&gMultiuseSpriteTemplate, x, y, 0);
     gSprites[spriteId].oam.priority = 0;
     gSprites[spriteId].callback = SpriteCallbackDummy;
@@ -4089,7 +4096,7 @@ static void Task_DisplayCaughtMonDexPage(u8 taskId)
         break;
     case 4:
         // We're using a different mon sprite creation method, because we don't have enough memory to safely use CreateMonPicSprite.
-        spriteId = Pokedex_CreateCaughtMonSprite(species, MON_PAGE_X, MON_PAGE_Y);
+        spriteId = Pokedex_CreateCaughtMonSprite(species, GetWordTaskArg(taskId, tPersonalityLo), MON_PAGE_X, MON_PAGE_Y);
         gTasks[taskId].tMonSpriteId = spriteId;
         LoadDexMonPalette(taskId, FALSE);
         gSprites[spriteId].oam.priority = 0;
