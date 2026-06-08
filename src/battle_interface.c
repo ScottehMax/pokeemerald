@@ -181,9 +181,12 @@ enum
 #define NEW_HPBAR_FILL_TILE_COUNT 8
 #define NEW_HPBAR_FILL_TILE_OFFSET 3
 #define NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN 4
+#define OW_HEALTHBOX_TEXT_OUTLINE_COLOR 1
+#define OW_HEALTHBOX_TEXT_FILL_COLOR 2
 
 static const u8 *GetHealthboxElementGfxPtr(u8);
 static void ClearHealthboxBackingTiles(u8 healthboxSpriteId);
+static void ApplyOverworldHealthboxTextPalette(u8 healthboxSpriteId);
 static void CopyNewHpBarBase(u8 healthbarSpriteId);
 static u8 GetNewHpBarObjTileOffset(u8 column, u8 row);
 
@@ -571,13 +574,6 @@ static const struct SpriteTemplate sStatusSummaryBallsSpriteTemplates[2] =
 
 static const u8 sEmptyWhiteText_GrayHighlight[] = __("{COLOR WHITE}{BACKGROUND DARK_GRAY}{ACCENT DARK_GRAY}              ");
 static const u8 sEmptyWhiteText_TransparentHighlight[] = __("{COLOR WHITE}{BACKGROUND TRANSPARENT}{ACCENT TRANSPARENT}              ");
-static const u8 sHealthboxNicknameTransparentHighlight[] =
-{
-    EXT_CTRL_CODE_BEGIN,
-    EXT_CTRL_CODE_HIGHLIGHT,
-    TEXT_COLOR_TRANSPARENT,
-    EOS
-};
 
 enum
 {
@@ -612,6 +608,14 @@ static const union TextColor sHealthBoxTextColor =
     .background = 0,
     .foreground = 1,
     .shadow = 3,
+    .accent = 0
+};
+
+static const union TextColor sOverworldHealthBoxTextColor =
+{
+    .background = 0,
+    .foreground = OW_HEALTHBOX_TEXT_FILL_COLOR,
+    .shadow = OW_HEALTHBOX_TEXT_OUTLINE_COLOR,
     .accent = 0
 };
 
@@ -726,7 +730,10 @@ u8 CreateBattlerHealthboxSprites(enum BattlerId battler)
     healthBarSpritePtr->invisible = TRUE;
 
     if (BattleOverworldScene_IsEnabled())
+    {
+        ApplyOverworldHealthboxTextPalette(healthboxLeftSpriteId);
         ClearHealthboxBackingTiles(healthboxLeftSpriteId);
+    }
 
     CreateIndicatorSprite(battler);
 
@@ -767,6 +774,15 @@ static void ClearHealthboxBackingTiles(u8 healthboxSpriteId)
     u16 tileSize = GetBattlerCoordsIndex(gSprites[healthboxSpriteId].hMain_Battler) == BATTLE_COORDS_DOUBLES ? 0x800 : 0x1000;
 
     CpuFill32(0, (void *)(OBJ_VRAM0 + gSprites[healthboxSpriteId].oam.tileNum * TILE_SIZE_4BPP), tileSize);
+}
+
+static void ApplyOverworldHealthboxTextPalette(u8 healthboxSpriteId)
+{
+    u16 colors[] = {RGB_BLACK, RGB_WHITE};
+
+    LoadPalette(colors,
+                OBJ_PLTT_ID(gSprites[healthboxSpriteId].oam.paletteNum) + OW_HEALTHBOX_TEXT_OUTLINE_COLOR,
+                sizeof(colors));
 }
 
 static u8 GetNewHpBarObjTileOffset(u8 column, u8 row)
@@ -923,6 +939,16 @@ void GetBattlerHealthboxCoords(enum BattlerId battler, s16 *x, s16 *y)
     enum BattlerPosition position = GetBattlerPosition(battler);
     enum BattleCoordTypes index = GetBattlerCoordsIndex(battler);
 
+    if (BattleOverworldScene_IsEnabled() && index == BATTLE_COORDS_SINGLES)
+    {
+        if (IsOnPlayerSide(battler))
+            *x = 44;
+        else
+            *x = 158;
+        *y = 30;
+        return;
+    }
+
     *x = sBattlerHealthboxCoords[index][position][0];
     *y = sBattlerHealthboxCoords[index][position][1];
 }
@@ -941,6 +967,7 @@ static void UpdateLvlInHealthbox(u8 healthboxSpriteId, u8 lvl)
     enum BattlerId battler = gSprites[healthboxSpriteId].hMain_Battler;
     u32 spriteId = gSprites[healthboxSpriteId].oam.affineParam;
     u32 bgColor = BattleOverworldScene_IsEnabled() ? 0 : HEALTHBOX_BG_INDEX;
+    const union TextColor textColor = BattleOverworldScene_IsEnabled() ? sOverworldHealthBoxTextColor : sHealthBoxTextColor;
 
     // Don't print Lv char if mon has a gimmick with an indicator active.
     if (GetIndicatorPalTag(battler) != TAG_NONE)
@@ -963,12 +990,12 @@ static void UpdateLvlInHealthbox(u8 healthboxSpriteId, u8 lvl)
     if (IsOnPlayerSide(battler))
     {
         FillSpriteRectColor(spriteId, 8, 5, 24, 11, bgColor);
-        AddSpriteTextPrinterParameterized6(spriteId, FONT_SMALL, 32 - width, 3, 0, 0, sHealthBoxTextColor, 0, text);
+        AddSpriteTextPrinterParameterized6(spriteId, FONT_SMALL, 32 - width, 3, 0, 0, textColor, 0, text);
     }
     else
     {
         FillSpriteRectColor(spriteId, 0, 5, 24, 11, bgColor);
-        AddSpriteTextPrinterParameterized6(spriteId, FONT_SMALL, 24 - width, 3, 0, 0, sHealthBoxTextColor, 0, text);
+        AddSpriteTextPrinterParameterized6(spriteId, FONT_SMALL, 24 - width, 3, 0, 0, textColor, 0, text);
     }
 }
 
@@ -983,6 +1010,7 @@ static void PrintHpOnHealthbox(u32 spriteId, s16 currHp, s16 maxHp, u32 bgColor,
 
     if (BattleOverworldScene_IsEnabled())
         bgColor = 0;
+    const union TextColor textColor = BattleOverworldScene_IsEnabled() ? sOverworldHealthBoxTextColor : sHealthBoxTextColor;
 
     // To fit 4 digit HP values we need to modify a bit the way hp is printed on Healthbox.
     // HP_RIGHT_SPRITE_CHARS chars can fit on the right healthbox, the rest goes to the left one
@@ -1004,9 +1032,9 @@ static void PrintHpOnHealthbox(u32 spriteId, s16 currHp, s16 maxHp, u32 bgColor,
 
     width = GetStringWidth(HP_FONT, text, -1) + GetFontAttribute(HP_FONT, FONTATTR_LETTER_SPACING);
     if (width < 32)
-        AddSpriteTextPrinterParameterized6(spriteId2, HP_FONT, 32 - width, yOffset + 5, 0, 0, sHealthBoxTextColor, 0, text);
+        AddSpriteTextPrinterParameterized6(spriteId2, HP_FONT, 32 - width, yOffset + 5, 0, 0, textColor, 0, text);
     else
-        AddSpriteTextPrinterParameterized6(spriteId, HP_FONT, 64 - (width - 32), yOffset + 5, 0, 0, sHealthBoxTextColor, 0, text);
+        AddSpriteTextPrinterParameterized6(spriteId, HP_FONT, 64 - (width - 32), yOffset + 5, 0, 0, textColor, 0, text);
 
     gSprites[spriteId].data[1] = savedValue1;
     gSprites[spriteId2].data[1] = savedValue2;
@@ -1777,15 +1805,7 @@ void UpdateNickInHealthbox(u8 healthboxSpriteId, struct Pokemon *mon)
 
     GetMonData(mon, MON_DATA_NICKNAME, nickname);
     StringGet_Nickname(nickname);
-    if (BattleOverworldScene_IsEnabled())
-    {
-        ptr = StringCopy(gDisplayedStringBattle, sHealthboxNicknameTransparentHighlight);
-        ptr = StringCopy(ptr, nickname);
-    }
-    else
-    {
-        ptr = StringCopy(gDisplayedStringBattle, nickname);
-    }
+    ptr = StringCopy(gDisplayedStringBattle, nickname);
 
     gender = GetMonGender(mon);
     species = GetMonData(mon, MON_DATA_SPECIES);
@@ -1818,16 +1838,17 @@ void UpdateNickInHealthbox(u8 healthboxSpriteId, struct Pokemon *mon)
 
     u32 fontId = GetFontIdToFit(gDisplayedStringBattle, FONT_SMALL, 0, 55);
     u32 bgColor = BattleOverworldScene_IsEnabled() ? 0 : HEALTHBOX_BG_INDEX;
+    const union TextColor textColor = BattleOverworldScene_IsEnabled() ? sOverworldHealthBoxTextColor : sHealthBoxTextColor;
 
     if (IsOnPlayerSide(gSprites[healthboxSpriteId].data[6]))
     {
         FillSpriteRectColor(healthboxSpriteId, 16, 5, 55, 11, bgColor);
-        AddSpriteTextPrinterParameterized6(healthboxSpriteId, fontId, 16, 3, 0, 0, sHealthBoxTextColor, 0, gDisplayedStringBattle);
+        AddSpriteTextPrinterParameterized6(healthboxSpriteId, fontId, 16, 3, 0, 0, textColor, 0, gDisplayedStringBattle);
     }
     else
     {
         FillSpriteRectColor(healthboxSpriteId, 8, 5, 55, 11, bgColor);
-        AddSpriteTextPrinterParameterized6(healthboxSpriteId, fontId, 8, 3, 0, 0, sHealthBoxTextColor, 0, gDisplayedStringBattle);
+        AddSpriteTextPrinterParameterized6(healthboxSpriteId, fontId, 8, 3, 0, 0, textColor, 0, gDisplayedStringBattle);
     }
 
     gSprites[healthboxSpriteId].data[1] = savedValue1;
@@ -2082,7 +2103,7 @@ void UpdateHealthboxAttribute(u8 healthboxSpriteId, struct Pokemon *mon, u8 elem
             MoveBattleBar(battler, healthboxSpriteId, HEALTH_BAR, 0);
         }
 
-        if (!isDoubles && (elementId == HEALTHBOX_EXP_BAR || elementId == HEALTHBOX_ALL))
+        if (!BattleOverworldScene_IsEnabled() && !isDoubles && (elementId == HEALTHBOX_EXP_BAR || elementId == HEALTHBOX_ALL))
         {
             enum Species species;
             u32 exp, currLevelExp;
@@ -2166,7 +2187,8 @@ s32 MoveBattleBar(enum BattlerId battler, u8 healthboxSpriteId, u8 whichBar, u8 
                     B_EXPBAR_PIXELS / 8, expFraction);
     }
 
-    if (whichBar == EXP_BAR || (whichBar == HEALTH_BAR && !gBattleSpritesDataPtr->battlerData[battler].hpNumbersNoBars))
+    if ((whichBar == EXP_BAR && !BattleOverworldScene_IsEnabled())
+     || (whichBar == HEALTH_BAR && !gBattleSpritesDataPtr->battlerData[battler].hpNumbersNoBars))
         MoveBattleBarGraphically(battler, whichBar);
 
     if (currentBarValue == -1)

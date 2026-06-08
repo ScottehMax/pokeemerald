@@ -1454,7 +1454,8 @@ void StartHealthboxSlideIn(enum BattlerId battler)
     healthboxSprite->x2 = 0x73;
     healthboxSprite->y2 = 0;
     healthboxSprite->callback = SpriteCB_HealthboxSlideIn;
-    if (!IsOnPlayerSide(battler))
+    if ((!BattleOverworldScene_IsEnabled() && !IsOnPlayerSide(battler))
+     || (BattleOverworldScene_IsEnabled() && IsOnPlayerSide(battler)))
     {
         healthboxSprite->sSpeedX = -healthboxSprite->sSpeedX;
         healthboxSprite->sSpeedY = -healthboxSprite->sSpeedY;
