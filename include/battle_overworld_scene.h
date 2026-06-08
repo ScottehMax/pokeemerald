@@ -5,12 +5,12 @@
 #include "pokemon.h"
 
 void BattleOverworldScene_Reset(void);
+void BattleOverworldScene_ResetSpriteReferences(void);
 bool8 BattleOverworldScene_IsEnabled(void);
 void BattleOverworldScene_SetSuspended(bool8 suspended);
 u32 BattleOverworldScene_GetBgPaletteMask(void);
 u32 BattleOverworldScene_ApplyBgPaletteMask(u32 selectedPalettes);
 bool8 BattleOverworldScene_IsBattlerFacingRight(u8 battler);
-void BattleOverworldScene_TraceBg3(u16 phase);
 void BattleOverworldScene_LoadBackground(void);
 void BattleOverworldScene_RestoreBackground(void);
 void BattleOverworldScene_KeepBaseBackgroundVisible(void);

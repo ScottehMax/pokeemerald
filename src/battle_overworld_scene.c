@@ -184,17 +184,6 @@ static u8 sCompositePalCount;
 static EWRAM_DATA u16 sBattleOwBgTileMap[NUM_TILES_TOTAL] = {0};
 static EWRAM_DATA u32 sBattleOwBgPaletteMask = 0;
 static const u8 sBattleOwBgFreePalSlots[] = {2, 3, 4, 6, 7, 10, 11};
-static EWRAM_DATA u32 sLastBg3TraceFrame = 0;
-static EWRAM_DATA u16 sLastBg3MapSample0 = 0;
-static EWRAM_DATA u16 sLastBg3MapSample1 = 0;
-static EWRAM_DATA u16 sLastBg3MapSample2 = 0;
-static EWRAM_DATA u16 sLastBg3TileSample0 = 0;
-static EWRAM_DATA u16 sLastBg3TileSample1 = 0;
-static EWRAM_DATA u16 sLastBg3PalSample0 = 0;
-static EWRAM_DATA u16 sLastBg3PalSample1 = 0;
-static EWRAM_DATA u16 sLastBg3FadedPalSample0 = 0;
-static EWRAM_DATA u16 sLastBg3FadedPalSample1 = 0;
-static EWRAM_DATA u32 sBg3StartupTraceUntil = 0;
 static EWRAM_DATA u8 ALIGNED(4) sBattleOwDecompressionBuffer[MAX_DECOMPRESSION_BUFFER_SIZE] = {0};
 
 static bool8 IsPlayerBattlerPosition(u8 battlerPosition)
@@ -617,8 +606,6 @@ void BattleOverworldScene_LoadBackground(void)
     if (!IsBattleOverworldSceneEnabled())
         return;
 
-    DebugPrintf("OWBG3 load f=%u anim=%u", gMain.vblankCounter1, gDoingBattleAnim);
-    sBg3StartupTraceUntil = gMain.vblankCounter1 + 240;
     BuildRoute101TileAndPaletteMaps(palMap);
     LoadMappedRoute101Tiles();
     UpdateRoute101PaletteMask(palMap);
@@ -636,7 +623,6 @@ void BattleOverworldScene_RestoreBackground(void)
     if (!IsBattleOverworldSceneEnabled())
         return;
 
-    DebugPrintf("OWBG3 restore f=%u anim=%u", gMain.vblankCounter1, gDoingBattleAnim);
     BuildRoute101TileAndPaletteMaps(palMap);
     UpdateRoute101PaletteMask(palMap);
 
@@ -875,156 +861,18 @@ u32 BattleOverworldScene_ApplyBgPaletteMask(u32 selectedPalettes)
     return selectedPalettes;
 }
 
-void BattleOverworldScene_TraceBg3(u16 phase)
+void BattleOverworldScene_Reset(void)
 {
-    u16 bg3Cnt;
-    u16 bg3Hofs;
-    u16 bg3Vofs;
-    u16 dispCnt;
-    u16 win0V;
-    u16 winIn;
-    u16 winOut;
-    u16 bldCnt;
-    u16 bldAlpha;
-    u16 scanlineState;
-    u16 scanlineDest;
-    u16 sample0;
-    u16 sample80;
-    u16 sample120;
-    u16 mapSample0;
-    u16 mapSample1;
-    u16 mapSample2;
-    u16 tileSample0;
-    u16 tileSample1;
-    u16 palSample0;
-    u16 palSample1;
-    u16 fadedPalSample0;
-    u16 fadedPalSample1;
-    bool8 contentChanged;
-    bool8 startupTrace;
-    bool8 suspicious;
-    u32 dmaDest;
-    const u16 *bg3Map = (const u16 *)BG_SCREEN_ADDR(OW_BG_LOWER_SCREENBASE);
-    const u16 *bg3Tiles = (const u16 *)(BG_CHAR_ADDR(OW_BG_CHARBASE) + TILE_OFFSET_4BPP(OW_BG_TILE_RANGE_1_START));
-    const u16 *bgPal = (const u16 *)BG_PLTT;
-    u16 expectedBg3Cnt = BGCNT_PRIORITY(3) | BGCNT_CHARBASE(OW_BG_CHARBASE) | BGCNT_16COLOR | BGCNT_SCREENBASE(OW_BG_LOWER_SCREENBASE) | BGCNT_TXT256x256;
-
-    if (!IsBattleOverworldSceneEnabled())
-        return;
-
-    dmaDest = (u32)gScanlineEffect.dmaDest;
-    bg3Cnt = GetGpuReg(REG_OFFSET_BG3CNT);
-    bg3Hofs = GetGpuReg(REG_OFFSET_BG3HOFS);
-    bg3Vofs = GetGpuReg(REG_OFFSET_BG3VOFS);
-    dispCnt = GetGpuReg(REG_OFFSET_DISPCNT);
-    win0V = GetGpuReg(REG_OFFSET_WIN0V);
-    winIn = GetGpuReg(REG_OFFSET_WININ);
-    winOut = GetGpuReg(REG_OFFSET_WINOUT);
-    bldCnt = GetGpuReg(REG_OFFSET_BLDCNT);
-    bldAlpha = GetGpuReg(REG_OFFSET_BLDALPHA);
-    scanlineState = gScanlineEffect.state;
-    scanlineDest = dmaDest >= REG_BASE ? dmaDest - REG_BASE : 0;
-    sample0 = gScanlineEffectRegBuffers[gScanlineEffect.srcBuffer][0];
-    sample80 = gScanlineEffectRegBuffers[gScanlineEffect.srcBuffer][80];
-    sample120 = gScanlineEffectRegBuffers[gScanlineEffect.srcBuffer][120];
-    mapSample0 = bg3Map[0];
-    mapSample1 = bg3Map[32 * 9 + 15];
-    mapSample2 = bg3Map[32 * 19 + 29];
-    tileSample0 = bg3Tiles[0];
-    tileSample1 = bg3Tiles[(OW_BG_TILE_RANGE_1_END - OW_BG_TILE_RANGE_1_START) * TILE_SIZE_4BPP / sizeof(u16) - 1];
-    palSample0 = bgPal[BG_PLTT_ID(2) + 1];
-    palSample1 = bgPal[BG_PLTT_ID(OW_BG_COMPOSITE_PAL_START) + 1];
-    fadedPalSample0 = gPlttBufferFaded[BG_PLTT_ID(2) + 1];
-    fadedPalSample1 = gPlttBufferFaded[BG_PLTT_ID(OW_BG_COMPOSITE_PAL_START) + 1];
-    contentChanged = mapSample0 != sLastBg3MapSample0
-                  || mapSample1 != sLastBg3MapSample1
-                  || mapSample2 != sLastBg3MapSample2
-                  || tileSample0 != sLastBg3TileSample0
-                  || tileSample1 != sLastBg3TileSample1
-                  || palSample0 != sLastBg3PalSample0
-                  || palSample1 != sLastBg3PalSample1
-                  || fadedPalSample0 != sLastBg3FadedPalSample0
-                  || fadedPalSample1 != sLastBg3FadedPalSample1;
-    startupTrace = gMain.vblankCounter1 < sBg3StartupTraceUntil;
-    suspicious = gBattle_BG3_X != 0
-              || gBattle_BG3_Y != 0
-              || bg3Hofs != 0
-              || bg3Vofs != 0
-              || bg3Cnt != expectedBg3Cnt
-              || !(dispCnt & DISPCNT_BG3_ON)
-              || scanlineState != 0
-              || (bldCnt & (BLDCNT_TGT1_BG3 | BLDCNT_TGT2_BG3));
-
-    if (contentChanged)
-    {
-        sLastBg3MapSample0 = mapSample0;
-        sLastBg3MapSample1 = mapSample1;
-        sLastBg3MapSample2 = mapSample2;
-        sLastBg3TileSample0 = tileSample0;
-        sLastBg3TileSample1 = tileSample1;
-        sLastBg3PalSample0 = palSample0;
-        sLastBg3PalSample1 = palSample1;
-        sLastBg3FadedPalSample0 = fadedPalSample0;
-        sLastBg3FadedPalSample1 = fadedPalSample1;
-    }
-
-    if (!suspicious && !contentChanged && !startupTrace)
-        return;
-
-    if (!contentChanged && startupTrace && phase != 12)
-        return;
-
-    if (!contentChanged && startupTrace && !suspicious && (gMain.vblankCounter1 & 0xF) != 0)
-        return;
-
-    if (!contentChanged && suspicious && sLastBg3TraceFrame == gMain.vblankCounter1)
-        return;
-
-    if (!contentChanged && suspicious && (gMain.vblankCounter1 & 0x7) != 0)
-        return;
-
-    sLastBg3TraceFrame = gMain.vblankCounter1;
-    DebugPrintf(
-        "OWBG3 f=%u ph=%u anim=%u chg=%u fade a=%u m=%u y=%u t=%u sel=%lx dis=%u bg3=(%d,%d) reg h=%x v=%x cnt=%x exp=%x disp=%x win0v=%x winin=%x winout=%x bld=%x/%x scan st=%u dst=%x samples=%x,%x,%x map=%x,%x,%x tile=%x,%x pal=%x,%x faded=%x,%x",
-        gMain.vblankCounter1,
-        phase,
-        gDoingBattleAnim,
-        contentChanged,
-        gPaletteFade.active,
-        gPaletteFade.mode,
-        gPaletteFade.y,
-        gPaletteFade.targetY,
-        gPaletteFade.multipurpose1,
-        gPaletteFade.bufferTransferDisabled,
-        gBattle_BG3_X,
-        gBattle_BG3_Y,
-        bg3Hofs,
-        bg3Vofs,
-        bg3Cnt,
-        expectedBg3Cnt,
-        dispCnt,
-        win0V,
-        winIn,
-        winOut,
-        bldCnt,
-        bldAlpha,
-        scanlineState,
-        scanlineDest,
-        sample0,
-        sample80,
-        sample120,
-        mapSample0,
-        mapSample1,
-        mapSample2,
-        tileSample0,
-        tileSample1,
-        palSample0,
-        palSample1,
-        fadedPalSample0,
-        fadedPalSample1);
+    BattleOverworldScene_ResetSpriteReferences();
+    sSceneSuspended = FALSE;
+    sReshowTransitionAllowsBg3Blend = FALSE;
+    sBg3BlendFadeStarted = FALSE;
+    sSceneVisible = FALSE;
+    sCompositeCount = 0;
+    sCompositePalCount = 0;
 }
 
-void BattleOverworldScene_Reset(void)
+void BattleOverworldScene_ResetSpriteReferences(void)
 {
     u8 battler;
 
@@ -1036,12 +884,6 @@ void BattleOverworldScene_Reset(void)
         sOwBattlerHiddenByBall[battler] = FALSE;
     }
     sCreatedTrainerSprites = FALSE;
-    sSceneSuspended = FALSE;
-    sReshowTransitionAllowsBg3Blend = FALSE;
-    sBg3BlendFadeStarted = FALSE;
-    sSceneVisible = FALSE;
-    sCompositeCount = 0;
-    sCompositePalCount = 0;
 }
 
 static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerClass)

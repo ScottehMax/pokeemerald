@@ -2032,7 +2032,9 @@ extern const u32 gBattleInterface_BallStatusBarGfx[];
 extern const u8 gBattleInterface_BallDisplayGfx[];
 extern const u16 gBattleInterface_BallStatusBarPal[];
 extern const u16 gBattleInterface_BallDisplayPal[];
+extern const u16 gBattleInterface_NewHpBarPal[];
 extern const u8 gHealthboxElementsGfxTable[][32];
+extern const u32 gBattleInterface_NewHpBarGfx[][8];
 
 extern const u16 gNamingScreenMenu_Pal[6][16];
 extern const u32 gNamingScreenMenu_Gfx[];
