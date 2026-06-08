@@ -55,34 +55,59 @@ extern const u32 gObjectEventPic_MayNormalRunning[];
 extern const u16 gObjectEventPal_Brendan[];
 extern const u16 gObjectEventPal_May[];
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_AquaMemberM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_AquaMemberF;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Anabel;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Archie;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Beauty;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_BlackBelt;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Boy3;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Brandon;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Brawly;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_BugCatcher;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Camper;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_CyclingTriathleteF;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_CyclingTriathleteM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Drake;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_ExpertF;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_ExpertM;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Fisherman;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Flannery;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Gentleman;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Girl3;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Glacia;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Greta;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_HexManiac;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Hiker;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Juan;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Lass;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Leaf;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Liza;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Lucy;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_MagmaMemberF;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_MagmaMemberM;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Man1;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Man3;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Man4;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Man5;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Maniac;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Maxie;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_NinjaBoy;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Noland;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Norman;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Phoebe;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Picnicker;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_PokefanF;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_PokefanM;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_PsychicM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Red;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_ReporterM;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RichBoy;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RivalBrendanNormal;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RivalMayNormal;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Roxanne;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RubySapphireBrendan;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RubySapphireMay;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RunningTriathleteF;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RunningTriathleteM;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Sailor;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_SchoolKidM;
@@ -95,7 +120,12 @@ extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_TuberF;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_TuberM;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Tucker;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Twin;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Wallace;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Wally;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Wattson;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Winona;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Woman1;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Woman2;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Woman5;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Youngster;
 
@@ -160,8 +190,9 @@ static const union AnimCmd *const sAnimTable_BattleTrainerFaceEast[] =
 
 static bool8 IsBattleOverworldSceneEnabled(void);
 static void BattleOverworldScene_ApplyBg3Config(void);
+static enum TrainerPicID GetBattleOwOpponentTrainerPic(void);
 static enum TrainerClassID GetBattleOwOpponentTrainerClass(void);
-static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerClass);
+static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(enum TrainerPicID trainerPic, enum TrainerClassID trainerClass);
 static const struct ObjectEventGraphicsInfo *GetBattleOwMonGraphicsInfo(struct Pokemon *mon, u8 battler, u16 *species, u16 *graphicsId);
 static void Task_BattleOverworldScene_WildShinyAnimations(u8 taskId);
 static const u16 *GetBattleOwPlayerTrainerPalette(void);
@@ -897,33 +928,212 @@ void BattleOverworldScene_ResetSpriteReferences(void)
     sCreatedTrainerSprites = FALSE;
 }
 
-static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerClass)
+static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(enum TrainerPicID trainerPic, enum TrainerClassID trainerClass)
 {
+    switch (trainerPic)
+    {
+    case TRAINER_PIC_HIKER:
+        return &gObjectEventGraphicsInfo_Hiker;
+    case TRAINER_PIC_AQUA_GRUNT_M:
+    case TRAINER_PIC_AQUA_ADMIN_M:
+        return &gObjectEventGraphicsInfo_AquaMemberM;
+    case TRAINER_PIC_AQUA_GRUNT_F:
+    case TRAINER_PIC_AQUA_ADMIN_F:
+        return &gObjectEventGraphicsInfo_AquaMemberF;
+    case TRAINER_PIC_AQUA_LEADER_ARCHIE:
+        return &gObjectEventGraphicsInfo_Archie;
+    case TRAINER_PIC_MAGMA_GRUNT_M:
+    case TRAINER_PIC_MAGMA_ADMIN:
+        return &gObjectEventGraphicsInfo_MagmaMemberM;
+    case TRAINER_PIC_MAGMA_GRUNT_F:
+        return &gObjectEventGraphicsInfo_MagmaMemberF;
+    case TRAINER_PIC_MAGMA_LEADER_MAXIE:
+        return &gObjectEventGraphicsInfo_Maxie;
+    case TRAINER_PIC_POKEMON_BREEDER_F:
+    case TRAINER_PIC_AROMA_LADY:
+    case TRAINER_PIC_LADY:
+        return &gObjectEventGraphicsInfo_Woman2;
+    case TRAINER_PIC_COOLTRAINER_M:
+    case TRAINER_PIC_DRAGON_TAMER:
+        return &gObjectEventGraphicsInfo_Man3;
+    case TRAINER_PIC_BIRD_KEEPER:
+    case TRAINER_PIC_GUITARIST:
+    case TRAINER_PIC_KINDLER:
+        return &gObjectEventGraphicsInfo_Man5;
+    case TRAINER_PIC_COLLECTOR:
+    case TRAINER_PIC_POKEMANIAC:
+    case TRAINER_PIC_RUIN_MANIAC:
+    case TRAINER_PIC_BUG_MANIAC:
+        return &gObjectEventGraphicsInfo_Maniac;
+    case TRAINER_PIC_SWIMMER_M:
+        return &gObjectEventGraphicsInfo_SwimmerM;
+    case TRAINER_PIC_SWIMMER_F:
+        return &gObjectEventGraphicsInfo_SwimmerF;
+    case TRAINER_PIC_SWIMMING_TRIATHLETE_M:
+        return &gObjectEventGraphicsInfo_RunningTriathleteM;
+    case TRAINER_PIC_SWIMMING_TRIATHLETE_F:
+        return &gObjectEventGraphicsInfo_RunningTriathleteF;
+    case TRAINER_PIC_EXPERT_M:
+    case TRAINER_PIC_OLD_COUPLE:
+        return &gObjectEventGraphicsInfo_ExpertM;
+    case TRAINER_PIC_EXPERT_F:
+        return &gObjectEventGraphicsInfo_ExpertF;
+    case TRAINER_PIC_BLACK_BELT:
+        return &gObjectEventGraphicsInfo_BlackBelt;
+    case TRAINER_PIC_BATTLE_GIRL:
+        return &gObjectEventGraphicsInfo_Girl3;
+    case TRAINER_PIC_HEX_MANIAC:
+        return &gObjectEventGraphicsInfo_HexManiac;
+    case TRAINER_PIC_INTERVIEWER:
+        return &gObjectEventGraphicsInfo_ReporterM;
+    case TRAINER_PIC_TUBER_F:
+        return &gObjectEventGraphicsInfo_TuberF;
+    case TRAINER_PIC_TUBER_M:
+        return &gObjectEventGraphicsInfo_TuberM;
+    case TRAINER_PIC_COOLTRAINER_F:
+    case TRAINER_PIC_PARASOL_LADY:
+        return &gObjectEventGraphicsInfo_Woman5;
+    case TRAINER_PIC_BEAUTY:
+        return &gObjectEventGraphicsInfo_Beauty;
+    case TRAINER_PIC_RICH_BOY:
+        return &gObjectEventGraphicsInfo_RichBoy;
+    case TRAINER_PIC_CAMPER:
+    case TRAINER_PIC_POKEMON_RANGER_M:
+        return &gObjectEventGraphicsInfo_Camper;
+    case TRAINER_PIC_PICNICKER:
+    case TRAINER_PIC_POKEMON_RANGER_F:
+        return &gObjectEventGraphicsInfo_Picnicker;
+    case TRAINER_PIC_POKEMON_BREEDER_M:
+        return &gObjectEventGraphicsInfo_Man4;
+    case TRAINER_PIC_PSYCHIC_M:
+        return &gObjectEventGraphicsInfo_PsychicM;
+    case TRAINER_PIC_PSYCHIC_F:
+        return &gObjectEventGraphicsInfo_Lass;
+    case TRAINER_PIC_GENTLEMAN:
+        return &gObjectEventGraphicsInfo_Gentleman;
+    case TRAINER_PIC_ELITE_FOUR_SIDNEY:
+        return &gObjectEventGraphicsInfo_Sidney;
+    case TRAINER_PIC_ELITE_FOUR_PHOEBE:
+        return &gObjectEventGraphicsInfo_Phoebe;
+    case TRAINER_PIC_ELITE_FOUR_GLACIA:
+        return &gObjectEventGraphicsInfo_Glacia;
+    case TRAINER_PIC_ELITE_FOUR_DRAKE:
+        return &gObjectEventGraphicsInfo_Drake;
+    case TRAINER_PIC_LEADER_ROXANNE:
+        return &gObjectEventGraphicsInfo_Roxanne;
+    case TRAINER_PIC_LEADER_BRAWLY:
+        return &gObjectEventGraphicsInfo_Brawly;
+    case TRAINER_PIC_LEADER_WATTSON:
+        return &gObjectEventGraphicsInfo_Wattson;
+    case TRAINER_PIC_LEADER_FLANNERY:
+        return &gObjectEventGraphicsInfo_Flannery;
+    case TRAINER_PIC_LEADER_NORMAN:
+        return &gObjectEventGraphicsInfo_Norman;
+    case TRAINER_PIC_LEADER_WINONA:
+        return &gObjectEventGraphicsInfo_Winona;
+    case TRAINER_PIC_LEADER_TATE_AND_LIZA:
+        return &gObjectEventGraphicsInfo_Liza;
+    case TRAINER_PIC_LEADER_JUAN:
+        return &gObjectEventGraphicsInfo_Juan;
+    case TRAINER_PIC_SCHOOL_KID_M:
+        return &gObjectEventGraphicsInfo_SchoolKidM;
+    case TRAINER_PIC_SCHOOL_KID_F:
+        return &gObjectEventGraphicsInfo_Girl3;
+    case TRAINER_PIC_SR_AND_JR:
+    case TRAINER_PIC_TWINS:
+    case TRAINER_PIC_YOUNG_COUPLE:
+    case TRAINER_PIC_SIS_AND_BRO:
+        return &gObjectEventGraphicsInfo_Twin;
+    case TRAINER_PIC_POKEFAN_M:
+        return &gObjectEventGraphicsInfo_PokefanM;
+    case TRAINER_PIC_POKEFAN_F:
+        return &gObjectEventGraphicsInfo_PokefanF;
+    case TRAINER_PIC_YOUNGSTER:
+        return &gObjectEventGraphicsInfo_Youngster;
+    case TRAINER_PIC_CHAMPION_WALLACE:
+        return &gObjectEventGraphicsInfo_Wallace;
+    case TRAINER_PIC_FISHERMAN:
+        return &gObjectEventGraphicsInfo_Fisherman;
+    case TRAINER_PIC_CYCLING_TRIATHLETE_M:
+        return &gObjectEventGraphicsInfo_CyclingTriathleteM;
+    case TRAINER_PIC_CYCLING_TRIATHLETE_F:
+        return &gObjectEventGraphicsInfo_CyclingTriathleteF;
+    case TRAINER_PIC_RUNNING_TRIATHLETE_M:
+        return &gObjectEventGraphicsInfo_RunningTriathleteM;
+    case TRAINER_PIC_RUNNING_TRIATHLETE_F:
+        return &gObjectEventGraphicsInfo_RunningTriathleteF;
+    case TRAINER_PIC_NINJA_BOY:
+        return &gObjectEventGraphicsInfo_NinjaBoy;
+    case TRAINER_PIC_SAILOR:
+        return &gObjectEventGraphicsInfo_Sailor;
+    case TRAINER_PIC_WALLY:
+        return &gObjectEventGraphicsInfo_Wally;
+    case TRAINER_PIC_BRENDAN:
+        return &gObjectEventGraphicsInfo_RivalBrendanNormal;
+    case TRAINER_PIC_MAY:
+        return &gObjectEventGraphicsInfo_RivalMayNormal;
+    case TRAINER_PIC_BUG_CATCHER:
+        return &gObjectEventGraphicsInfo_BugCatcher;
+    case TRAINER_PIC_LASS:
+        return &gObjectEventGraphicsInfo_Lass;
+    case TRAINER_PIC_STEVEN:
+        return &gObjectEventGraphicsInfo_Steven;
+    case TRAINER_PIC_SALON_MAIDEN_ANABEL:
+        return &gObjectEventGraphicsInfo_Anabel;
+    case TRAINER_PIC_DOME_ACE_TUCKER:
+        return &gObjectEventGraphicsInfo_Tucker;
+    case TRAINER_PIC_PALACE_MAVEN_SPENSER:
+        return &gObjectEventGraphicsInfo_Spenser;
+    case TRAINER_PIC_ARENA_TYCOON_GRETA:
+        return &gObjectEventGraphicsInfo_Greta;
+    case TRAINER_PIC_FACTORY_HEAD_NOLAND:
+        return &gObjectEventGraphicsInfo_Noland;
+    case TRAINER_PIC_PIKE_QUEEN_LUCY:
+        return &gObjectEventGraphicsInfo_Lucy;
+    case TRAINER_PIC_PYRAMID_KING_BRANDON:
+        return &gObjectEventGraphicsInfo_Brandon;
+    case TRAINER_PIC_RED:
+        return &gObjectEventGraphicsInfo_Red;
+    case TRAINER_PIC_LEAF:
+        return &gObjectEventGraphicsInfo_Leaf;
+    case TRAINER_PIC_RS_BRENDAN:
+        return &gObjectEventGraphicsInfo_RubySapphireBrendan;
+    case TRAINER_PIC_RS_MAY:
+        return &gObjectEventGraphicsInfo_RubySapphireMay;
+    default:
+        break;
+    }
+
     switch (trainerClass)
     {
     case TRAINER_CLASS_HIKER:
         return &gObjectEventGraphicsInfo_Hiker;
     case TRAINER_CLASS_TEAM_AQUA:
     case TRAINER_CLASS_AQUA_ADMIN:
-    case TRAINER_CLASS_AQUA_LEADER:
         return &gObjectEventGraphicsInfo_AquaMemberM;
+    case TRAINER_CLASS_AQUA_LEADER:
+        return &gObjectEventGraphicsInfo_Archie;
     case TRAINER_CLASS_TEAM_MAGMA:
     case TRAINER_CLASS_MAGMA_ADMIN:
-    case TRAINER_CLASS_MAGMA_LEADER:
         return &gObjectEventGraphicsInfo_MagmaMemberM;
+    case TRAINER_CLASS_MAGMA_LEADER:
+        return &gObjectEventGraphicsInfo_Maxie;
     case TRAINER_CLASS_PKMN_BREEDER:
     case TRAINER_CLASS_AROMA_LADY:
     case TRAINER_CLASS_LADY:
+        return &gObjectEventGraphicsInfo_Woman2;
     case TRAINER_CLASS_BEAUTY:
-    case TRAINER_CLASS_PARASOL_LADY:
         return &gObjectEventGraphicsInfo_Beauty;
+    case TRAINER_CLASS_PARASOL_LADY:
+        return &gObjectEventGraphicsInfo_Woman5;
     case TRAINER_CLASS_COOLTRAINER:
     case TRAINER_CLASS_COOLTRAINER_2:
     case TRAINER_CLASS_DRAGON_TAMER:
-        return &gObjectEventGraphicsInfo_Boy3;
-    case TRAINER_CLASS_BIRD_KEEPER:
-    case TRAINER_CLASS_KINDLER:
         return &gObjectEventGraphicsInfo_Man3;
+    case TRAINER_CLASS_BIRD_KEEPER:
+    case TRAINER_CLASS_GUITARIST:
+    case TRAINER_CLASS_KINDLER:
+        return &gObjectEventGraphicsInfo_Man5;
     case TRAINER_CLASS_COLLECTOR:
     case TRAINER_CLASS_POKEMANIAC:
     case TRAINER_CLASS_RUIN_MANIAC:
@@ -937,8 +1147,9 @@ static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 t
     case TRAINER_CLASS_OLD_COUPLE:
         return &gObjectEventGraphicsInfo_ExpertM;
     case TRAINER_CLASS_BLACK_BELT:
-    case TRAINER_CLASS_BATTLE_GIRL:
         return &gObjectEventGraphicsInfo_BlackBelt;
+    case TRAINER_CLASS_BATTLE_GIRL:
+        return &gObjectEventGraphicsInfo_Girl3;
     case TRAINER_CLASS_HEX_MANIAC:
         return &gObjectEventGraphicsInfo_HexManiac;
     case TRAINER_CLASS_INTERVIEWER:
@@ -949,12 +1160,10 @@ static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 t
         return &gObjectEventGraphicsInfo_TuberM;
     case TRAINER_CLASS_RICH_BOY:
         return &gObjectEventGraphicsInfo_RichBoy;
-    case TRAINER_CLASS_GUITARIST:
-        return &gObjectEventGraphicsInfo_Man1;
     case TRAINER_CLASS_CAMPER:
-    case TRAINER_CLASS_PKMN_RANGER:
         return &gObjectEventGraphicsInfo_Camper;
     case TRAINER_CLASS_PICNICKER:
+    case TRAINER_CLASS_PKMN_RANGER:
         return &gObjectEventGraphicsInfo_Picnicker;
     case TRAINER_CLASS_PSYCHIC:
         return &gObjectEventGraphicsInfo_PsychicM;
@@ -976,7 +1185,7 @@ static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 t
     case TRAINER_CLASS_POKEFAN:
         return &gObjectEventGraphicsInfo_PokefanM;
     case TRAINER_CLASS_CHAMPION:
-        return &gObjectEventGraphicsInfo_Steven;
+        return &gObjectEventGraphicsInfo_Wallace;
     case TRAINER_CLASS_FISHERMAN:
         return &gObjectEventGraphicsInfo_Fisherman;
     case TRAINER_CLASS_TRIATHLETE:
@@ -992,7 +1201,7 @@ static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 t
     case TRAINER_CLASS_LASS:
         return &gObjectEventGraphicsInfo_Lass;
     case TRAINER_CLASS_SALON_MAIDEN:
-        return &gObjectEventGraphicsInfo_Woman5;
+        return &gObjectEventGraphicsInfo_Anabel;
     case TRAINER_CLASS_DOME_ACE:
         return &gObjectEventGraphicsInfo_Tucker;
     case TRAINER_CLASS_PALACE_MAVEN:
@@ -1021,6 +1230,16 @@ static enum TrainerClassID GetBattleOwOpponentTrainerClass(void)
         return TRAINER_CLASS_EXPERT;
 
     return GetTrainerClassFromId(TRAINER_BATTLE_PARAM.opponentA);
+}
+
+static enum TrainerPicID GetBattleOwOpponentTrainerPic(void)
+{
+    if (gBattleTypeFlags & BATTLE_TYPE_FRONTIER)
+        return GetFrontierTrainerFrontSpriteId(TRAINER_BATTLE_PARAM.opponentA);
+    if (gBattleTypeFlags & BATTLE_TYPE_TRAINER_HILL)
+        return TRAINER_PIC_NONE;
+
+    return GetTrainerPicFromId(TRAINER_BATTLE_PARAM.opponentA);
 }
 
 static const u16 *GetBattleOwPlayerTrainerPalette(void)
@@ -1098,7 +1317,7 @@ void BattleOverworldScene_CreateTrainerSprites(void)
 
     if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
     {
-        opponentGraphicsInfo = GetBattleOwTrainerGraphicsInfo(GetBattleOwOpponentTrainerClass());
+        opponentGraphicsInfo = GetBattleOwTrainerGraphicsInfo(GetBattleOwOpponentTrainerPic(), GetBattleOwOpponentTrainerClass());
         template = sTrainerTemplate;
         template.oam = opponentGraphicsInfo->oam;
         template.images = opponentGraphicsInfo->images;
