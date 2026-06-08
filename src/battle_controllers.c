@@ -49,6 +49,7 @@ static void InitBtlControllersInternal(void);
 static void SetBattlePartyIds(void);
 static void Task_HandleSendLinkBuffersData(u8 taskId);
 static void Task_HandleCopyReceivedLinkBuffersData(u8 taskId);
+static bool8 IsIntroPartySummaryHidden(enum BattlerId battler);
 static void Task_StartSendOutAnim(u8 taskId);
 static void SpriteCB_FreePlayerSpriteLoadMonSprite(struct Sprite *sprite);
 static void SpriteCB_FreeOpponentSprite(struct Sprite *sprite);
@@ -2967,9 +2968,27 @@ static bool32 TwoMonsAtSendOut(enum BattlerId battler)
     return FALSE;
 }
 
+static bool8 IsIntroPartySummaryHidden(enum BattlerId battler)
+{
+    if (!BattleOverworldScene_IsEnabled())
+        return TRUE;
+    if (gBattleSpritesDataPtr->healthBoxesData[battler].partyStatusSummaryShown)
+        return FALSE;
+    if (IsDoubleBattle() && !(gBattleTypeFlags & BATTLE_TYPE_MULTI)
+     && gBattleSpritesDataPtr->healthBoxesData[BATTLE_PARTNER(battler)].partyStatusSummaryShown)
+        return FALSE;
+
+    return TRUE;
+}
+
 // Send out at start of battle
 static void Task_StartSendOutAnim(u8 taskId)
 {
+    enum BattlerId battler = gTasks[taskId].tBattlerId;
+
+    if (!IsIntroPartySummaryHidden(battler))
+        return;
+
     if (gTasks[taskId].tFramesToWait != 0 && gTasks[taskId].tStartTimer < gTasks[taskId].tFramesToWait)
     {
         gTasks[taskId].tStartTimer++;
@@ -2977,7 +2996,6 @@ static void Task_StartSendOutAnim(u8 taskId)
     else
     {
         enum BattlerId battlerPartner;
-        enum BattlerId battler = gTasks[taskId].tBattlerId;
 
         if (TwoMonsAtSendOut(battler))
         {

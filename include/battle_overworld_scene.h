@@ -19,6 +19,7 @@ void BattleOverworldScene_BeginSceneFadeIn(void);
 void BattleOverworldScene_CreateTrainerSprites(void);
 void BattleOverworldScene_CreateIntroSprites(void);
 void BattleOverworldScene_CreateInitialSprites(void);
+void BattleOverworldScene_TryWildShinyAnimations(void);
 bool8 BattleOverworldScene_CreateBattlerSprite(u8 battler);
 void BattleOverworldScene_RegisterBattlerSprite(u8 battler, u8 spriteId);
 bool8 BattleOverworldScene_IsBattlerSprite(u8 battler, u8 spriteId);

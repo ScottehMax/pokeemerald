@@ -3,11 +3,13 @@
 #include "battle_anim.h"
 #include "battle_interface.h"
 #include "battle_overworld_scene.h"
+#include "battle_setup.h"
 #include "bg.h"
 #include "data.h"
 #include "decompress.h"
 #include "event_object_movement.h"
 #include "fieldmap.h"
+#include "frontier_util.h"
 #include "gpu_regs.h"
 #include "main.h"
 #include "palette.h"
@@ -15,10 +17,12 @@
 #include "sprite.h"
 #include "task.h"
 #include "constants/battle.h"
+#include "constants/battle_anim.h"
 #include "constants/event_objects.h"
 #include "constants/global.h"
 #include "constants/rgb.h"
 #include "constants/species.h"
+#include "constants/trainers.h"
 
 #define OW_TRAINER_PLAYER_PAL_SLOT 12
 #define OW_TRAINER_OPPONENT_PAL_SLOT 13
@@ -46,10 +50,52 @@ extern const struct OamData gObjectEventBaseOam_16x32;
 
 extern const u32 gObjectEventPic_BrendanNormalRunning[];
 extern const u32 gObjectEventPic_MayNormalRunning[];
-extern const u32 gObjectEventPic_Youngster[];
 extern const u16 gObjectEventPal_Brendan[];
 extern const u16 gObjectEventPal_May[];
-extern const u16 gObjectEventPal_Npc1[];
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_AquaMemberM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Beauty;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_BlackBelt;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Boy3;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Brandon;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_BugCatcher;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Camper;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_ExpertM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Fisherman;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Gentleman;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Greta;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_HexManiac;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Hiker;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Lass;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Lucy;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_MagmaMemberM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Man1;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Man3;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Maniac;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_NinjaBoy;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Noland;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Picnicker;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_PokefanM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_PsychicM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_ReporterM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RichBoy;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RivalBrendanNormal;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Roxanne;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RubySapphireBrendan;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_RunningTriathleteM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Sailor;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_SchoolKidM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Sidney;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Spenser;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Steven;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_SwimmerF;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_SwimmerM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_TuberF;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_TuberM;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Tucker;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Twin;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Woman1;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Woman5;
+extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_Youngster;
 
 static const struct SpriteFrameImage sPicTable_BattleBrendan[] =
 {
@@ -75,19 +121,6 @@ static const struct SpriteFrameImage sPicTable_BattleMay[] =
     overworld_frame(gObjectEventPic_MayNormalRunning, 2, 4, 6),
     overworld_frame(gObjectEventPic_MayNormalRunning, 2, 4, 7),
     overworld_frame(gObjectEventPic_MayNormalRunning, 2, 4, 8),
-};
-
-static const struct SpriteFrameImage sPicTable_BattleYoungster[] =
-{
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 0),
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 1),
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 2),
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 3),
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 4),
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 5),
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 6),
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 7),
-    overworld_frame(gObjectEventPic_Youngster, 2, 4, 8),
 };
 
 static const struct SpriteTemplate sTrainerTemplate =
@@ -125,7 +158,10 @@ static const union AnimCmd *const sAnimTable_BattleTrainerFaceEast[] =
 
 static bool8 IsBattleOverworldSceneEnabled(void);
 static void BattleOverworldScene_ApplyBg3Config(void);
+static enum TrainerClassID GetBattleOwOpponentTrainerClass(void);
+static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerClass);
 static const struct ObjectEventGraphicsInfo *GetBattleOwMonGraphicsInfo(struct Pokemon *mon, u8 battler, u16 *species, u16 *graphicsId);
+static void Task_BattleOverworldScene_WildShinyAnimations(u8 taskId);
 
 static u8 sPlayerTrainerSpriteId;
 static u8 sOpponentTrainerSpriteId;
@@ -775,9 +811,10 @@ static void Task_BattleOverworldScene_KeepSpritesVisible(u8 taskId)
         return;
     }
 
-    for (battler = 0; battler < gBattlersCount; battler++)
+    for (battler = 0; battler < MAX_BATTLERS_COUNT && battler < gBattlersCount; battler++)
     {
-        if (gBattlerSpriteIds[battler] < MAX_SPRITES && gSprites[gBattlerSpriteIds[battler]].inUse)
+        if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler])
+         && gSprites[gBattlerSpriteIds[battler]].inUse)
         {
             if (!sOwBattlerHiddenByBall[battler])
                 gSprites[gBattlerSpriteIds[battler]].invisible = FALSE;
@@ -1007,9 +1044,136 @@ void BattleOverworldScene_Reset(void)
     sCompositePalCount = 0;
 }
 
+static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(u8 trainerClass)
+{
+    switch (trainerClass)
+    {
+    case TRAINER_CLASS_HIKER:
+        return &gObjectEventGraphicsInfo_Hiker;
+    case TRAINER_CLASS_TEAM_AQUA:
+    case TRAINER_CLASS_AQUA_ADMIN:
+    case TRAINER_CLASS_AQUA_LEADER:
+        return &gObjectEventGraphicsInfo_AquaMemberM;
+    case TRAINER_CLASS_TEAM_MAGMA:
+    case TRAINER_CLASS_MAGMA_ADMIN:
+    case TRAINER_CLASS_MAGMA_LEADER:
+        return &gObjectEventGraphicsInfo_MagmaMemberM;
+    case TRAINER_CLASS_PKMN_BREEDER:
+    case TRAINER_CLASS_AROMA_LADY:
+    case TRAINER_CLASS_LADY:
+    case TRAINER_CLASS_BEAUTY:
+    case TRAINER_CLASS_PARASOL_LADY:
+        return &gObjectEventGraphicsInfo_Beauty;
+    case TRAINER_CLASS_COOLTRAINER:
+    case TRAINER_CLASS_COOLTRAINER_2:
+    case TRAINER_CLASS_DRAGON_TAMER:
+        return &gObjectEventGraphicsInfo_Boy3;
+    case TRAINER_CLASS_BIRD_KEEPER:
+    case TRAINER_CLASS_KINDLER:
+        return &gObjectEventGraphicsInfo_Man3;
+    case TRAINER_CLASS_COLLECTOR:
+    case TRAINER_CLASS_POKEMANIAC:
+    case TRAINER_CLASS_RUIN_MANIAC:
+    case TRAINER_CLASS_BUG_MANIAC:
+        return &gObjectEventGraphicsInfo_Maniac;
+    case TRAINER_CLASS_SWIMMER_M:
+        return &gObjectEventGraphicsInfo_SwimmerM;
+    case TRAINER_CLASS_SWIMMER_F:
+        return &gObjectEventGraphicsInfo_SwimmerF;
+    case TRAINER_CLASS_EXPERT:
+    case TRAINER_CLASS_OLD_COUPLE:
+        return &gObjectEventGraphicsInfo_ExpertM;
+    case TRAINER_CLASS_BLACK_BELT:
+    case TRAINER_CLASS_BATTLE_GIRL:
+        return &gObjectEventGraphicsInfo_BlackBelt;
+    case TRAINER_CLASS_HEX_MANIAC:
+        return &gObjectEventGraphicsInfo_HexManiac;
+    case TRAINER_CLASS_INTERVIEWER:
+        return &gObjectEventGraphicsInfo_ReporterM;
+    case TRAINER_CLASS_TUBER_F:
+        return &gObjectEventGraphicsInfo_TuberF;
+    case TRAINER_CLASS_TUBER_M:
+        return &gObjectEventGraphicsInfo_TuberM;
+    case TRAINER_CLASS_RICH_BOY:
+        return &gObjectEventGraphicsInfo_RichBoy;
+    case TRAINER_CLASS_GUITARIST:
+        return &gObjectEventGraphicsInfo_Man1;
+    case TRAINER_CLASS_CAMPER:
+    case TRAINER_CLASS_PKMN_RANGER:
+        return &gObjectEventGraphicsInfo_Camper;
+    case TRAINER_CLASS_PICNICKER:
+        return &gObjectEventGraphicsInfo_Picnicker;
+    case TRAINER_CLASS_PSYCHIC:
+        return &gObjectEventGraphicsInfo_PsychicM;
+    case TRAINER_CLASS_GENTLEMAN:
+        return &gObjectEventGraphicsInfo_Gentleman;
+    case TRAINER_CLASS_ELITE_FOUR:
+        return &gObjectEventGraphicsInfo_Sidney;
+    case TRAINER_CLASS_LEADER:
+        return &gObjectEventGraphicsInfo_Roxanne;
+    case TRAINER_CLASS_SCHOOL_KID:
+        return &gObjectEventGraphicsInfo_SchoolKidM;
+    case TRAINER_CLASS_SR_AND_JR:
+    case TRAINER_CLASS_TWINS:
+    case TRAINER_CLASS_YOUNG_COUPLE:
+    case TRAINER_CLASS_SIS_AND_BRO:
+        return &gObjectEventGraphicsInfo_Twin;
+    case TRAINER_CLASS_WINSTRATE:
+        return &gObjectEventGraphicsInfo_Woman1;
+    case TRAINER_CLASS_POKEFAN:
+        return &gObjectEventGraphicsInfo_PokefanM;
+    case TRAINER_CLASS_CHAMPION:
+        return &gObjectEventGraphicsInfo_Steven;
+    case TRAINER_CLASS_FISHERMAN:
+        return &gObjectEventGraphicsInfo_Fisherman;
+    case TRAINER_CLASS_TRIATHLETE:
+        return &gObjectEventGraphicsInfo_RunningTriathleteM;
+    case TRAINER_CLASS_NINJA_BOY:
+        return &gObjectEventGraphicsInfo_NinjaBoy;
+    case TRAINER_CLASS_SAILOR:
+        return &gObjectEventGraphicsInfo_Sailor;
+    case TRAINER_CLASS_RIVAL:
+        return &gObjectEventGraphicsInfo_RivalBrendanNormal;
+    case TRAINER_CLASS_BUG_CATCHER:
+        return &gObjectEventGraphicsInfo_BugCatcher;
+    case TRAINER_CLASS_LASS:
+        return &gObjectEventGraphicsInfo_Lass;
+    case TRAINER_CLASS_SALON_MAIDEN:
+        return &gObjectEventGraphicsInfo_Woman5;
+    case TRAINER_CLASS_DOME_ACE:
+        return &gObjectEventGraphicsInfo_Tucker;
+    case TRAINER_CLASS_PALACE_MAVEN:
+        return &gObjectEventGraphicsInfo_Spenser;
+    case TRAINER_CLASS_ARENA_TYCOON:
+        return &gObjectEventGraphicsInfo_Greta;
+    case TRAINER_CLASS_FACTORY_HEAD:
+        return &gObjectEventGraphicsInfo_Noland;
+    case TRAINER_CLASS_PIKE_QUEEN:
+        return &gObjectEventGraphicsInfo_Lucy;
+    case TRAINER_CLASS_PYRAMID_KING:
+        return &gObjectEventGraphicsInfo_Brandon;
+    case TRAINER_CLASS_RS_PROTAG:
+        return &gObjectEventGraphicsInfo_RubySapphireBrendan;
+    case TRAINER_CLASS_YOUNGSTER:
+    default:
+        return &gObjectEventGraphicsInfo_Youngster;
+    }
+}
+
+static enum TrainerClassID GetBattleOwOpponentTrainerClass(void)
+{
+    if (gBattleTypeFlags & BATTLE_TYPE_FRONTIER)
+        return GetFrontierOpponentClass(TRAINER_BATTLE_PARAM.opponentA);
+    if (gBattleTypeFlags & BATTLE_TYPE_TRAINER_HILL)
+        return TRAINER_CLASS_EXPERT;
+
+    return GetTrainerClassFromId(TRAINER_BATTLE_PARAM.opponentA);
+}
+
 void BattleOverworldScene_CreateTrainerSprites(void)
 {
     struct SpriteTemplate template;
+    const struct ObjectEventGraphicsInfo *opponentGraphicsInfo;
 
     if (!IsBattleOverworldSceneEnabled())
         return;
@@ -1038,10 +1202,12 @@ void BattleOverworldScene_CreateTrainerSprites(void)
 
     if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
     {
+        opponentGraphicsInfo = GetBattleOwTrainerGraphicsInfo(GetBattleOwOpponentTrainerClass());
         template = sTrainerTemplate;
-        template.images = sPicTable_BattleYoungster;
+        template.oam = opponentGraphicsInfo->oam;
+        template.images = opponentGraphicsInfo->images;
         template.anims = sAnimTable_BattleTrainerFaceWest;
-        LoadPalette(gObjectEventPal_Npc1, OBJ_PLTT_ID(OW_TRAINER_OPPONENT_PAL_SLOT), PLTT_SIZE_4BPP);
+        PatchObjectPalette(opponentGraphicsInfo->paletteTag, OW_TRAINER_OPPONENT_PAL_SLOT);
         sOpponentTrainerSpriteId = CreateSprite(&template, 212, OW_SCENE_BASE_Y, 0);
         if (sOpponentTrainerSpriteId != MAX_SPRITES)
         {
@@ -1204,7 +1370,7 @@ void BattleOverworldScene_CreateIntroSprites(void)
 
     BattleOverworldScene_CreateTrainerSprites();
 
-    for (battler = 0; battler < gBattlersCount; battler++)
+    for (battler = 0; battler < MAX_BATTLERS_COUNT && battler < gBattlersCount; battler++)
     {
         if (gHealthboxSpriteIds[battler] < MAX_SPRITES)
             SetHealthboxSpriteInvisible(gHealthboxSpriteIds[battler]);
@@ -1240,7 +1406,7 @@ void BattleOverworldScene_CreateInitialSprites(void)
 
     BattleOverworldScene_CreateTrainerSprites();
 
-    for (battler = 0; battler < gBattlersCount; battler++)
+    for (battler = 0; battler < MAX_BATTLERS_COUNT && battler < gBattlersCount; battler++)
     {
         BattleOverworldScene_CreateBattlerSprite(battler);
 
@@ -1254,6 +1420,65 @@ void BattleOverworldScene_CreateInitialSprites(void)
     }
 
     BattleOverworldScene_EnsureVisibilityTask();
+}
+
+void BattleOverworldScene_TryWildShinyAnimations(void)
+{
+    u8 battler;
+    bool8 started = FALSE;
+
+    if (!IsBattleOverworldSceneEnabled())
+        return;
+    if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+        return;
+    if (FindTaskIdByFunc(Task_BattleOverworldScene_WildShinyAnimations) != TASK_NONE)
+        return;
+
+    for (battler = 0; battler < MAX_BATTLERS_COUNT && battler < gBattlersCount; battler++)
+    {
+        if (GetBattlerSide(battler) != B_SIDE_OPPONENT)
+            continue;
+        if (!BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
+            continue;
+
+        TryShinyAnimation(battler, GetBattlerMon(battler));
+        started = TRUE;
+    }
+
+    if (started)
+        CreateTask(Task_BattleOverworldScene_WildShinyAnimations, 10);
+}
+
+static void Task_BattleOverworldScene_WildShinyAnimations(u8 taskId)
+{
+    u8 battler;
+    bool8 waiting = FALSE;
+
+    for (battler = 0; battler < gBattlersCount; battler++)
+    {
+        if (GetBattlerSide(battler) != B_SIDE_OPPONENT)
+            continue;
+        if (!gBattleSpritesDataPtr->healthBoxesData[battler].triedShinyMonAnim)
+            continue;
+        if (!gBattleSpritesDataPtr->healthBoxesData[battler].finishedShinyMonAnim)
+            waiting = TRUE;
+    }
+
+    if (waiting)
+        return;
+
+    for (battler = 0; battler < gBattlersCount; battler++)
+    {
+        if (GetBattlerSide(battler) != B_SIDE_OPPONENT)
+            continue;
+
+        gBattleSpritesDataPtr->healthBoxesData[battler].triedShinyMonAnim = FALSE;
+        gBattleSpritesDataPtr->healthBoxesData[battler].finishedShinyMonAnim = FALSE;
+    }
+
+    FreeSpriteTilesByTag(ANIM_TAG_GOLD_STARS);
+    FreeSpritePaletteByTag(ANIM_TAG_GOLD_STARS);
+    DestroyTask(taskId);
 }
 
 bool8 BattleOverworldScene_LoadMonSpriteGfx(struct Pokemon *mon, u8 battler)
@@ -1278,7 +1503,6 @@ bool8 BattleOverworldScene_LoadMonSpriteGfx(struct Pokemon *mon, u8 battler)
     palette = GetBattleOwMonPalette(species, shiny, female);
     LoadPalette(palette, OBJ_PLTT_ID(battler), PLTT_SIZE_4BPP);
     LoadPalette(palette, BG_PLTT_ID(8) + BG_PLTT_ID(battler), PLTT_SIZE_4BPP);
-    BattleOverworldScene_CreateTrainerSprites();
 
     return TRUE;
 }

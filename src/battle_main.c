@@ -3568,6 +3568,7 @@ static void DoBattleIntro(void)
                 PlayCry_ByMode(gBattleMons[battler].species, 25, CRY_MODE_NORMAL);
             }
             BattleOverworldScene_BeginSceneFadeIn();
+            BattleOverworldScene_TryWildShinyAnimations();
             if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
                 gBattleStruct->eventState.battleIntro++;
             else
