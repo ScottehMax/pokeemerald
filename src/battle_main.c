@@ -10,6 +10,7 @@
 #include "battle_interface.h"
 #include "battle_main.h"
 #include "battle_message.h"
+#include "battle_overworld_scene.h"
 #include "battle_pyramid.h"
 #include "battle_scripts.h"
 #include "battle_setup.h"
@@ -536,7 +537,11 @@ static void CB2_InitBattleInternal(void)
     {
         gBattle_WIN0V = WIN_RANGE(DISPLAY_HEIGHT / 2, DISPLAY_HEIGHT / 2 + 1);
         ScanlineEffect_Clear();
-        if (B_FAST_INTRO_NO_SLIDE == FALSE && !gTestRunnerHeadless)
+        if (BattleOverworldScene_IsEnabled())
+        {
+            gBattle_WIN0V = 0;
+        }
+        else if (B_FAST_INTRO_NO_SLIDE == FALSE && !gTestRunnerHeadless)
         {
             for (i = 0; i < DISPLAY_HEIGHT / 2; i++)
             {
@@ -574,6 +579,7 @@ static void CB2_InitBattleInternal(void)
     InitBattleBgsVideo();
     LoadBattleTextboxAndBackground();
     ResetSpriteData();
+    BattleOverworldScene_Reset();
     ResetTasks();
     if (B_FAST_INTRO_NO_SLIDE == FALSE && !gTestRunnerHeadless)
         DrawBattleEntryBackground();
@@ -1747,11 +1753,16 @@ static void CB2_HandleStartMultiBattle(void)
 
 void BattleMainCB2(void)
 {
+    BattleOverworldScene_TraceBg3(1);
     AnimateSprites();
+    BattleOverworldScene_FixBattlerSpriteOrientations();
     BuildOamBuffer();
     RunTextPrinters();
     UpdatePaletteFade();
     RunTasks();
+    BattleOverworldScene_TraceBg3(2);
+    BattleOverworldScene_KeepBaseBackgroundVisible();
+    BattleOverworldScene_TraceBg3(3);
 
     if (JOY_HELD(B_BUTTON) && gBattleTypeFlags & BATTLE_TYPE_RECORDED && RecordedBattle_CanStopPlayback())
     {
@@ -2056,9 +2067,11 @@ void VBlankCB_Battle(void)
     SetGpuReg(REG_OFFSET_WIN0V, gBattle_WIN0V);
     SetGpuReg(REG_OFFSET_WIN1H, gBattle_WIN1H);
     SetGpuReg(REG_OFFSET_WIN1V, gBattle_WIN1V);
+    BattleOverworldScene_TraceBg3(11);
     LoadOam();
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();
+    BattleOverworldScene_TraceBg3(12);
     ScanlineEffect_InitHBlankDmaTransfer();
 }
 
@@ -3402,6 +3415,9 @@ static void DoBattleIntro(void)
             gBattleStruct->eventState.battleIntro++;
         break;
     case BATTLE_INTRO_STATE_DRAW_SPRITES:
+    {
+        bool8 overworldScene = BattleOverworldScene_IsEnabled();
+
         for (battler = 0; battler < gBattlersCount; battler++)
         {
             if ((gBattleTypeFlags & BATTLE_TYPE_SAFARI) && IsOnPlayerSide(battler))
@@ -3434,27 +3450,39 @@ static void DoBattleIntro(void)
             switch (GetBattlerPosition(battler))
             {
             case B_POSITION_PLAYER_LEFT: // player sprite
-                BtlController_EmitDrawTrainerPic(battler, B_COMM_TO_CONTROLLER);
-                MarkBattlerForControllerExec(battler);
-                break;
-            case B_POSITION_OPPONENT_LEFT:
-                if (gBattleTypeFlags & BATTLE_TYPE_TRAINER) // opponent 1 sprite
+                if (!overworldScene)
                 {
                     BtlController_EmitDrawTrainerPic(battler, B_COMM_TO_CONTROLLER);
                     MarkBattlerForControllerExec(battler);
                 }
+                break;
+            case B_POSITION_OPPONENT_LEFT:
+                if (gBattleTypeFlags & BATTLE_TYPE_TRAINER) // opponent 1 sprite
+                {
+                    if (!overworldScene)
+                    {
+                        BtlController_EmitDrawTrainerPic(battler, B_COMM_TO_CONTROLLER);
+                        MarkBattlerForControllerExec(battler);
+                    }
+                }
                 else // wild mon 1
                 {
-                    BtlController_EmitLoadMonSprite(battler, B_COMM_TO_CONTROLLER);
-                    MarkBattlerForControllerExec(battler);
+                    if (!overworldScene)
+                    {
+                        BtlController_EmitLoadMonSprite(battler, B_COMM_TO_CONTROLLER);
+                        MarkBattlerForControllerExec(battler);
+                    }
                     gBattleResults.lastOpponentSpecies = GetMonData(GetBattlerMon(battler), MON_DATA_SPECIES);
                 }
                 break;
             case B_POSITION_PLAYER_RIGHT:
                 if (gBattleTypeFlags & (BATTLE_TYPE_MULTI | BATTLE_TYPE_INGAME_PARTNER)) // partner sprite
                 {
-                    BtlController_EmitDrawTrainerPic(battler, B_COMM_TO_CONTROLLER);
-                    MarkBattlerForControllerExec(battler);
+                    if (!overworldScene)
+                    {
+                        BtlController_EmitDrawTrainerPic(battler, B_COMM_TO_CONTROLLER);
+                        MarkBattlerForControllerExec(battler);
+                    }
                 }
                 break;
             case B_POSITION_OPPONENT_RIGHT:
@@ -3462,14 +3490,20 @@ static void DoBattleIntro(void)
                 {
                     if (gBattleTypeFlags & (BATTLE_TYPE_MULTI | BATTLE_TYPE_TWO_OPPONENTS) && !BATTLE_TWO_VS_ONE_OPPONENT) // opponent 2 if exists
                     {
-                        BtlController_EmitDrawTrainerPic(battler, B_COMM_TO_CONTROLLER);
-                        MarkBattlerForControllerExec(battler);
+                        if (!overworldScene)
+                        {
+                            BtlController_EmitDrawTrainerPic(battler, B_COMM_TO_CONTROLLER);
+                            MarkBattlerForControllerExec(battler);
+                        }
                     }
                 }
                 else if (IsBattlerAlive(battler)) // wild mon 2 if alive
                 {
-                    BtlController_EmitLoadMonSprite(battler, B_COMM_TO_CONTROLLER);
-                    MarkBattlerForControllerExec(battler);
+                    if (!overworldScene)
+                    {
+                        BtlController_EmitLoadMonSprite(battler, B_COMM_TO_CONTROLLER);
+                        MarkBattlerForControllerExec(battler);
+                    }
                     gBattleResults.lastOpponentSpecies = GetMonData(GetBattlerMon(battler), MON_DATA_SPECIES);
                 }
                 break;
@@ -3481,11 +3515,17 @@ static void DoBattleIntro(void)
                 BattleArena_InitPoints();
         }
 
-        if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+        if (overworldScene)
+        {
+            BattleOverworldScene_CreateInitialSprites();
+            gBattleStruct->eventState.battleIntro = BATTLE_INTRO_STATE_SET_DEX_AND_BATTLE_VARS;
+        }
+        else if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
             gBattleStruct->eventState.battleIntro++;
         else // Skip party summary since it is a wild battle.
             gBattleStruct->eventState.battleIntro = BATTLE_INTRO_STATE_INTRO_TEXT;
         break;
+    }
     case BATTLE_INTRO_STATE_DRAW_PARTY_SUMMARY:
         if (!gBattleControllerExecFlags)
         {

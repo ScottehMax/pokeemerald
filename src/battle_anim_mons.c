@@ -2,6 +2,7 @@
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_interface.h"
+#include "battle_overworld_scene.h"
 #include "bg.h"
 #include "contest.h"
 #include "data.h"
@@ -964,6 +965,12 @@ u8 GetBattleBgPaletteNum(void)
 
 void UpdateAnimBg3ScreenSize(bool8 largeScreenSize)
 {
+    if (BattleOverworldScene_IsEnabled())
+    {
+        BattleOverworldScene_KeepBaseBackgroundVisible();
+        return;
+    }
+
     if (!largeScreenSize || IsContest())
     {
         SetAnimBgAttribute(3, BG_ANIM_SCREEN_SIZE, 0);
@@ -1339,7 +1346,9 @@ u32 GetBattlePalettesMask(bool8 battleBackground, bool8 attacker, bool8 target, 
 
     if (battleBackground)
     {
-        if (!IsContest())
+        if (BattleOverworldScene_IsEnabled())
+            selectedPalettes = BattleOverworldScene_GetBgPaletteMask();
+        else if (!IsContest())
             selectedPalettes = 0xe; // Palettes 1, 2, and 3
         else
             selectedPalettes = 1 << GetBattleBgPaletteNum();
@@ -2253,6 +2262,13 @@ u8 CreateInvisibleSpriteCopy(enum BattlerId battler, u8 spriteId, enum Species s
     gSprites[newSpriteId].oam.objMode = ST_OAM_OBJ_WINDOW;
     gSprites[newSpriteId].oam.tileNum = gSprites[spriteId].oam.tileNum;
     gSprites[newSpriteId].callback = SpriteCallbackDummy;
+    if (BattleOverworldScene_IsEnabled())
+    {
+        gSprites[newSpriteId].animBeginning = FALSE;
+        gSprites[newSpriteId].animEnded = TRUE;
+        gSprites[newSpriteId].animDelayCounter = 0;
+        gSprites[newSpriteId].animPaused = TRUE;
+    }
     return newSpriteId;
 }
 

@@ -1,5 +1,6 @@
 #include "global.h"
 #include "battle_anim.h"
+#include "battle_overworld_scene.h"
 #include "random.h"
 #include "scanline_effect.h"
 #include "task.h"
@@ -580,6 +581,11 @@ void AnimTask_HorizontalShake(u8 taskId)
     switch (animBattler)
     {
     case ANIM_OPPONENT_LEFT: // Shake platforms
+        if (BattleOverworldScene_IsEnabled())
+        {
+            DestroyAnimVisualTask(taskId);
+            return;
+        }
         task->tInitialX = gBattle_BG3_X;
         task->func = AnimTask_ShakePlatforms;
         break;
@@ -738,6 +744,12 @@ void AnimTask_PositionFissureBgOnBattler(u8 taskId)
 
     if (gBattleAnimArgs[0] > ANIM_TARGET)
         battler = BATTLE_PARTNER(battler);
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        DestroyAnimVisualTask(taskId);
+        return;
+    }
 
     newTask = &gTasks[CreateTask(WaitForFissureCompletion, gBattleAnimArgs[1])];
     newTask->data[1] = (32 - GetBattlerSpriteCoord(battler, BATTLER_COORD_X_2)) & 0x1FF;

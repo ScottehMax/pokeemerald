@@ -7,6 +7,7 @@
 #include "battle_gfx_sfx_util.h"
 #include "battle_interface.h"
 #include "battle_message.h"
+#include "battle_overworld_scene.h"
 #include "battle_setup.h"
 #include "battle_tv.h"
 #include "cable_club.h"
@@ -2001,6 +2002,7 @@ void StartSendOutAnim(enum BattlerId battler, bool32 dontClearTransform, bool32 
     enum Species species;
     struct Pokemon *mon = GetBattlerMon(battler);
     u32 sendoutType;
+    bool8 overworldSprite;
 
     if (IsOnPlayerSide(battler))
     {
@@ -2021,17 +2023,21 @@ void StartSendOutAnim(enum BattlerId battler, bool32 dontClearTransform, bool32 
     // Load sprite for opponent only, player sprite is expected to be already loaded.
     if (!IsOnPlayerSide(battler))
         BattleLoadMonSpriteGfx(mon, battler);
-    SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
+    overworldSprite = BattleOverworldScene_SetMonSpriteTemplate(species, battler);
+    if (!overworldSprite)
+        SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
 
     gBattlerSpriteIds[battler] = CreateSprite(&gMultiuseSpriteTemplate,
                                         GetBattlerSpriteCoord(battler, BATTLER_COORD_X_2),
-                                        GetBattlerSpriteDefault_Y(battler),
+                                        GetBattlerSpriteCoord(battler, BATTLER_COORD_Y),
                                         GetBattlerSpriteSubpriority(battler));
 
     gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
     gSprites[gBattlerSpriteIds[battler]].data[2] = species;
     gSprites[gBattlerSpriteIds[battler]].oam.paletteNum = battler;
-    StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
+    if (overworldSprite)
+        BattleOverworldScene_RegisterBattlerSprite(battler, gBattlerSpriteIds[battler]);
+    StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], overworldSprite ? BattleOverworldScene_GetBattlerAnimNum(battler) : 0);
     gSprites[gBattlerSpriteIds[battler]].invisible = TRUE;
     gSprites[gBattlerSpriteIds[battler]].callback = SpriteCallbackDummy;
 
@@ -2345,6 +2351,7 @@ void BtlController_HandleLoadMonSprite(enum BattlerId battler)
     u32 y;
     struct Pokemon *mon = GetBattlerMon(battler);
     enum Species species = GetBattlerVisualSpecies(battler);
+    bool8 overworldSprite;
 
     if (gBattleTypeFlags & BATTLE_TYPE_GHOST && GetBattlerSide(battler) == B_SIDE_OPPONENT)
     {
@@ -2358,7 +2365,9 @@ void BtlController_HandleLoadMonSprite(enum BattlerId battler)
         BattleLoadMonSpriteGfx(mon, battler);
         y = GetBattlerSpriteDefault_Y(battler);
     }
-    SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
+    overworldSprite = BattleOverworldScene_SetMonSpriteTemplate(species, battler);
+    if (!overworldSprite)
+        SetMultiuseSpriteTemplateToPokemon(species, GetBattlerPosition(battler));
 
     gBattlerSpriteIds[battler] = CreateSprite(&gMultiuseSpriteTemplate,
                                                GetBattlerSpriteCoord(battler, BATTLER_COORD_X_2),
@@ -2369,7 +2378,9 @@ void BtlController_HandleLoadMonSprite(enum BattlerId battler)
     gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
     gSprites[gBattlerSpriteIds[battler]].data[2] = species;
     gSprites[gBattlerSpriteIds[battler]].oam.paletteNum = battler;
-    StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
+    if (overworldSprite)
+        BattleOverworldScene_RegisterBattlerSprite(battler, gBattlerSpriteIds[battler]);
+    StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], overworldSprite ? BattleOverworldScene_GetBattlerAnimNum(battler) : 0);
 
     if (!(gBattleTypeFlags & BATTLE_TYPE_GHOST))
         SetBattlerShadowSpriteCallback(battler, species);
@@ -2965,7 +2976,10 @@ static void SpriteCB_FreePlayerSpriteLoadMonSprite(struct Sprite *sprite)
 
     // Load mon sprite
     BattleLoadMonSpriteGfx(GetBattlerMon(battler), battler);
-    StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
+    if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
+        StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], BattleOverworldScene_GetBattlerAnimNum(battler));
+    else
+        StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
 }
 
 static void SpriteCB_FreeOpponentSprite(struct Sprite *sprite)
@@ -3052,6 +3066,8 @@ static void AnimateMonAfterKnockout(enum BattlerId battler)
 {
     if (B_ANIMATE_MON_AFTER_KO == FALSE)
         return;
+    if (BattleOverworldScene_IsEnabled())
+        return;
 
     enum BattlerId oppositeBattler = BATTLE_OPPOSITE(battler);
     enum BattlerId partnerBattler = BATTLE_PARTNER(oppositeBattler);
@@ -3124,7 +3140,8 @@ void TryShinyAnimAfterMonAnim(enum BattlerId battler)
 
 void WaitForMonAnimAfterLoad(enum BattlerId battler)
 {
-    if (gSprites[gBattlerSpriteIds[battler]].animEnded && gSprites[gBattlerSpriteIds[battler]].x2 == 0)
+    if ((BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]) || gSprites[gBattlerSpriteIds[battler]].animEnded)
+     && gSprites[gBattlerSpriteIds[battler]].x2 == 0)
         BtlController_Complete(battler);
 }
 
@@ -3195,7 +3212,10 @@ void BtlController_HandleSwitchInShowHealthbox(enum BattlerId battler)
             HandleLowHpMusicChange(GetBattlerMon(battler), battler);
         }
 
-        StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
+        if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
+            StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], BattleOverworldScene_GetBattlerAnimNum(battler));
+        else
+            StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
         UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], GetBattlerMon(battler), HEALTHBOX_ALL);
         StartHealthboxSlideIn(battler);
         SetHealthboxSpriteVisible(gHealthboxSpriteIds[battler]);

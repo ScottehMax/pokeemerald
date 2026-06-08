@@ -1,5 +1,6 @@
 #include "global.h"
 #include "battle_anim.h"
+#include "battle_overworld_scene.h"
 #include "battle_environment.h"
 #include "contest.h"
 #include "gpu_regs.h"
@@ -704,6 +705,12 @@ void AnimTask_BlendNonAttackerPalettes(u8 taskId)
 void AnimTask_StartSlidingBg(u8 taskId)
 {
     u8 newTaskId;
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        DestroyAnimVisualTask(taskId);
+        return;
+    }
 
     UpdateAnimBg3ScreenSize(FALSE);
     newTaskId = CreateTask(AnimTask_UpdateSlidingBg, 5);

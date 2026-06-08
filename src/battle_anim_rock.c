@@ -1,5 +1,6 @@
 #include "global.h"
 #include "battle_anim.h"
+#include "battle_overworld_scene.h"
 #include "gpu_regs.h"
 #include "graphics.h"
 #include "palette.h"
@@ -978,6 +979,12 @@ void AnimTask_GetSeismicTossDamageLevel(u8 taskId)
 
 void AnimTask_MoveSeismicTossBg(u8 taskId)
 {
+    if (BattleOverworldScene_IsEnabled())
+    {
+        DestroyAnimVisualTask(taskId);
+        return;
+    }
+
     if (gTasks[taskId].data[0] == 0)
     {
         UpdateAnimBg3ScreenSize(FALSE);
@@ -998,6 +1005,12 @@ void AnimTask_MoveSeismicTossBg(u8 taskId)
 
 void AnimTask_SeismicTossBgAccelerateDownAtEnd(u8 taskId)
 {
+    if (BattleOverworldScene_IsEnabled())
+    {
+        DestroyAnimVisualTask(taskId);
+        return;
+    }
+
     if (gTasks[taskId].data[0] == 0)
     {
         UpdateAnimBg3ScreenSize(FALSE);

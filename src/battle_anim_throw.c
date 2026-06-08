@@ -3,6 +3,7 @@
 #include "battle_anim.h"
 #include "battle_controllers.h"
 #include "battle_interface.h"
+#include "battle_overworld_scene.h"
 #include "decompress.h"
 #include "dma3.h"
 #include "gpu_regs.h"
@@ -1519,7 +1520,8 @@ static void SpriteCB_Ball_Release_Step(struct Sprite *sprite)
 
     // Animate Pokémon emerging from Poké Ball
     gSprites[gBattlerSpriteIds[gBattleAnimTarget]].invisible = FALSE;
-    StartSpriteAffineAnim(&gSprites[gBattlerSpriteIds[gBattleAnimTarget]], BATTLER_AFFINE_EMERGE);
+    if (!BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, gBattlerSpriteIds[gBattleAnimTarget]))
+        StartSpriteAffineAnim(&gSprites[gBattlerSpriteIds[gBattleAnimTarget]], BATTLER_AFFINE_EMERGE);
     AnimateSprite(&gSprites[gBattlerSpriteIds[gBattleAnimTarget]]);
     gSprites[gBattlerSpriteIds[gBattleAnimTarget]].sOffsetY = 4096;
 }
@@ -1531,7 +1533,12 @@ static void SpriteCB_Ball_Release_Wait(struct Sprite *sprite)
     if (sprite->animEnded)
         sprite->invisible = TRUE;
 
-    if (gSprites[gBattlerSpriteIds[gBattleAnimTarget]].affineAnimEnded)
+    if (BattleOverworldScene_IsBattlerSprite(gBattleAnimTarget, gBattlerSpriteIds[gBattleAnimTarget])
+     && gSprites[gBattlerSpriteIds[gBattleAnimTarget]].sOffsetY <= 0)
+    {
+        released = TRUE;
+    }
+    else if (gSprites[gBattlerSpriteIds[gBattleAnimTarget]].affineAnimEnded)
     {
         StartSpriteAffineAnim(&gSprites[gBattlerSpriteIds[gBattleAnimTarget]], BATTLER_AFFINE_NORMAL);
         released = TRUE;

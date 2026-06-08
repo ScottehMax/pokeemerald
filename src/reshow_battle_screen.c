@@ -11,6 +11,7 @@
 #include "battle_controllers.h"
 #include "link.h"
 #include "sprite.h"
+#include "battle_overworld_scene.h"
 #include "trainer.h"
 #include "constants/trainers.h"
 #include "battle_interface.h"
@@ -140,6 +141,7 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
             enum BattlerId opponentBattler;
             enum Species species;
 
+            BattleOverworldScene_CreateTrainerSprites();
             LoadAndCreateEnemyShadowSprites();
 
             opponentBattler = GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT);
@@ -164,7 +166,15 @@ static void CB2_ReshowBattleScreenAfterMenu(void)
         break;
     default:
         SetVBlankCallback(VBlankCB_Battle);
-        ClearBattleBgCntBaseBlocks();
+        if (BattleOverworldScene_IsEnabled())
+        {
+            BattleOverworldScene_LoadBackground();
+            LoadBattleMenuWindowGfx();
+        }
+        else
+        {
+            ClearBattleBgCntBaseBlocks();
+        }
         BeginHardwarePaletteFade(0xFF, 0, 0x10, 0, 1);
         gPaletteFade.bufferTransferDisabled = 0;
         SetMainCallback2(BattleMainCB2);
@@ -307,6 +317,9 @@ void CreateBattlerSprite(enum BattlerId battler)
         u8 posY;
         enum BattlerPosition position = GetBattlerPosition(battler);
 
+        if (BattleOverworldScene_CreateBattlerSprite(battler))
+            return;
+
         if (IsGhostBattleWithoutScope())
             posY = GetGhostSpriteDefault_Y(battler);
         else if (gBattleSpritesDataPtr->battlerData[battler].behindSubstitute)
@@ -332,7 +345,10 @@ void CreateBattlerSprite(enum BattlerId battler)
             gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
             gSprites[gBattlerSpriteIds[battler]].data[2] = species;
 
-            StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
+            if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
+                StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], BattleOverworldScene_GetBattlerAnimNum(battler));
+            else
+                StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
         }
         else if (gBattleTypeFlags & BATTLE_TYPE_SAFARI && position == B_POSITION_PLAYER_LEFT)
         {
@@ -372,7 +388,10 @@ void CreateBattlerSprite(enum BattlerId battler)
             gSprites[gBattlerSpriteIds[battler]].data[0] = battler;
             gSprites[gBattlerSpriteIds[battler]].data[2] = species;
 
-            StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
+            if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
+                StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], BattleOverworldScene_GetBattlerAnimNum(battler));
+            else
+                StartSpriteAnim(&gSprites[gBattlerSpriteIds[battler]], 0);
         }
 
         gSprites[gBattlerSpriteIds[battler]].invisible = gBattleSpritesDataPtr->battlerData[battler].invisible;

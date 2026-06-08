@@ -4,6 +4,7 @@
 #include "battle_message.h"
 #include "battle_anim.h"
 #include "battle_anim_scripts.h"
+#include "battle_overworld_scene.h"
 #include "battle_ai_record.h"
 #include "battle_ai_util.h"
 #include "battle_scripts.h"
@@ -10317,6 +10318,7 @@ static void Cmd_displaydexinfo(void)
         if (!gPaletteFade.active)
         {
             CloseMainBattleScreen();
+            BattleOverworldScene_SetSuspended(TRUE);
             gBattleCommunication[TASK_ID] = DisplayCaughtMonDexPage(species,
                                                                     GetMonData(mon, MON_DATA_IS_SHINY),
                                                                     GetMonData(mon, MON_DATA_PERSONALITY));
@@ -10333,6 +10335,7 @@ static void Cmd_displaydexinfo(void)
         }
         break;
     case 3:
+        BattleOverworldScene_SetSuspended(FALSE);
         InitBattleBgsVideo();
         LoadBattleTextboxAndBackground();
         gBattle_BG3_X = 256;
@@ -13961,4 +13964,3 @@ void BS_RestoreStatChangeQueue(void)
     ClearOtherStatChangeValues(gBattlerAttacker);
     gBattlescriptCurrInstr = cmd->nextInstr;
 }
-
