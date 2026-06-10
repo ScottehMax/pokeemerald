@@ -2504,6 +2504,7 @@ static void Cmd_splitbgprio(void)
     enum AnimBattler wantedBattler;
     enum BattlerId battler;
     enum BattlerPosition battlerPosition;
+    u8 bg1Priority;
 
     wantedBattler = sBattleAnimScriptPtr[1];
     sBattleAnimScriptPtr += 2;
@@ -2517,7 +2518,8 @@ static void Cmd_splitbgprio(void)
     battlerPosition = GetBattlerPosition(battler);
     if (!IsContest() && (battlerPosition == B_POSITION_PLAYER_LEFT || battlerPosition == B_POSITION_OPPONENT_RIGHT))
     {
-        SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 1);
+        bg1Priority = BattleOverworldScene_IsEnabled() ? 2 : 1;
+        SetAnimBgAttribute(1, BG_ANIM_PRIORITY, bg1Priority);
         if (!BattleOverworldScene_IsEnabled())
             SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
     }
@@ -2528,7 +2530,7 @@ static void Cmd_splitbgprio_all(void)
     sBattleAnimScriptPtr++;
     if (!IsContest())
     {
-        SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 1);
+        SetAnimBgAttribute(1, BG_ANIM_PRIORITY, BattleOverworldScene_IsEnabled() ? 2 : 1);
         if (!BattleOverworldScene_IsEnabled())
             SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
     }
@@ -2539,6 +2541,7 @@ static void Cmd_splitbgprio_foes(void)
     enum AnimBattler wantedBattler;
     enum BattlerPosition battlerPosition;
     enum BattlerId battler;
+    u8 bg1Priority;
 
     wantedBattler = sBattleAnimScriptPtr[1];
     sBattleAnimScriptPtr += 2;
@@ -2555,7 +2558,8 @@ static void Cmd_splitbgprio_foes(void)
         battlerPosition = GetBattlerPosition(battler);
         if (!IsContest() && (battlerPosition == B_POSITION_PLAYER_LEFT || battlerPosition == B_POSITION_OPPONENT_RIGHT))
         {
-            SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 1);
+            bg1Priority = BattleOverworldScene_IsEnabled() ? 2 : 1;
+            SetAnimBgAttribute(1, BG_ANIM_PRIORITY, bg1Priority);
             if (!BattleOverworldScene_IsEnabled())
                 SetAnimBgAttribute(2, BG_ANIM_PRIORITY, 2);
         }

@@ -18,6 +18,7 @@ static void AnimCirclingSparkle(struct Sprite *);
 static void AnimShakeMonOrBattlePlatforms(struct Sprite *);
 static void AnimShakeMonOrBattlePlatforms_Step(struct Sprite *);
 static void AnimShakeMonOrBattlePlatforms_UpdateCoordOffsetEnabled(void);
+static u32 GetSelectedPalettesForSceneBlend(s16 selector);
 static void AnimHitSplatPersistent(struct Sprite *);
 static void AnimHitSplatHandleInvert(struct Sprite *);
 static void AnimConfusionDuck_Step(struct Sprite *);
@@ -401,6 +402,16 @@ u32 UnpackSelectedBattlePalettes(s16 selector)
     return GetBattlePalettesMask(battleBackground, attacker, target, attackerPartner, targetPartner, anim1, anim2);
 }
 
+static u32 GetSelectedPalettesForSceneBlend(s16 selector)
+{
+    u32 selectedPalettes = UnpackSelectedBattlePalettes(selector);
+
+    if ((selector & (F_PAL_BG | F_PAL_BATTLERS)) == (F_PAL_BG | F_PAL_BATTLERS))
+        selectedPalettes = BattleOverworldScene_ApplyScenePaletteMask(selectedPalettes);
+
+    return selectedPalettes;
+}
+
 static void AnimSimplePaletteBlend_Step(struct Sprite *sprite)
 {
     if (!gPaletteFade.active)
@@ -431,7 +442,7 @@ static void AnimComplexPaletteBlend(struct Sprite *sprite)
     sprite->sBlendY2 = cmd->blendY2;
     sprite->sPaletteSelector = cmd->selector;
 
-    selectedPalettes = UnpackSelectedBattlePalettes(sprite->sPaletteSelector);
+    selectedPalettes = GetSelectedPalettesForSceneBlend(sprite->sPaletteSelector);
     BlendPalettes(selectedPalettes, cmd->blendY1, cmd->color1);
     sprite->invisible = TRUE;
     sprite->callback = AnimComplexPaletteBlend_Step1;
@@ -456,7 +467,7 @@ static void AnimComplexPaletteBlend_Step1(struct Sprite *sprite)
         return;
     }
 
-    selectedPalettes = UnpackSelectedBattlePalettes(sprite->sPaletteSelector);
+    selectedPalettes = GetSelectedPalettesForSceneBlend(sprite->sPaletteSelector);
     if (sprite->sDelay & 0x100)
         BlendPalettes(selectedPalettes, sprite->sBlendY1, sprite->sColor1);
     else
@@ -473,7 +484,7 @@ static void AnimComplexPaletteBlend_Step2(struct Sprite *sprite)
 
     if (!gPaletteFade.active)
     {
-        selectedPalettes = UnpackSelectedBattlePalettes(sprite->sPaletteSelector);
+        selectedPalettes = GetSelectedPalettesForSceneBlend(sprite->sPaletteSelector);
         BlendPalettes(selectedPalettes, 0, 0);
         DestroyAnimSprite(sprite);
     }
@@ -536,7 +547,7 @@ void AnimTask_BlendColorCycle(u8 taskId)
 
 static void BlendColorCycle(u8 taskId, u8 startBlendAmount, u8 targetBlendAmount)
 {
-    u32 selectedPalettes = UnpackSelectedBattlePalettes(gTasks[taskId].tPalSelector);
+    u32 selectedPalettes = GetSelectedPalettesForSceneBlend(gTasks[taskId].tPalSelector);
     BeginNormalPaletteFade(
         selectedPalettes,
         gTasks[taskId].tDelay,

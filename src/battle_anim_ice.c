@@ -1622,7 +1622,10 @@ static void AnimHailContinue(struct Sprite *sprite)
 // arg 5: arc height (negative)
 static void InitIceBallAnim(struct Sprite *sprite)
 {
-    u32 animNum = gAnimDisableStructPtr->rolloutTimer + 1;
+    u32 animNum = gAnimDisableStructPtr->rolloutTimer;
+
+    if (animNum > 4)
+        animNum = 4;
 
     StartSpriteAffineAnim(sprite, animNum);
     InitSpritePosToAnimAttacker(sprite, TRUE);
@@ -1691,7 +1694,7 @@ static void AnimIceBallParticle(struct Sprite *sprite)
 void AnimTask_GetIceBallCounter(u8 taskId)
 {
     u8 arg = gBattleAnimArgs[0];
-    gBattleAnimArgs[arg] = gAnimDisableStructPtr->rolloutTimer + 1;
+    gBattleAnimArgs[arg] = min(gAnimDisableStructPtr->rolloutTimer, 4);
     DestroyAnimVisualTask(taskId);
 }
 

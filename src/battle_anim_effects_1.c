@@ -4889,6 +4889,12 @@ void AnimTask_CycleMagicalLeafPal(u8 taskId)
     switch (task->data[0])
     {
     case 0:
+        if (!TryLoadPal(ANIM_TAG_LEAF) || !TryLoadPal(ANIM_TAG_RAZOR_LEAF))
+        {
+            DestroyAnimVisualTask(taskId);
+            return;
+        }
+
         task->data[8] = OBJ_PLTT_ID(IndexOfSpritePaletteTag(ANIM_TAG_LEAF));
         task->data[12] = OBJ_PLTT_ID(IndexOfSpritePaletteTag(ANIM_TAG_RAZOR_LEAF));
         task->data[0]++;
@@ -5409,8 +5415,15 @@ void AnimGrantingStars(struct Sprite *sprite)
     CMD_ARGS(unk0, unk1, unk2, unk3, unk4, unk5);
 
     enum AnimBattler animBattler = cmd->unk2;
-    if (!InitSpritePosToAnimBattler(animBattler, sprite, FALSE))
+    enum BattlerId battler = GetAnimBattlerId(animBattler);
+    if (GetAnimBattlerSpriteId(animBattler) == 0xFF || !IsBattlerSpriteVisible(battler))
+    {
+        DestroyAnimSprite(sprite);
         return;
+    }
+
+    sprite->x = GetBattlerSpriteCoord2(battler, BATTLER_COORD_X_2);
+    sprite->y = GetBattlerSpriteCoord2(battler, BATTLER_COORD_Y_PIC_OFFSET);
 
     SetAnimSpriteInitialXOffset(sprite, cmd->unk0);
     sprite->y += cmd->unk1;

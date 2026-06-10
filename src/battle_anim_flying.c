@@ -360,6 +360,12 @@ static void AnimEllipticalGust_Step(struct Sprite *sprite)
 // Animates the palette on the gust tornado to make it look like its spinning
 void AnimTask_AnimateGustTornadoPalette(u8 taskId)
 {
+    if (!TryLoadPal(ANIM_TAG_GUST))
+    {
+        DestroyAnimVisualTask(taskId);
+        return;
+    }
+
     gTasks[taskId].data[0] = gBattleAnimArgs[1];
     gTasks[taskId].data[1] = gBattleAnimArgs[0];
     gTasks[taskId].data[2] = IndexOfSpritePaletteTag(ANIM_TAG_GUST);

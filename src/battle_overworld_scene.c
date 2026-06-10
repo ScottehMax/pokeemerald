@@ -216,6 +216,7 @@ static void BattleOverworldScene_RestoreTrainerSpriteOam(u8 spriteId, u8 subprio
 static void LoadBattleOwPlayerTrainerPalette(void);
 static void ReserveLoadedBattleOwTrainerPalette(u8 paletteSlot, u16 paletteTag);
 static void LoadBattleOwOpponentTrainerPalette(u16 objectPaletteTag);
+static bool8 IsBattleOwTrainerPaletteBlended(u8 paletteSlot);
 static void RestoreBattleOwTrainerPalettes(void);
 
 static u8 sPlayerTrainerSpriteId;
@@ -1578,6 +1579,20 @@ static void LoadBattleOwOpponentTrainerPalette(u16 objectPaletteTag)
     ReserveLoadedBattleOwTrainerPalette(OW_TRAINER_OPPONENT_PAL_SLOT, TAG_OW_TRAINER_OPPONENT_PAL);
 }
 
+static bool8 IsBattleOwTrainerPaletteBlended(u8 paletteSlot)
+{
+    u16 i;
+    u16 offset = OBJ_PLTT_ID(paletteSlot);
+
+    for (i = 0; i < 16; i++)
+    {
+        if (gPlttBufferFaded[offset + i] != gPlttBufferUnfaded[offset + i])
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 static void RestoreBattleOwTrainerPalettes(void)
 {
     if (!sSceneVisible)
@@ -1586,10 +1601,14 @@ static void RestoreBattleOwTrainerPalettes(void)
     if (gPaletteFade.active)
         return;
 
-    if (sPlayerTrainerSpriteId < MAX_SPRITES && gSprites[sPlayerTrainerSpriteId].inUse)
+    if (sPlayerTrainerSpriteId < MAX_SPRITES
+     && gSprites[sPlayerTrainerSpriteId].inUse
+     && !IsBattleOwTrainerPaletteBlended(OW_TRAINER_PLAYER_PAL_SLOT))
         LoadBattleOwPlayerTrainerPalette();
 
-    if (sOpponentTrainerSpriteId < MAX_SPRITES && gSprites[sOpponentTrainerSpriteId].inUse)
+    if (sOpponentTrainerSpriteId < MAX_SPRITES
+     && gSprites[sOpponentTrainerSpriteId].inUse
+     && !IsBattleOwTrainerPaletteBlended(OW_TRAINER_OPPONENT_PAL_SLOT))
         LoadBattleOwOpponentTrainerPalette(sOpponentTrainerPaletteTag);
 }
 
