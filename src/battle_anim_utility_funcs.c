@@ -49,6 +49,8 @@ void AnimTask_BlendBattleAnimPal(u8 taskId)
                                     (gBattleAnimArgs[0] >>  8) & 1,
                                     (gBattleAnimArgs[0] >>  9) & 1,
                                     (gBattleAnimArgs[0] >> 10) & 1);
+    if (gBattleAnimArgs[0] == (F_PAL_BG | F_PAL_BATTLERS_2))
+        selectedPalettes = BattleOverworldScene_ApplyScenePaletteMask(selectedPalettes);
     StartBlendAnimSpriteColor(taskId, selectedPalettes);
 }
 
@@ -172,7 +174,7 @@ static void AnimTask_BlendSpriteColor_Step2(u8 taskId)
 void AnimTask_HardwarePaletteFade(u8 taskId)
 {
     BeginHardwarePaletteFade(
-        gBattleAnimArgs[0],
+        BattleOverworldScene_ApplyBgBlendTargetMask(gBattleAnimArgs[0]),
         gBattleAnimArgs[1],
         gBattleAnimArgs[2],
         gBattleAnimArgs[3],
@@ -267,14 +269,18 @@ void AnimTask_DrawFallingWhiteLinesOnAttacker(u8 taskId)
     SetGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_OBJWIN_ON);
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG1 | BLDCNT_TGT2_ALL | BLDCNT_EFFECT_BLEND);
     SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(8, 12));
-    bg1Cnt = GetGpuReg(REG_OFFSET_BG1CNT);
-    ((struct BgCnt *)&bg1Cnt)->priority = 0;
-    ((struct BgCnt *)&bg1Cnt)->screenSize = 0;
-    SetGpuReg(REG_OFFSET_BG1CNT, bg1Cnt);
-
     if (!IsContest())
     {
-        ((struct BgCnt *)&bg1Cnt)->charBaseBlock = 1;
+        SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 0);
+        SetAnimBgAttribute(1, BG_ANIM_SCREEN_SIZE, 0);
+        SetAnimBgAttribute(1, BG_ANIM_CHAR_BASE_BLOCK, 1);
+        SetAnimBgAttribute(1, BG_ANIM_SCREEN_BASE_BLOCK, 28);
+    }
+    else
+    {
+        bg1Cnt = GetGpuReg(REG_OFFSET_BG1CNT);
+        ((struct BgCnt *)&bg1Cnt)->priority = 0;
+        ((struct BgCnt *)&bg1Cnt)->screenSize = 0;
         SetGpuReg(REG_OFFSET_BG1CNT, bg1Cnt);
     }
 
@@ -286,8 +292,7 @@ void AnimTask_DrawFallingWhiteLinesOnAttacker(u8 taskId)
             if (IsBattlerSpriteVisible(BATTLE_PARTNER(gBattleAnimAttacker)) == TRUE)
             {
                 gSprites[gBattlerSpriteIds[BATTLE_PARTNER(gBattleAnimAttacker)]].oam.priority -= 1;
-                ((struct BgCnt *)&bg1Cnt)->priority = 1;
-                SetGpuReg(REG_OFFSET_BG1CNT, bg1Cnt);
+                SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 1);
                 var0 = 1;
             }
         }
@@ -316,7 +321,6 @@ static void AnimTask_DrawFallingWhiteLinesOnAttacker_Step(u8 taskId)
 {
     struct BattleAnimBgData animBgData;
     struct Sprite *sprite;
-    u32 bg1Cnt;
 
     gTasks[taskId].data[10] += 4;
     gBattle_BG1_Y -= 4;
@@ -335,9 +339,7 @@ static void AnimTask_DrawFallingWhiteLinesOnAttacker_Step(u8 taskId)
                                        | WINOUT_WINOBJ_BG_ALL | WINOUT_WINOBJ_OBJ | WINOUT_WINOBJ_CLR);
             if (!IsContest())
             {
-                bg1Cnt = GetGpuReg(REG_OFFSET_BG1CNT);
-                ((struct BgCnt *)&bg1Cnt)->charBaseBlock = 0;
-                SetGpuReg(REG_OFFSET_BG1CNT, bg1Cnt);
+                SetAnimBgAttribute(1, BG_ANIM_CHAR_BASE_BLOCK, 0);
             }
 
             SetGpuReg(REG_OFFSET_DISPCNT, GetGpuReg(REG_OFFSET_DISPCNT) ^ DISPCNT_OBJWIN_ON);
@@ -708,12 +710,6 @@ void AnimTask_StartSlidingBg(u8 taskId)
 {
     u8 newTaskId;
 
-    if (BattleOverworldScene_IsEnabled())
-    {
-        DestroyAnimVisualTask(taskId);
-        return;
-    }
-
     UpdateAnimBg3ScreenSize(FALSE);
     newTaskId = CreateTask(AnimTask_UpdateSlidingBg, 5);
     if (gBattleAnimArgs[2] && !IsOnPlayerSide(gBattleAnimAttacker))
@@ -800,16 +796,22 @@ void StartMonScrollingBgMask(u8 taskId, int UNUSED unused, u16 scrollSpeed, enum
     SetGpuRegBits(REG_OFFSET_DISPCNT, DISPCNT_OBJWIN_ON);
     SetGpuReg(REG_OFFSET_BLDCNT, BLDCNT_TGT1_BG1 | BLDCNT_TGT2_ALL | BLDCNT_EFFECT_BLEND);
     SetGpuReg(REG_OFFSET_BLDALPHA, BLDALPHA_BLEND(0, 16));
-    bg1Cnt = GetGpuReg(REG_OFFSET_BG1CNT);
-    ((vBgCnt *)&bg1Cnt)->priority = 0;
-    ((vBgCnt *)&bg1Cnt)->screenSize = 0;
-    ((vBgCnt *)&bg1Cnt)->areaOverflowMode = 1;
     if (!IsContest())
     {
-        ((vBgCnt *)&bg1Cnt)->charBaseBlock = 1;
+        SetAnimBgAttribute(1, BG_ANIM_PRIORITY, 0);
+        SetAnimBgAttribute(1, BG_ANIM_SCREEN_SIZE, 0);
+        SetAnimBgAttribute(1, BG_ANIM_AREA_OVERFLOW_MODE, 1);
+        SetAnimBgAttribute(1, BG_ANIM_CHAR_BASE_BLOCK, 1);
+        SetAnimBgAttribute(1, BG_ANIM_SCREEN_BASE_BLOCK, 28);
     }
-
-    SetGpuReg(REG_OFFSET_BG1CNT, bg1Cnt);
+    else
+    {
+        bg1Cnt = GetGpuReg(REG_OFFSET_BG1CNT);
+        ((vBgCnt *)&bg1Cnt)->priority = 0;
+        ((vBgCnt *)&bg1Cnt)->screenSize = 0;
+        ((vBgCnt *)&bg1Cnt)->areaOverflowMode = 1;
+        SetGpuReg(REG_OFFSET_BG1CNT, bg1Cnt);
+    }
 
     if (IsContest())
         species = gContestResources->moveAnim->species;
@@ -879,9 +881,7 @@ static void UpdateMonScrollingBgMask(u8 taskId)
                                            | WINOUT_WINOBJ_BG_ALL | WINOUT_WINOBJ_OBJ | WINOUT_WINOBJ_CLR);
                 if (!IsContest())
                 {
-                    u32 bg1Cnt = GetGpuReg(REG_OFFSET_BG1CNT);
-                    ((vBgCnt *)&bg1Cnt)->charBaseBlock = 0;
-                    SetGpuReg(REG_OFFSET_BG1CNT, bg1Cnt);
+                    SetAnimBgAttribute(1, BG_ANIM_CHAR_BASE_BLOCK, 0);
                 }
 
                 SetGpuReg(REG_OFFSET_DISPCNT, GetGpuReg(REG_OFFSET_DISPCNT) ^ DISPCNT_OBJWIN_ON);

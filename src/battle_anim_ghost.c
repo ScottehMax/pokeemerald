@@ -1,6 +1,7 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_anim.h"
+#include "battle_overworld_scene.h"
 #include "bg.h"
 #include "decompress.h"
 #include "gpu_regs.h"
@@ -1012,7 +1013,7 @@ void AnimTask_CurseStretchingBlackBg(u8 taskId)
                                     (WININ_WIN1_BG_ALL | WININ_WIN1_OBJ | WININ_WIN1_CLR)));
     SetGpuReg(REG_OFFSET_WINOUT, ((WINOUT_WIN01_BG_ALL | WINOUT_WIN01_OBJ) |
                                     (WINOUT_WINOBJ_BG_ALL | WINOUT_WINOBJ_OBJ | WINOUT_WINOBJ_CLR)));
-    SetGpuReg(REG_OFFSET_BLDCNT, (BLDCNT_TGT1_BG3 | BLDCNT_EFFECT_DARKEN));
+    SetGpuReg(REG_OFFSET_BLDCNT, BattleOverworldScene_ApplyBgBlendTargetMask(BLDCNT_TGT1_BG3 | BLDCNT_EFFECT_DARKEN));
     SetGpuReg(REG_OFFSET_BLDY, 16);
 
     if (!IsOnPlayerSide(gBattleAnimAttacker) || IsContest())
@@ -1043,7 +1044,7 @@ static void AnimTask_CurseStretchingBlackBg_Step1(u8 taskId)
     s16 leftDistance, rightDistance, topDistance, bottomDistance;
     s16 startX, startY;
     u16 left, right, top, bottom;
-    u16 selectedPalettes;
+    u32 selectedPalettes;
 
     step = gTasks[taskId].data[0];
     gTasks[taskId].data[0]++;
@@ -1067,7 +1068,7 @@ static void AnimTask_CurseStretchingBlackBg_Step1(u8 taskId)
         right = DISPLAY_WIDTH;
         top = 0;
         bottom = 112;
-        selectedPalettes = GetBattlePalettesMask(TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE);
+        selectedPalettes = BattleOverworldScene_ApplyBgPaletteMask(GetBattlePalettesMask(TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE));
         BeginNormalPaletteFade(selectedPalettes, 0, 16, 16, RGB_BLACK);
         gTasks[taskId].func = AnimTask_CurseStretchingBlackBg_Step2;
     }
@@ -1705,4 +1706,3 @@ void AnimTask_GhostGetOut(u8 taskId)
     task->func = AnimTask_GhostGetOut_Step1;
     task->func(taskId);
 }
-

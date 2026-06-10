@@ -1001,13 +1001,18 @@ void DrawMainBattleBackground(void)
     LoadBattleEnvironmentGfx(GetBattleEnvironmentOverride());
 }
 
-void LoadBattleTextboxAndBackground(void)
+void LoadBattleTextboxAndWindowGfx(void)
 {
     DecompressDataWithHeaderVram(gBattleTextboxTiles, (void *)(BG_CHAR_ADDR(0)));
     CopyToBgTilemapBuffer(0, gBattleTextboxTilemap, 0, 0);
     CopyBgTilemapBufferToVram(0);
     LoadPalette(gBattleTextboxPalette, BG_PLTT_ID(0), 2 * PLTT_SIZE_4BPP);
     LoadBattleMenuWindowGfx();
+}
+
+void LoadBattleTextboxAndBackground(void)
+{
+    LoadBattleTextboxAndWindowGfx();
     if (B_TERRAIN_BG_CHANGE == TRUE)
         DrawTerrainTypeBattleBackground();
     else

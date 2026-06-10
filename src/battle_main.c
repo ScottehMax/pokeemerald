@@ -2100,6 +2100,7 @@ void VBlankCB_Battle(void)
     LoadOam();
     ProcessSpriteCopyRequests();
     TransferPlttBuffer();
+    BattleOverworldScene_TryShowBaseBackgroundInVBlank();
     BattleOverworldScene_TransferBackgroundAnimation();
     ScanlineEffect_InitHBlankDmaTransfer();
 }

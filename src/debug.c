@@ -1,7 +1,15 @@
 #include "global.h"
 #include "battle.h"
+#include "battle_anim.h"
+#include "battle_bg.h"
+#include "battle_gfx_sfx_util.h"
+#include "battle_main.h"
+#include "battle_overworld_scene.h"
 #include "battle_setup.h"
+#include "battle_util.h"
+#include "battle_util2.h"
 #include "berry.h"
+#include "bg.h"
 #include "clock.h"
 #include "coins.h"
 #include "credits.h"
@@ -15,9 +23,12 @@
 #include "event_object_movement.h"
 #include "event_scripts.h"
 #include "field_message_box.h"
+#include "fieldmap.h"
 #include "field_screen_effect.h"
 #include "field_weather.h"
+#include "field_player_avatar.h"
 #include "follower_npc.h"
+#include "gpu_regs.h"
 #include "international_string_util.h"
 #include "item.h"
 #include "item_icon.h"
@@ -31,6 +42,7 @@
 #include "map_name_popup.h"
 #include "menu.h"
 #include "money.h"
+#include "move.h"
 #include "naming_screen.h"
 #include "new_game.h"
 #include "overworld.h"
@@ -45,6 +57,7 @@
 #include "rtc.h"
 #include "script.h"
 #include "script_pokemon_util.h"
+#include "scanline_effect.h"
 #include "sound.h"
 #include "strings.h"
 #include "string_util.h"
@@ -62,6 +75,8 @@
 #include "constants/flags.h"
 #include "constants/items.h"
 #include "constants/map_groups.h"
+#include "constants/moves.h"
+#include "constants/pokemon.h"
 #include "constants/rgb.h"
 #include "constants/script_commands.h"
 #include "constants/songs.h"
@@ -187,6 +202,10 @@ enum DebugMenuTypes
 #define DEBUG_MENU_WIDTH_FLAGVAR 4
 #define DEBUG_MENU_HEIGHT_FLAGVAR 2
 
+#define OW_BATTLE_ANIM_BASE_Y 56
+#define OW_BATTLE_ANIM_FONT FONT_SMALL_NARROW
+#define OW_BATTLE_ANIM_ROW_HEIGHT 9
+
 #define DEBUG_NUMBER_DIGITS_FLAGS 4
 #define DEBUG_NUMBER_DIGITS_VARIABLES 5
 #define DEBUG_NUMBER_DIGITS_VARIABLE_VALUE 5
@@ -244,6 +263,20 @@ struct DebugMenuListData
 // EWRAM
 static EWRAM_DATA struct DebugMonData *sDebugMonData = NULL;
 static EWRAM_DATA struct DebugMenuListData *sDebugMenuListData = NULL;
+static EWRAM_DATA u8 sOwBattleAnimWindowId = 0;
+static EWRAM_DATA u16 sOwBattleAnimPlayerSpecies = 0;
+static EWRAM_DATA u16 sOwBattleAnimOpponentSpecies = 0;
+static EWRAM_DATA u16 sOwBattleAnimPlayerTrainerGfx = 0;
+static EWRAM_DATA u16 sOwBattleAnimOpponentTrainerGfx = 0;
+static EWRAM_DATA u16 sOwBattleAnimMove = 0;
+static EWRAM_DATA u8 sOwBattleAnimAttacker = 0;
+static EWRAM_DATA u8 sOwBattleAnimCursor = 0;
+static EWRAM_DATA bool8 sOwBattleAnimHelpVisible = FALSE;
+static EWRAM_DATA bool8 sOwBattleAnimWasActive = FALSE;
+static EWRAM_DATA bool8 sOwBattleAnimOldInBattle = FALSE;
+static EWRAM_DATA u32 sOwBattleAnimOldBattleTypeFlags = 0;
+static EWRAM_DATA struct Pokemon sOwBattleAnimPlayerPartyBackup;
+static EWRAM_DATA struct Pokemon sOwBattleAnimEnemyPartyBackup;
 EWRAM_DATA bool8 gIsDebugBattle = FALSE;
 EWRAM_DATA u64 gDebugAIFlags = 0;
 
@@ -254,11 +287,18 @@ static u32 Debug_GenerateListBasicMenu(const struct DebugMenuOption *items);
 static u32 Debug_GenerateListTrainerMenu(const struct DebugMenuOption *items);
 static u32 Debug_GenerateListFlagsMenu(const struct DebugMenuOption *items);
 static void Debug_DestroyMenu(u8 taskId);
+static void Debug_DestroyMenu_Full(u8 taskId);
 static void DebugAction_Cancel(u8 taskId);
 static void DebugAction_DestroyExtraWindow(u8 taskId);
 static u8 DebugNativeStep_CreateDebugWindow(void);
 static void DebugNativeStep_CloseDebugWindow(u8 taskId);
+static void DebugAction_OwBattleAnim(u8 taskId);
 
+static void CB2_DebugOwBattleAnim(void);
+static void VBlankCB_DebugOwBattleAnim(void);
+static void InitOwBattleAnimBgsAndWindows(void);
+static void FieldCB_ReturnToDebugMenu(void);
+static void CenterCameraOnPlayerForOwBattleAnimReturn(void);
 static void DebugAction_OpenSubMenu(u8 taskId, const struct DebugMenuOption *items);
 static void DebugAction_OpenSubMenuTrainers(u8 taskId, const struct DebugMenuOption *items);
 static void DebugAction_OpenSubMenuFlagsVars(u8 taskId, const struct DebugMenuOption *items);
@@ -268,6 +308,17 @@ static void DebugAction_ExecuteScript(u8 taskId, void *script);
 static void DebugAction_ToggleFlag(u8 taskId, void *flagToggleFunc);
 
 static void DebugTask_HandleMenuInput_General(u8 taskId);
+static void Task_OwBattleAnimInput(u8 taskId);
+static void SetupOwBattleAnimBattleState(void);
+static void FreeOwBattleAnimBattleState(void);
+static void RefreshOwBattleAnimScene(void);
+static void UpdateOwBattleAnimMons(void);
+static void CreateOwBattleAnimSprites(void);
+static void DrawOwBattleAnimText(void);
+static void PrintOwBattleAnimText(const u8 *str, u8 x, u8 y);
+static void ChangeOwBattleAnimSelection(s16 delta);
+static void PlayOwBattleAnimMove(void);
+static void RunOwBattleAnimScript(void);
 
 static void DebugAction_Util_Fly(u8 taskId);
 static void DebugAction_Util_Warp_Warp(u8 taskId);
@@ -749,6 +800,7 @@ static const struct DebugMenuOption sDebugMenu_Actions_Main[] =
     { COMPOUND_STRING("Flags & Vars…"), DebugAction_OpenSubMenuFlagsVars, sDebugMenu_Actions_Flags, },
     { COMPOUND_STRING("Sound…"),        DebugAction_OpenSubMenu, sDebugMenu_Actions_Sound, },
     { COMPOUND_STRING("ROM Info…"),     DebugAction_OpenSubMenu, sDebugMenu_Actions_ROMInfo2, },
+    { COMPOUND_STRING("OW Anim Check"), DebugAction_OwBattleAnim, },
     { COMPOUND_STRING("Cancel"),        DebugAction_Cancel, },
     { NULL }
 };
@@ -797,6 +849,71 @@ static const struct WindowTemplate sDebugMenuWindowTemplateSound =
     .height = DEBUG_MENU_HEIGHT_SOUND,
     .paletteNum = 15,
     .baseBlock = 1,
+};
+
+static const struct WindowTemplate sDebugMenuWindowTemplateOwBattleAnim =
+{
+    .bg = 0,
+    .tilemapLeft = 0,
+    .tilemapTop = 10,
+    .width = 30,
+    .height = 10,
+    .paletteNum = 15,
+    .baseBlock = 1,
+};
+
+static const struct BgTemplate sOwBattleAnimBgTemplates[] =
+{
+    {
+        .bg = 0,
+        .charBaseIndex = 0,
+        .mapBaseIndex = 24,
+        .screenSize = 0,
+        .paletteMode = 0,
+        .priority = 0,
+        .baseTile = 0,
+    },
+    {
+        .bg = 1,
+        .charBaseIndex = 1,
+        .mapBaseIndex = 28,
+        .screenSize = 0,
+        .paletteMode = 0,
+        .priority = 1,
+        .baseTile = 0,
+    },
+    {
+        .bg = 2,
+        .charBaseIndex = 2,
+        .mapBaseIndex = 27,
+        .screenSize = 0,
+        .paletteMode = 0,
+        .priority = 2,
+        .baseTile = 0,
+    },
+    {
+        .bg = 3,
+        .charBaseIndex = 2,
+        .mapBaseIndex = 26,
+        .screenSize = 0,
+        .paletteMode = 0,
+        .priority = 3,
+        .baseTile = 0,
+    },
+};
+
+static const struct WindowTemplate sOwBattleAnimWindowTemplates[] =
+{
+    {
+        .bg = 0,
+        .tilemapLeft = 0,
+        .tilemapTop = 10,
+        .width = 30,
+        .height = 10,
+        .paletteNum = 15,
+        .baseBlock = 1,
+    },
+    DUMMY_WIN_TEMPLATE,
 };
 
 static bool32 Debug_SaveCallbackMenu(struct DebugMenuOption *callbackItems);
@@ -4953,6 +5070,436 @@ static void DebugAction_Party_BattleSingle(u8 taskId)
     CalculateEnemyPartyCount();
     BattleSetup_StartTrainerBattle_Debug();
     Debug_DestroyMenu_Full(taskId);
+}
+
+enum
+{
+    OW_ANIM_ROW_PLAYER_MON,
+    OW_ANIM_ROW_OPPONENT_MON,
+    OW_ANIM_ROW_PLAYER_TRAINER,
+    OW_ANIM_ROW_OPPONENT_TRAINER,
+    OW_ANIM_ROW_MOVE,
+    OW_ANIM_ROW_SIDE,
+    OW_ANIM_ROW_COUNT
+};
+
+static const u8 sText_PlayerMon[] = _("P MON");
+static const u8 sText_OpponentMon[] = _("O MON");
+static const u8 sText_PlayerTrainer[] = _("P TRN");
+static const u8 sText_OpponentTrainer[] = _("O TRN");
+static const u8 sText_Move[] = _("MOVE");
+static const u8 sText_Side[] = _("SIDE");
+static const u8 sText_Player[] = _("PLAYER");
+static const u8 sText_Opponent[] = _("OPPONENT");
+static const u8 sText_AnimHelp1[] = _("UP/DN ROW  L/R VALUE");
+static const u8 sText_AnimHelp2[] = _("A PLAY  SEL HELP  B BACK");
+static const u8 sTextColor_TransparentBg[] = {TEXT_COLOR_TRANSPARENT, TEXT_COLOR_WHITE, TEXT_COLOR_DARK_GRAY};
+
+static void DebugAction_OwBattleAnim(u8 taskId)
+{
+    Debug_DestroyMenu_Full(taskId);
+    LockPlayerFieldControls();
+    PlayerFreeze();
+    StopPlayerAvatar();
+    InitOwBattleAnimBgsAndWindows();
+
+    sOwBattleAnimPlayerSpecies = SPECIES_TREECKO;
+    sOwBattleAnimOpponentSpecies = SPECIES_POOCHYENA;
+    sOwBattleAnimPlayerTrainerGfx = OBJ_EVENT_GFX_BRENDAN_NORMAL;
+    sOwBattleAnimOpponentTrainerGfx = OBJ_EVENT_GFX_YOUNGSTER;
+    sOwBattleAnimMove = MOVE_POUND;
+    sOwBattleAnimAttacker = B_POSITION_PLAYER_LEFT;
+    sOwBattleAnimCursor = 0;
+    sOwBattleAnimHelpVisible = TRUE;
+    sOwBattleAnimWasActive = FALSE;
+
+    SetupOwBattleAnimBattleState();
+    sOwBattleAnimWindowId = 0;
+    RefreshOwBattleAnimScene();
+    CreateTask(Task_OwBattleAnimInput, 0);
+    SetVBlankCallback(VBlankCB_DebugOwBattleAnim);
+    SetMainCallback2(CB2_DebugOwBattleAnim);
+}
+
+static void CB2_DebugOwBattleAnim(void)
+{
+    RunTasks();
+    BattleOverworldScene_KeepSpritesVisible();
+    BattleOverworldScene_KeepBaseBackgroundVisible();
+    BattleOverworldScene_UpdateBackgroundAnimation();
+    AnimateSprites();
+    BuildOamBuffer();
+    RunTextPrinters();
+    UpdatePaletteFade();
+}
+
+static void VBlankCB_DebugOwBattleAnim(void)
+{
+    LoadOam();
+    ProcessSpriteCopyRequests();
+    TransferPlttBuffer();
+    BattleOverworldScene_TransferBackgroundAnimation();
+    ScanlineEffect_InitHBlankDmaTransfer();
+    SetGpuReg(REG_OFFSET_BG0HOFS, gBattle_BG0_X);
+    SetGpuReg(REG_OFFSET_BG0VOFS, gBattle_BG0_Y);
+    SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
+    SetGpuReg(REG_OFFSET_BG1VOFS, gBattle_BG1_Y);
+    SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
+    SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
+    SetGpuReg(REG_OFFSET_BG3HOFS, gBattle_BG3_X);
+    SetGpuReg(REG_OFFSET_BG3VOFS, gBattle_BG3_Y);
+    SetGpuReg(REG_OFFSET_WIN0H, gBattle_WIN0H);
+    SetGpuReg(REG_OFFSET_WIN0V, gBattle_WIN0V);
+    SetGpuReg(REG_OFFSET_WIN1H, gBattle_WIN1H);
+    SetGpuReg(REG_OFFSET_WIN1V, gBattle_WIN1V);
+}
+
+static void InitOwBattleAnimBgsAndWindows(void)
+{
+    SetVBlankCallback(NULL);
+    SetGpuReg(REG_OFFSET_DISPCNT, 0);
+    ResetBgsAndClearDma3BusyFlags(0);
+    InitBgsFromTemplates(0, sOwBattleAnimBgTemplates, ARRAY_COUNT(sOwBattleAnimBgTemplates));
+    CpuFill32(0, (void *)VRAM, VRAM_SIZE);
+    DmaClear32(3, OAM, OAM_SIZE);
+    DmaClear16(3, PLTT, PLTT_SIZE);
+    SetGpuReg(REG_OFFSET_BLDCNT, 0);
+    SetGpuReg(REG_OFFSET_BLDALPHA, 0);
+    SetGpuReg(REG_OFFSET_BLDY, 0);
+    ResetPaletteFade();
+    ResetTasks();
+    ResetSpriteData();
+    FreeAllSpritePalettes();
+    ScanlineEffect_Stop();
+    InitWindows(sOwBattleAnimWindowTemplates);
+    DeactivateAllTextPrinters();
+    LoadMessageBoxAndBorderGfx();
+    SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJWIN_ON | DISPCNT_WIN0_ON | DISPCNT_OBJ_ON | DISPCNT_OBJ_1D_MAP);
+}
+
+static void FieldCB_ReturnToDebugMenu(void)
+{
+    MainCallback vblankCb = gMain.vblankCallback;
+
+    SetVBlankCallback(NULL);
+    LockPlayerFieldControls();
+    FreezeObjectEvents();
+    Debug_ShowMainMenu();
+    SetVBlankCallback(vblankCb);
+    FadeInFromBlack();
+}
+
+static void CenterCameraOnPlayerForOwBattleAnimReturn(void)
+{
+    s16 x;
+    s16 y;
+
+    PlayerGetDestCoords(&x, &y);
+    SetCameraFocusCoords(x, y);
+}
+
+static void Task_OwBattleAnimInput(u8 taskId)
+{
+    bool8 sceneChanged = FALSE;
+    bool8 textChanged = FALSE;
+
+    RunOwBattleAnimScript();
+    if (gAnimScriptActive)
+        return;
+
+    if (JOY_NEW(B_BUTTON))
+    {
+        PlaySE(SE_SELECT);
+        DestroyTask(taskId);
+        BattleOverworldScene_StopBackgroundAnimation();
+        FreeOwBattleAnimBattleState();
+        CenterCameraOnPlayerForOwBattleAnimReturn();
+        gFieldCallback = FieldCB_ReturnToDebugMenu;
+        gMain.state = 0;
+        CB2_ReturnToField();
+        return;
+    }
+    if (JOY_NEW(A_BUTTON))
+    {
+        PlaySE(SE_SELECT);
+        PlayOwBattleAnimMove();
+        DrawOwBattleAnimText();
+        return;
+    }
+    if (JOY_NEW(SELECT_BUTTON))
+    {
+        PlaySE(SE_SELECT);
+        sOwBattleAnimHelpVisible ^= TRUE;
+        DrawOwBattleAnimText();
+    }
+    if (JOY_NEW(DPAD_UP))
+    {
+        if (sOwBattleAnimCursor == 0)
+            sOwBattleAnimCursor = OW_ANIM_ROW_COUNT - 1;
+        else
+            sOwBattleAnimCursor--;
+        textChanged = TRUE;
+    }
+    if (JOY_NEW(DPAD_DOWN))
+    {
+        sOwBattleAnimCursor++;
+        if (sOwBattleAnimCursor >= OW_ANIM_ROW_COUNT)
+            sOwBattleAnimCursor = 0;
+        textChanged = TRUE;
+    }
+    if (JOY_NEW(DPAD_LEFT) || JOY_NEW(L_BUTTON))
+    {
+        ChangeOwBattleAnimSelection(JOY_NEW(L_BUTTON) ? -10 : -1);
+        if (sOwBattleAnimCursor <= OW_ANIM_ROW_OPPONENT_TRAINER)
+            sceneChanged = TRUE;
+        else
+            textChanged = TRUE;
+    }
+    if (JOY_NEW(DPAD_RIGHT) || JOY_NEW(R_BUTTON))
+    {
+        ChangeOwBattleAnimSelection(JOY_NEW(R_BUTTON) ? 10 : 1);
+        if (sOwBattleAnimCursor <= OW_ANIM_ROW_OPPONENT_TRAINER)
+            sceneChanged = TRUE;
+        else
+            textChanged = TRUE;
+    }
+
+    if (sceneChanged)
+        RefreshOwBattleAnimScene();
+    else if (textChanged)
+        DrawOwBattleAnimText();
+}
+
+static void SetupOwBattleAnimBattleState(void)
+{
+    u8 battler;
+
+    sOwBattleAnimOldInBattle = gMain.inBattle;
+    sOwBattleAnimOldBattleTypeFlags = gBattleTypeFlags;
+    sOwBattleAnimPlayerPartyBackup = gParties[B_TRAINER_PLAYER][0];
+    sOwBattleAnimEnemyPartyBackup = gParties[B_TRAINER_OPPONENT_A][0];
+
+    gBattleTypeFlags = BATTLE_TYPE_TRAINER;
+    gMain.inBattle = TRUE;
+    AllocateBattleResources();
+    AllocateBattleSpritesData();
+    AllocateMonSpritesGfx();
+    BattleOverworldScene_Reset();
+    SetBgTilemapBuffer(1, gBattleAnimBgTilemapBuffer);
+    gBattle_BG0_X = 0;
+    gBattle_BG0_Y = 0;
+    gBattle_BG1_X = 0;
+    gBattle_BG1_Y = 0;
+    gBattle_BG2_X = 0;
+    gBattle_BG2_Y = 0;
+    gBattle_BG3_X = 0;
+    gBattle_BG3_Y = 0;
+    gBattle_WIN0H = DISPLAY_WIDTH;
+    gBattle_WIN0V = 0;
+    gBattle_WIN1H = 0;
+    gBattle_WIN1V = 0;
+    SetGpuReg(REG_OFFSET_WININ, WININ_WIN0_ALL | WININ_WIN1_ALL);
+    SetGpuReg(REG_OFFSET_WINOUT, WINOUT_WIN01_ALL | WINOUT_WINOBJ_ALL);
+
+    gBattlersCount = 2;
+    gBattlerPositions[0] = B_POSITION_PLAYER_LEFT;
+    gBattlerPositions[1] = B_POSITION_OPPONENT_LEFT;
+    gBattlerPartyIndexes[0] = 0;
+    gBattlerPartyIndexes[1] = 0;
+    for (battler = 0; battler < MAX_BATTLERS_COUNT; battler++)
+    {
+        gBattlerSpriteIds[battler] = SPRITE_NONE;
+        gHealthboxSpriteIds[battler] = SPRITE_NONE;
+    }
+}
+
+static void FreeOwBattleAnimBattleState(void)
+{
+    if (gAnimScriptActive || sOwBattleAnimWasActive)
+        ClearBattleAnimationVars();
+
+    if (sOwBattleAnimWindowId != WINDOW_NONE)
+    {
+        ClearStdWindowAndFrame(sOwBattleAnimWindowId, TRUE);
+        FreeAllWindowBuffers();
+        sOwBattleAnimWindowId = WINDOW_NONE;
+    }
+
+    ResetSpriteData();
+    FreeAllSpritePalettes();
+    BattleOverworldScene_ResetSpriteReferences();
+    FreeMonSpritesGfx();
+    FreeBattleSpritesData();
+    FreeBattleResources();
+
+    gParties[B_TRAINER_PLAYER][0] = sOwBattleAnimPlayerPartyBackup;
+    gParties[B_TRAINER_OPPONENT_A][0] = sOwBattleAnimEnemyPartyBackup;
+    gBattleTypeFlags = sOwBattleAnimOldBattleTypeFlags;
+    gMain.inBattle = sOwBattleAnimOldInBattle;
+}
+
+static void RefreshOwBattleAnimScene(void)
+{
+    BattleOverworldScene_LoadDebugBackground(NULL, 3, 7);
+    UpdateOwBattleAnimMons();
+    CreateOwBattleAnimSprites();
+    DrawOwBattleAnimText();
+}
+
+static void UpdateOwBattleAnimMons(void)
+{
+    CreateMonWithIVs(&gParties[B_TRAINER_PLAYER][0], sOwBattleAnimPlayerSpecies, 50, Random32(), OTID_STRUCT_PLAYER_ID, USE_RANDOM_IVS);
+    CreateMonWithIVs(&gParties[B_TRAINER_OPPONENT_A][0], sOwBattleAnimOpponentSpecies, 50, Random32(), OTID_STRUCT_PLAYER_ID, USE_RANDOM_IVS);
+    SetMonMoveSlot(&gParties[B_TRAINER_PLAYER][0], sOwBattleAnimMove, 0);
+    SetMonMoveSlot(&gParties[B_TRAINER_OPPONENT_A][0], sOwBattleAnimMove, 0);
+    PokemonToBattleMon(&gParties[B_TRAINER_PLAYER][0], &gBattleMons[0]);
+    PokemonToBattleMon(&gParties[B_TRAINER_OPPONENT_A][0], &gBattleMons[1]);
+}
+
+static void CreateOwBattleAnimSprites(void)
+{
+    ResetSpriteData();
+    FreeAllSpritePalettes();
+    BattleOverworldScene_ResetSpriteReferences();
+    gReservedSpritePaletteCount = MAX_BATTLERS_COUNT;
+
+    BattleOverworldScene_CreateDebugTrainerSprites(sOwBattleAnimPlayerTrainerGfx,
+                                                   sOwBattleAnimOpponentTrainerGfx,
+                                                   OW_BATTLE_ANIM_BASE_Y);
+    BattleOverworldScene_CreateBattlerSprite(0);
+    BattleOverworldScene_CreateBattlerSprite(1);
+}
+
+static void DrawOwBattleAnimText(void)
+{
+    u8 text[8];
+    u8 y;
+
+    if (sOwBattleAnimWindowId == WINDOW_NONE)
+        return;
+
+    if (!sOwBattleAnimHelpVisible)
+    {
+        FillWindowPixelBuffer(sOwBattleAnimWindowId, PIXEL_FILL(0));
+        ClearWindowTilemap(sOwBattleAnimWindowId);
+        CopyWindowToVram(sOwBattleAnimWindowId, COPYWIN_GFX);
+        CopyBgTilemapBufferToVram(0);
+        ShowBg(0);
+        return;
+    }
+
+    PutWindowTilemap(sOwBattleAnimWindowId);
+    FillWindowPixelBuffer(sOwBattleAnimWindowId, PIXEL_FILL(0));
+
+    y = 0;
+    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_PLAYER_MON ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleAnimText(sText_PlayerMon, 8, y);
+    ConvertIntToDecimalStringN(text, sOwBattleAnimPlayerSpecies, STR_CONV_MODE_LEFT_ALIGN, 3);
+    PrintOwBattleAnimText(text, 56, y);
+    PrintOwBattleAnimText(GetSpeciesName(sOwBattleAnimPlayerSpecies), 88, y);
+
+    y += OW_BATTLE_ANIM_ROW_HEIGHT;
+    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_OPPONENT_MON ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleAnimText(sText_OpponentMon, 8, y);
+    ConvertIntToDecimalStringN(text, sOwBattleAnimOpponentSpecies, STR_CONV_MODE_LEFT_ALIGN, 3);
+    PrintOwBattleAnimText(text, 56, y);
+    PrintOwBattleAnimText(GetSpeciesName(sOwBattleAnimOpponentSpecies), 88, y);
+
+    y += OW_BATTLE_ANIM_ROW_HEIGHT;
+    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_PLAYER_TRAINER ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleAnimText(sText_PlayerTrainer, 8, y);
+    ConvertIntToDecimalStringN(text, sOwBattleAnimPlayerTrainerGfx, STR_CONV_MODE_LEFT_ALIGN, 3);
+    PrintOwBattleAnimText(text, 64, y);
+
+    y += OW_BATTLE_ANIM_ROW_HEIGHT;
+    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_OPPONENT_TRAINER ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleAnimText(sText_OpponentTrainer, 8, y);
+    ConvertIntToDecimalStringN(text, sOwBattleAnimOpponentTrainerGfx, STR_CONV_MODE_LEFT_ALIGN, 3);
+    PrintOwBattleAnimText(text, 64, y);
+
+    y += OW_BATTLE_ANIM_ROW_HEIGHT;
+    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_MOVE ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleAnimText(sText_Move, 8, y);
+    ConvertIntToDecimalStringN(text, sOwBattleAnimMove, STR_CONV_MODE_LEFT_ALIGN, 3);
+    PrintOwBattleAnimText(text, 56, y);
+    PrintOwBattleAnimText(GetMoveName(sOwBattleAnimMove), 88, y);
+
+    y += OW_BATTLE_ANIM_ROW_HEIGHT;
+    PrintOwBattleAnimText(sOwBattleAnimCursor == OW_ANIM_ROW_SIDE ? gText_SelectorArrow2 : gText_Space, 0, y);
+    PrintOwBattleAnimText(sText_Side, 8, y);
+    PrintOwBattleAnimText(sOwBattleAnimAttacker == B_POSITION_PLAYER_LEFT ? sText_Player : sText_Opponent, 56, y);
+
+    PrintOwBattleAnimText(sText_AnimHelp1, 128, 32);
+    PrintOwBattleAnimText(sText_AnimHelp2, 128, 44);
+    CopyWindowToVram(sOwBattleAnimWindowId, COPYWIN_FULL);
+    CopyBgTilemapBufferToVram(0);
+    ShowBg(0);
+}
+
+static void PrintOwBattleAnimText(const u8 *str, u8 x, u8 y)
+{
+    AddTextPrinterParameterized4(sOwBattleAnimWindowId, OW_BATTLE_ANIM_FONT, x, y, 0, 0, sTextColor_TransparentBg, TEXT_SKIP_DRAW, str);
+}
+
+static void ChangeOwBattleAnimSelection(s16 delta)
+{
+    switch (sOwBattleAnimCursor)
+    {
+    case OW_ANIM_ROW_PLAYER_MON:
+        sOwBattleAnimPlayerSpecies = ((sOwBattleAnimPlayerSpecies - 1 + NUM_SPECIES - 1 + delta) % (NUM_SPECIES - 1)) + 1;
+        break;
+    case OW_ANIM_ROW_OPPONENT_MON:
+        sOwBattleAnimOpponentSpecies = ((sOwBattleAnimOpponentSpecies - 1 + NUM_SPECIES - 1 + delta) % (NUM_SPECIES - 1)) + 1;
+        break;
+    case OW_ANIM_ROW_PLAYER_TRAINER:
+        sOwBattleAnimPlayerTrainerGfx = (sOwBattleAnimPlayerTrainerGfx + NUM_OBJ_EVENT_GFX + delta) % NUM_OBJ_EVENT_GFX;
+        break;
+    case OW_ANIM_ROW_OPPONENT_TRAINER:
+        sOwBattleAnimOpponentTrainerGfx = (sOwBattleAnimOpponentTrainerGfx + NUM_OBJ_EVENT_GFX + delta) % NUM_OBJ_EVENT_GFX;
+        break;
+    case OW_ANIM_ROW_MOVE:
+        sOwBattleAnimMove = ((sOwBattleAnimMove - 1 + MOVES_COUNT - 1 + delta) % (MOVES_COUNT - 1)) + 1;
+        break;
+    case OW_ANIM_ROW_SIDE:
+        sOwBattleAnimAttacker ^= 1;
+        break;
+    }
+}
+
+static void PlayOwBattleAnimMove(void)
+{
+    u8 attacker = sOwBattleAnimAttacker == B_POSITION_PLAYER_LEFT ? 0 : 1;
+
+    ClearBattleAnimationVars();
+    gBattlerAttacker = attacker;
+    gCurrentMove = sOwBattleAnimMove;
+    gChosenMove = sOwBattleAnimMove;
+    gCurrMovePos = 0;
+    gChosenMovePos = 0;
+    gChosenMoveByBattler[attacker] = sOwBattleAnimMove;
+    gBattlerTarget = GetBattleMoveTarget(sOwBattleAnimMove, TARGET_NONE);
+    gBattleMons[attacker].moves[0] = sOwBattleAnimMove;
+    gBattleMons[attacker].pp[0] = CalculatePPWithBonus(sOwBattleAnimMove, gBattleMons[attacker].ppBonuses, 0);
+    gAnimMovePower = GetMovePower(sOwBattleAnimMove);
+    gAnimMoveDmg = 50;
+    gAnimMoveTurn = 0;
+    SetBattlerSpriteAffineMode(ST_OAM_AFFINE_OFF);
+    DoMoveAnim(sOwBattleAnimMove);
+    sOwBattleAnimWasActive = TRUE;
+}
+
+static void RunOwBattleAnimScript(void)
+{
+    if (gAnimScriptActive)
+        gAnimScriptCallback();
+    if (sOwBattleAnimWasActive && !gAnimScriptActive)
+    {
+        SetBattlerSpriteAffineMode(ST_OAM_AFFINE_OFF);
+        BattleOverworldScene_RestoreBattlerSpriteAnim(0);
+        BattleOverworldScene_RestoreBattlerSpriteAnim(1);
+        DrawOwBattleAnimText();
+        sOwBattleAnimWasActive = FALSE;
+    }
 }
 
 void CheckEWRAMCounters(struct ScriptContext *ctx)

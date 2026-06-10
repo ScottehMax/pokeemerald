@@ -915,11 +915,6 @@ static void SpriteCB_ReleaseMonFromBall(struct Sprite *sprite)
 
         if (matrixNum != 0xFF)
         {
-            s16 xScale = OW_SEND_OUT_START_SCALE;
-
-            if (BattleOverworldScene_IsBattlerFacingRight(sprite->sBattler))
-                xScale = -xScale;
-
             monSprite->oam.objMode = ST_OAM_OBJ_NORMAL;
             monSprite->oam.matrixNum = matrixNum;
             monSprite->oam.affineMode = ST_OAM_AFFINE_DOUBLE;
@@ -930,7 +925,7 @@ static void SpriteCB_ReleaseMonFromBall(struct Sprite *sprite)
             monSprite->affineAnimBeginning = FALSE;
             monSprite->affineAnimEnded = FALSE;
             CalcCenterToCornerVec(monSprite, monSprite->oam.shape, monSprite->oam.size, monSprite->oam.affineMode);
-            SetSpriteRotScale(gBattlerSpriteIds[sprite->sBattler], xScale, OW_SEND_OUT_START_SCALE, 0);
+            SetSpriteRotScale(gBattlerSpriteIds[sprite->sBattler], OW_SEND_OUT_START_SCALE, OW_SEND_OUT_START_SCALE, 0);
             monSprite->data[1] = OW_SEND_OUT_START_SCALE;
         }
         else
@@ -1004,7 +999,6 @@ static void HandleBallAnimEnd(struct Sprite *sprite)
     if (overworldBattler)
     {
         struct Sprite *monSprite = &gSprites[gBattlerSpriteIds[battler]];
-        s16 xScale;
 
         if (slideIn)
         {
@@ -1016,10 +1010,7 @@ static void HandleBallAnimEnd(struct Sprite *sprite)
             if (monSprite->data[1] < 0x100)
                 monSprite->data[1] = 0x100;
 
-            xScale = monSprite->data[1];
-            if (BattleOverworldScene_IsBattlerFacingRight(battler))
-                xScale = -xScale;
-            SetSpriteRotScale(gBattlerSpriteIds[battler], xScale, monSprite->data[1], 0);
+            SetSpriteRotScale(gBattlerSpriteIds[battler], monSprite->data[1], monSprite->data[1], 0);
             monSprite->y2 = 0;
         }
         else

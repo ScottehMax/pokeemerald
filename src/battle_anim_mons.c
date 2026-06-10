@@ -31,6 +31,10 @@ static void AnimTask_AlphaFadeIn_Step(u8 taskId);
 static void AnimTask_AttackerPunchWithTrace_Step(u8 taskId);
 static void AnimTask_BlendMonInAndOut_Step(u8 taskId);
 static bool8 ShouldRotScaleSpeciesBeFlipped(void);
+static u8 GetOverworldBattlerForRotScaleSprite(u8 spriteId);
+static bool8 ShouldFlipBattlerRotScaleX(u8 spriteId);
+static bool32 IsAnimBgLargeScreen(u8 bgId);
+static void KeepAnimBgVisibleInOverworldBattle(u8 bgId);
 static void CreateBattlerTrace(struct Task *task, u8 taskId);
 
 EWRAM_DATA static union AffineAnimCmd *sAnimTaskAffineAnim = NULL;
@@ -227,6 +231,9 @@ u8 GetBattlerSpriteCoord2(enum BattlerId battler, u8 coordType)
 {
     enum Species species;
     struct BattleSpriteInfo *spriteInfo;
+
+    if (BattleOverworldScene_IsEnabled())
+        return GetBattlerSpriteCoord(battler, coordType);
 
     if (coordType == BATTLER_COORD_Y_PIC_OFFSET || coordType == BATTLER_COORD_Y_PIC_OFFSET_DEFAULT)
     {
@@ -755,7 +762,12 @@ void InitSpritePosToAnimTarget(struct Sprite *sprite, bool8 respectMonPicOffsets
 
 void InitSpritePosToAnimAttacker(struct Sprite *sprite, bool8 respectMonPicOffsets)
 {
-    if (!respectMonPicOffsets)
+    if (BattleOverworldScene_IsEnabled())
+    {
+        sprite->x = GetBattlerSpriteCoord2(gBattleAnimAttacker, BATTLER_COORD_X_2);
+        sprite->y = GetBattlerSpriteCoord2(gBattleAnimAttacker, BATTLER_COORD_Y_PIC_OFFSET);
+    }
+    else if (!respectMonPicOffsets)
     {
         sprite->x = GetBattlerSpriteCoord2(gBattleAnimAttacker, BATTLER_COORD_X);
         sprite->y = GetBattlerSpriteCoord2(gBattleAnimAttacker, BATTLER_COORD_Y);
@@ -829,6 +841,9 @@ bool32 InitSpritePosToAnimBattler(enum AnimBattler animBattlerId, struct Sprite 
 
 bool8 IsBattlerSpritePresent(enum BattlerId battler)
 {
+    if (battler >= gBattlersCount)
+        return FALSE;
+
     if (IsContest())
     {
         if (gBattleAnimAttacker == battler)
@@ -874,7 +889,7 @@ void GetBattleAnimBg1Data(struct BattleAnimBgData *out)
         out->bgTilemap = (u16 *)gBattleAnimBgTilemapBuffer;
         out->paletteId = BG_ANIM_PAL_1;
         out->bgId = 1;
-        out->tilesOffset = 0x200;
+        out->tilesOffset = BattleOverworldScene_IsEnabled() ? 0x100 : 0x200;
         out->unused = 0;
     }
 }
@@ -956,22 +971,83 @@ static void InitAnimBgTilemapBuffer(u32 bgId, const void *src)
     CopyToBgTilemapBuffer(bgId, src, 0, 0);
 }
 
+static bool32 IsAnimBgLargeScreen(u8 bgId)
+{
+    return GetAnimBgAttribute(bgId, BG_ANIM_SCREEN_SIZE) != 0;
+}
+
+static void KeepAnimBgVisibleInOverworldBattle(u8 bgId)
+{
+    u16 winIn;
+    u16 winOut;
+    u16 winInMask = 0;
+    u16 winOutMask = 0;
+
+    if (!BattleOverworldScene_IsEnabled())
+        return;
+
+    ShowBg(bgId);
+
+    switch (bgId)
+    {
+    case 1:
+        winInMask = WININ_WIN0_BG1 | WININ_WIN1_BG1 | WININ_WIN0_CLR | WININ_WIN1_CLR;
+        winOutMask = WINOUT_WINOBJ_BG1 | WINOUT_WIN01_CLR | WINOUT_WINOBJ_CLR;
+        if ((GetGpuReg(REG_OFFSET_DISPCNT) & DISPCNT_OBJWIN_ON) == 0
+         || (GetGpuReg(REG_OFFSET_WINOUT) & WINOUT_WINOBJ_BG1) == 0
+         || (GetGpuReg(REG_OFFSET_WINOUT) & WINOUT_WIN01_BG1) != 0)
+            winOutMask |= WINOUT_WIN01_BG1;
+        break;
+    case 2:
+        winInMask = WININ_WIN0_BG2 | WININ_WIN1_BG2 | WININ_WIN0_CLR | WININ_WIN1_CLR;
+        winOutMask = WINOUT_WIN01_BG2 | WINOUT_WINOBJ_BG2 | WINOUT_WIN01_CLR | WINOUT_WINOBJ_CLR;
+        break;
+    case 3:
+        winInMask = WININ_WIN0_BG3 | WININ_WIN1_BG3 | WININ_WIN0_CLR | WININ_WIN1_CLR;
+        winOutMask = WINOUT_WIN01_BG3 | WINOUT_WINOBJ_BG3 | WINOUT_WIN01_CLR | WINOUT_WINOBJ_CLR;
+        break;
+    default:
+        return;
+    }
+
+    winIn = GetGpuReg(REG_OFFSET_WININ);
+    winOut = GetGpuReg(REG_OFFSET_WINOUT);
+    SetGpuReg(REG_OFFSET_WININ, winIn | winInMask);
+    SetGpuReg(REG_OFFSET_WINOUT, winOut | winOutMask);
+}
+
 void AnimLoadCompressedBgTilemap(u32 bgId, const void *src)
 {
-    InitAnimBgTilemapBuffer(bgId, src);
-    CopyBgTilemapBufferToVram(bgId);
+    if (BattleOverworldScene_IsEnabled())
+    {
+        struct BattleAnimBgData data;
+
+        GetBattleAnimBgData(&data, bgId);
+        InitAnimBgTilemapBuffer(data.bgId, src);
+        RelocateBattleBgPal(data.paletteId, data.bgTilemap, data.tilesOffset, IsAnimBgLargeScreen(data.bgId));
+        KeepAnimBgVisibleInOverworldBattle(data.bgId);
+        CopyBgTilemapBufferToVram(data.bgId);
+    }
+    else
+    {
+        InitAnimBgTilemapBuffer(bgId, src);
+        CopyBgTilemapBufferToVram(bgId);
+    }
 }
 
 void AnimLoadCompressedBgTilemapHandleContest(struct BattleAnimBgData *data, const void *src, bool32 largeScreen)
 {
     InitAnimBgTilemapBuffer(data->bgId, src);
-    if (IsContest() == TRUE)
-        RelocateBattleBgPal(data->paletteId, data->bgTilemap, 0, largeScreen);
+    if (IsContest() == TRUE || BattleOverworldScene_IsEnabled())
+        RelocateBattleBgPal(data->paletteId, data->bgTilemap, data->tilesOffset, largeScreen);
+    KeepAnimBgVisibleInOverworldBattle(data->bgId);
     CopyBgTilemapBufferToVram(data->bgId);
 }
 
 u8 GetBattleBgPaletteNum(void)
 {
+    if (BattleOverworldScene_IsEnabled() && BattleOverworldScene_IsMoveBgActive())
+        return BATTLE_OW_MOVE_BG_PAL_SLOT;
     if (IsContest())
         return 1;
     else
@@ -980,7 +1056,7 @@ u8 GetBattleBgPaletteNum(void)
 
 void UpdateAnimBg3ScreenSize(bool8 largeScreenSize)
 {
-    if (BattleOverworldScene_IsEnabled())
+    if (BattleOverworldScene_IsEnabled() && !BattleOverworldScene_IsMoveBgActive())
     {
         BattleOverworldScene_KeepBaseBackgroundVisible();
         return;
@@ -1223,6 +1299,8 @@ void SetSpriteRotScale(u8 spriteId, s16 xScale, s16 yScale, u16 rotation)
     src.rotation = rotation;
     if (ShouldRotScaleSpeciesBeFlipped())
         src.xScale = -src.xScale;
+    if (ShouldFlipBattlerRotScaleX(spriteId))
+        src.xScale = -src.xScale;
     i = gSprites[spriteId].oam.matrixNum;
     ObjAffineSet(&src, &matrix, 1, 2);
     gOamMatrices[i].a = matrix.a;
@@ -1247,22 +1325,111 @@ static bool8 ShouldRotScaleSpeciesBeFlipped(void)
     }
 }
 
+static u8 GetOverworldBattlerForRotScaleSprite(u8 spriteId)
+{
+    u8 battler;
+    struct Sprite *sprite;
+
+    if (!BattleOverworldScene_IsEnabled() || spriteId >= MAX_SPRITES || !gSprites[spriteId].inUse)
+        return MAX_BATTLERS_COUNT;
+
+    battler = gSprites[spriteId].data[0];
+    if (battler < gBattlersCount && BattleOverworldScene_IsBattlerSprite(battler, spriteId))
+        return battler;
+
+    sprite = &gSprites[spriteId];
+    for (battler = 0; battler < gBattlersCount; battler++)
+    {
+        u8 battlerSpriteId = gBattlerSpriteIds[battler];
+        struct Sprite *battlerSprite;
+
+        if (battlerSpriteId >= MAX_SPRITES
+         || !BattleOverworldScene_IsBattlerSprite(battler, battlerSpriteId)
+         || !gSprites[battlerSpriteId].inUse)
+            continue;
+
+        battlerSprite = &gSprites[battlerSpriteId];
+        if (sprite->template == battlerSprite->template
+         && sprite->images == battlerSprite->images
+         && sprite->anims == battlerSprite->anims
+         && sprite->oam.shape == battlerSprite->oam.shape
+         && sprite->oam.size == battlerSprite->oam.size
+         && sprite->oam.paletteNum == battlerSprite->oam.paletteNum)
+            return battler;
+    }
+
+    return MAX_BATTLERS_COUNT;
+}
+
+static bool8 ShouldFlipBattlerRotScaleX(u8 spriteId)
+{
+    u8 battler = GetOverworldBattlerForRotScaleSprite(spriteId);
+
+    if (battler >= gBattlersCount)
+        return FALSE;
+
+    if (BattleOverworldScene_IsBattlerSprite(battler, spriteId))
+        return gSprites[spriteId].hFlip;
+
+    return BattleOverworldScene_IsBattlerFacingRight(battler);
+}
+
 void PrepareBattlerSpriteForRotScale(u8 spriteId, u8 objMode)
 {
     enum BattlerId battler = gSprites[spriteId].data[0];
+    bool8 overworldBattler = BattleOverworldScene_IsBattlerSprite(battler, spriteId);
+    bool8 wasAffine = gSprites[spriteId].oam.affineMode;
 
+    if (overworldBattler && !wasAffine)
+        BattleOverworldScene_RestoreBattlerSpriteOam(battler);
+    if (overworldBattler)
+        BattleOverworldScene_SetBattlerHiddenByMonBg(battler, FALSE);
     if (IsContest() || IsBattlerSpriteVisible(battler))
         gSprites[spriteId].invisible = FALSE;
     gSprites[spriteId].oam.objMode = objMode;
     gSprites[spriteId].affineAnimPaused = TRUE;
+    if (overworldBattler && !wasAffine)
+        gSprites[spriteId].hFlip = (gSprites[spriteId].oam.matrixNum >> 3) & 1;
     if (!IsContest() && !gSprites[spriteId].oam.affineMode)
-        gSprites[spriteId].oam.matrixNum = gBattleSpritesDataPtr->healthBoxesData[battler].matrixNum;
+    {
+        if (overworldBattler)
+        {
+            u8 matrixNum;
+
+            matrixNum = AllocOamMatrix();
+            if (matrixNum == 0xFF)
+                return;
+
+            gSprites[spriteId].oam.matrixNum = matrixNum;
+        }
+        else
+        {
+            gSprites[spriteId].oam.matrixNum = gBattleSpritesDataPtr->healthBoxesData[battler].matrixNum;
+        }
+    }
     gSprites[spriteId].oam.affineMode = ST_OAM_AFFINE_DOUBLE;
+    if (overworldBattler)
+        SetSpriteRotScale(spriteId, 0x100, 0x100, 0);
     CalcCenterToCornerVec(&gSprites[spriteId], gSprites[spriteId].oam.shape, gSprites[spriteId].oam.size, gSprites[spriteId].oam.affineMode);
 }
 
 void ResetSpriteRotScale(u8 spriteId)
 {
+    enum BattlerId battler = gSprites[spriteId].data[0];
+
+    if (BattleOverworldScene_IsBattlerSprite(battler, spriteId))
+    {
+        u8 matrixNum = gSprites[spriteId].oam.matrixNum;
+
+        SetSpriteRotScale(spriteId, 0x100, 0x100, 0);
+        gSprites[spriteId].oam.affineMode = ST_OAM_AFFINE_OFF;
+        gSprites[spriteId].oam.objMode = ST_OAM_OBJ_NORMAL;
+        gSprites[spriteId].affineAnimPaused = FALSE;
+        FreeOamMatrix(matrixNum);
+        BattleOverworldScene_RestoreBattlerSpriteOam(battler);
+        return;
+    }
+
     SetSpriteRotScale(spriteId, 0x100, 0x100, 0);
     gSprites[spriteId].oam.affineMode = ST_OAM_AFFINE_NORMAL;
     gSprites[spriteId].oam.objMode = ST_OAM_OBJ_NORMAL;
@@ -1298,6 +1465,8 @@ void TrySetSpriteRotScale(struct Sprite *sprite, bool8 recalcCenterVector, s16 x
         src.yScale = yScale;
         src.rotation = rotation;
         if (ShouldRotScaleSpeciesBeFlipped())
+            src.xScale = -src.xScale;
+        if (sprite >= gSprites && sprite < gSprites + MAX_SPRITES && ShouldFlipBattlerRotScaleX(sprite - gSprites))
             src.xScale = -src.xScale;
         i = sprite->oam.matrixNum;
         ObjAffineSet(&src, &matrix, 1, 2);
@@ -2047,7 +2216,7 @@ u8 GetBattlerSpriteBGPriority(enum BattlerId battler)
     if (IsContest())
         return 2;
     else if (BattleOverworldScene_IsEnabled())
-        return GetAnimBgAttribute(1, BG_ANIM_PRIORITY);
+        return 2;
     else if (position == B_POSITION_PLAYER_LEFT || position == B_POSITION_OPPONENT_RIGHT)
         return GetAnimBgAttribute(2, BG_ANIM_PRIORITY);
     else
@@ -2126,6 +2295,33 @@ s16 GetBattlerSpriteCoordAttr(enum BattlerId battler, u8 attr)
     u8 size;
     u8 y_offset;
     struct BattleSpriteInfo *spriteInfo;
+
+    if (BattleOverworldScene_IsEnabled())
+    {
+        s16 x = BattleOverworldScene_GetBattlerSpriteX(battler);
+        s16 y = BattleOverworldScene_GetBattlerSpriteY(battler);
+        s16 width = BattleOverworldScene_GetBattlerSpriteWidth(battler);
+        s16 height = BattleOverworldScene_GetBattlerSpriteHeight(battler);
+
+        switch (attr)
+        {
+        case BATTLER_COORD_ATTR_HEIGHT:
+            return height;
+        case BATTLER_COORD_ATTR_WIDTH:
+            return width;
+        case BATTLER_COORD_ATTR_LEFT:
+            return x - width / 2;
+        case BATTLER_COORD_ATTR_RIGHT:
+            return x + width / 2;
+        case BATTLER_COORD_ATTR_TOP:
+            return y - height / 2;
+        case BATTLER_COORD_ATTR_BOTTOM:
+        case BATTLER_COORD_ATTR_RAW_BOTTOM:
+            return y + height / 2;
+        default:
+            return 0;
+        }
+    }
 
     if (IsContest())
     {

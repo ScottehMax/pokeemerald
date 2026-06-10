@@ -39,29 +39,38 @@ void SetAnimBgAttribute(u8 bgId, u8 attributeId, u8 value)
         switch (attributeId)
         {
         case BG_ANIM_SCREEN_SIZE:
+            SetBgAttribute(bgId, BG_ATTR_SCREENSIZE, value);
             ((vBgCnt *)&bgCnt)->screenSize = value;
             break;
         case BG_ANIM_AREA_OVERFLOW_MODE:
+            SetBgAttribute(bgId, BG_ATTR_WRAPAROUND, value);
             ((vBgCnt *)&bgCnt)->areaOverflowMode = value;
             break;
         case BG_ANIM_MOSAIC:
+            SetBgAttribute(bgId, BG_ATTR_MOSAIC, value);
             ((vBgCnt *)&bgCnt)->mosaic = value;
             break;
         case BG_ANIM_CHAR_BASE_BLOCK:
+            SetBgAttribute(bgId, BG_ATTR_CHARBASEINDEX, value);
             ((vBgCnt *)&bgCnt)->charBaseBlock = value;
             break;
         case BG_ANIM_PRIORITY:
+            SetBgAttribute(bgId, BG_ATTR_PRIORITY, value);
             ((vBgCnt *)&bgCnt)->priority = value;
             break;
         case BG_ANIM_PALETTES_MODE:
+            SetBgAttribute(bgId, BG_ATTR_PALETTEMODE, value);
             ((vBgCnt *)&bgCnt)->palettes = value;
             break;
         case BG_ANIM_SCREEN_BASE_BLOCK:
+            SetBgAttribute(bgId, BG_ATTR_MAPBASEINDEX, value);
             ((vBgCnt *)&bgCnt)->screenBaseBlock = value;
             break;
         }
 
         SetGpuReg(sBattleAnimBgCnts[bgId], bgCnt);
+        if (attributeId == BG_ANIM_PRIORITY)
+            BattleOverworldScene_ApplyAnimBgPriority(bgId, value);
     }
 }
 

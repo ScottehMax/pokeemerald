@@ -58,6 +58,7 @@ static void PlayerHandlePaletteFade(enum BattlerId battler);
 static void PlayerHandlePause(enum BattlerId battler);
 static void PlayerHandleChooseAction(enum BattlerId battler);
 static void PlayerHandleYesNoBox(enum BattlerId battler);
+static void ClearYesNoBox(void);
 static void PlayerHandleChooseItem(enum BattlerId battler);
 static void PlayerHandleChoosePokemon(enum BattlerId battler);
 static void PlayerHandleCmd23(enum BattlerId battler);
@@ -1651,7 +1652,7 @@ static void PlayerHandleYesNoInput(enum BattlerId battler)
     }
     if (JOY_NEW(A_BUTTON))
     {
-        HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
+        ClearYesNoBox();
         PlaySE(SE_SELECT);
 
         if (gMultiUsePlayerCursor != 0)
@@ -1663,10 +1664,17 @@ static void PlayerHandleYesNoInput(enum BattlerId battler)
     }
     if (JOY_NEW(B_BUTTON))
     {
-        HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
+        ClearYesNoBox();
         PlaySE(SE_SELECT);
         BtlController_Complete(battler);
     }
+}
+
+static void ClearYesNoBox(void)
+{
+    ClearWindowTilemap(B_WIN_YESNO);
+    HandleBattleWindow(YESNOBOX_X_Y, WINDOW_CLEAR);
+    CopyBgTilemapBufferToVram(0);
 }
 
 static void MoveSelectionDisplayMoveNames(enum BattlerId battler)

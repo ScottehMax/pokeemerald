@@ -1013,7 +1013,7 @@ void HandleSpeciesGfxDataChange(enum BattlerId battlerAtk, enum BattlerId battle
     }
 
     gSprites[gBattlerSpriteIds[battlerAtk]].y = GetBattlerSpriteDefault_Y(battlerAtk);
-    StartSpriteAnim(&gSprites[gBattlerSpriteIds[battlerAtk]], 0);
+    BattleOverworldScene_StartBattlerSpriteAnim(battlerAtk, gBattlerSpriteIds[battlerAtk], 0);
 }
 
 void BattleLoadSubstituteOrMonSpriteGfx(enum BattlerId battler, bool8 loadMonSprite)
@@ -1053,7 +1053,7 @@ void BattleLoadSubstituteOrMonSpriteGfx(enum BattlerId battler, bool8 loadMonSpr
 void LoadBattleMonGfxAndAnimate(enum BattlerId battler, bool8 loadMonSprite, u8 spriteId)
 {
     BattleLoadSubstituteOrMonSpriteGfx(battler, loadMonSprite);
-    StartSpriteAnim(&gSprites[spriteId], 0);
+    BattleOverworldScene_StartBattlerSpriteAnim(battler, spriteId, 0);
 
     if (!loadMonSprite)
         gSprites[spriteId].y = GetSubstituteSpriteDefault_Y(battler);
@@ -1152,11 +1152,23 @@ void SetBattlerSpriteAffineMode(u8 affineMode)
     {
         if (IsBattlerSpritePresent(i))
         {
-            if (overworldScene)
-                affineMode = ST_OAM_AFFINE_OFF;
+            u8 mode = affineMode;
 
-            gSprites[gBattlerSpriteIds[i]].oam.affineMode = affineMode;
-            if (affineMode == ST_OAM_AFFINE_OFF)
+            if (BattleOverworldScene_IsBattlerSprite(i, gBattlerSpriteIds[i]))
+            {
+                gSprites[gBattlerSpriteIds[i]].oam.affineMode = ST_OAM_AFFINE_OFF;
+                gSprites[gBattlerSpriteIds[i]].oam.objMode = ST_OAM_OBJ_NORMAL;
+                gSprites[gBattlerSpriteIds[i]].affineAnimPaused = FALSE;
+                BattleOverworldScene_RestoreBattlerSpriteOam(i);
+                continue;
+            }
+            else if (overworldScene)
+            {
+                mode = ST_OAM_AFFINE_OFF;
+            }
+
+            gSprites[gBattlerSpriteIds[i]].oam.affineMode = mode;
+            if (mode == ST_OAM_AFFINE_OFF)
             {
                 gBattleSpritesDataPtr->healthBoxesData[i].matrixNum = gSprites[gBattlerSpriteIds[i]].oam.matrixNum;
                 gSprites[gBattlerSpriteIds[i]].oam.matrixNum = 0;

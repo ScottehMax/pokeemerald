@@ -244,6 +244,8 @@ int ProcessPlayerFieldInput(struct FieldInput *input)
     {
         PlaySE(SE_WIN_OPEN);
         FreezeObjectEvents();
+        PlayerFreeze();
+        StopPlayerAvatar();
         Debug_ShowMainMenu();
         return TRUE;
     }
