@@ -498,13 +498,16 @@ static void Task_DoPokeballSendOutAnim(u8 taskId)
 
 static inline void DoPokeballSendOutSoundEffect(enum BattlerId battler)
 {
+    if (BattleOverworldScene_IsBattlerSprite(battler, gBattlerSpriteIds[battler]))
+        return;
+
     if (IsBattlerPlayer(battler) && B_PLAYER_THROW_BALLS_SOUND < GEN_5)
         return;
 
     if (!IsBattlerPlayer(battler) && B_ENEMY_THROW_BALLS_SOUND < GEN_5)
         return;
 
-     PlaySE(SE_BALL_THROW);
+    PlaySE(SE_BALL_THROW);
 }
 
 static inline void *GetOpponentMonSendOutCallback(void)
