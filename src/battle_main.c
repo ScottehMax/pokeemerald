@@ -2766,7 +2766,10 @@ static void SpriteCB_AnimFaintOpponent(struct Sprite *sprite)
             for (i = 0; i < 0x100; i++)
                 *(dst++) = 0;
 
-            StartSpriteAnim(sprite, 0);
+            if (BattleOverworldScene_IsBattlerSprite(sprite->sBattler, gBattlerSpriteIds[sprite->sBattler]))
+                BattleOverworldScene_StartBattlerSpriteAnim(sprite->sBattler, gBattlerSpriteIds[sprite->sBattler], 0);
+            else
+                StartSpriteAnim(sprite, 0);
         }
     }
 }
