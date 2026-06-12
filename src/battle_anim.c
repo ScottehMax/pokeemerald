@@ -1979,6 +1979,8 @@ void LoadMoveBg(u16 bgId)
 
 static void LoadMoveBgForOverworldBattle(u16 bgId)
 {
+    void *imageBuffer;
+    u32 imageSize;
     u16 winIn;
     u16 winOut;
 
@@ -1987,8 +1989,12 @@ static void LoadMoveBgForOverworldBattle(u16 bgId)
     HideBg(3);
 
     CpuFill32(0, (void *)BG_CHAR_ADDR(OW_MOVE_BG_CHARBASE), 0x4000);
-    DecompressDataWithHeaderWram(gBattleAnimBackgroundTable[bgId].image, gBattleAnimBgTileBuffer);
-    CpuCopy32(gBattleAnimBgTileBuffer, (void *)BG_CHAR_ADDR(OW_MOVE_BG_CHARBASE), 0x2000);
+    imageBuffer = malloc_and_decompress(gBattleAnimBackgroundTable[bgId].image, &imageSize);
+    if (imageBuffer != NULL)
+    {
+        CpuCopy32(imageBuffer, (void *)BG_CHAR_ADDR(OW_MOVE_BG_CHARBASE), min(imageSize, BG_CHAR_SIZE));
+        Free(imageBuffer);
+    }
     DecompressDataWithHeaderWram(gBattleAnimBackgroundTable[bgId].tilemap, gBattleAnimBgTilemapBuffer);
     RelocateBattleBgPal(BATTLE_OW_MOVE_BG_PAL_SLOT, (u16 *)gBattleAnimBgTilemapBuffer, OW_MOVE_BG_TILE_OFFSET, FALSE);
     DmaCopy32(3, gBattleAnimBgTilemapBuffer, (void *)BG_SCREEN_ADDR(OW_MOVE_BG_SCREENBASE), 0x800);
