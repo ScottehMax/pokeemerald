@@ -39,6 +39,7 @@ static void SetPalettesToColor(u32, u16);
 static void AnimTask_UpdateSlidingBg(u8);
 static void UpdateMonScrollingBgMask(u8);
 static void AnimTask_WaitAndRestoreVisibility(u8);
+static void RestoreOverworldObjWindowMaskAnim(enum BattlerId battler, u8 maskSpriteId);
 
 static const u16 sCurseLinesPalette[] = { RGB_WHITE };
 
@@ -447,10 +448,12 @@ static void StatsChangeAnimation_Step2(u8 taskId)
     spriteId2 = 0;
     battlerSpriteId = gBattlerSpriteIds[sAnimStatsChangeData->battler1];
     spriteId = CreateInvisibleSpriteCopy(sAnimStatsChangeData->battler1, battlerSpriteId, sAnimStatsChangeData->species);
+    RestoreOverworldObjWindowMaskAnim(sAnimStatsChangeData->battler1, spriteId);
     if (sAnimStatsChangeData->aMultipleBattlers)
     {
         battlerSpriteId = gBattlerSpriteIds[sAnimStatsChangeData->battler2];
         spriteId2 = CreateInvisibleSpriteCopy(sAnimStatsChangeData->battler2, battlerSpriteId, sAnimStatsChangeData->species);
+        RestoreOverworldObjWindowMaskAnim(sAnimStatsChangeData->battler2, spriteId2);
     }
 
     GetBattleAnimBg1Data(&animBgData);
@@ -819,8 +822,12 @@ void StartMonScrollingBgMask(u8 taskId, int UNUSED unused, u16 scrollSpeed, enum
         species = GetMonData(GetBattlerMon(battler), MON_DATA_SPECIES);
 
     spriteId = CreateInvisibleSpriteCopy(battler, gBattlerSpriteIds[battler], species);
+    RestoreOverworldObjWindowMaskAnim(battler, spriteId);
     if (includePartner)
+    {
         spriteId2 = CreateInvisibleSpriteCopy(battler2, gBattlerSpriteIds[battler2], species);
+        RestoreOverworldObjWindowMaskAnim(battler2, spriteId2);
+    }
 
     GetBattleAnimBg1Data(&animBgData);
     AnimLoadCompressedBgTilemapHandleContest(&animBgData, tilemap, FALSE);
@@ -896,6 +903,32 @@ static void UpdateMonScrollingBgMask(u8 taskId)
         }
         break;
     }
+}
+
+static void RestoreOverworldObjWindowMaskAnim(enum BattlerId battler, u8 maskSpriteId)
+{
+    u8 battlerSpriteId;
+    const struct Sprite *source;
+    struct Sprite *mask;
+
+    if (!BattleOverworldScene_IsEnabled() || battler >= MAX_BATTLERS_COUNT || maskSpriteId >= MAX_SPRITES)
+        return;
+
+    battlerSpriteId = gBattlerSpriteIds[battler];
+    if (battlerSpriteId >= MAX_SPRITES || !gSprites[battlerSpriteId].inUse || !gSprites[maskSpriteId].inUse)
+        return;
+
+    source = &gSprites[battlerSpriteId];
+    mask = &gSprites[maskSpriteId];
+
+    mask->animNum = source->animNum;
+    mask->animCmdIndex = source->animCmdIndex;
+    mask->animDelayCounter = source->animDelayCounter;
+    mask->animLoopCounter = source->animLoopCounter;
+    mask->animBeginning = source->animBeginning;
+    mask->animEnded = source->animEnded;
+    mask->animPaused = source->animPaused;
+    mask->oam.tileNum = source->oam.tileNum;
 }
 
 void AnimTask_GetBattleEnvironment(u8 taskId)
