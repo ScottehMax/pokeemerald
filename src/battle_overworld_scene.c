@@ -725,13 +725,13 @@ void BattleOverworldScene_StopBackgroundAnimation(void)
 
 void BattleOverworldScene_UpdateBackgroundAnimation(void)
 {
-    if (sBattleOwBgTilesetAnimsActive && !sMoveBgActive)
+    if (!sSceneSuspended && sBattleOwBgTilesetAnimsActive && !sMoveBgActive)
         UpdateTilesetAnimations();
 }
 
 void BattleOverworldScene_TransferBackgroundAnimation(void)
 {
-    if (sBattleOwBgTilesetAnimsActive && !sMoveBgActive)
+    if (!sSceneSuspended && sBattleOwBgTilesetAnimsActive && !sMoveBgActive)
         TransferTilesetAnimsBuffer();
 }
 
