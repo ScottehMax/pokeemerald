@@ -264,11 +264,20 @@ static void SpriteCb_GimmickTrigger(struct Sprite *sprite)
 // oam.affineParam holds healthboxRight spriteId
 #define hMain_Battler               data[6]
 
-void LoadIndicatorSpritesGfx(void)
+static void LoadIndicatorSpritePalette(u32 palTag)
 {
-    LoadSpritePalette(&sSpritePalette_MiscIndicator);
-    LoadSpritePalette(&sSpritePalette_MegaIndicator);
-    LoadSpritePalette(&sSpritePalette_TeraIndicator);
+    switch (palTag)
+    {
+    case TAG_MISC_INDICATOR_PAL:
+        LoadSpritePalette(&sSpritePalette_MiscIndicator);
+        break;
+    case TAG_MEGA_INDICATOR_PAL:
+        LoadSpritePalette(&sSpritePalette_MegaIndicator);
+        break;
+    case TAG_TERA_INDICATOR_PAL:
+        LoadSpritePalette(&sSpritePalette_TeraIndicator);
+        break;
+    }
 }
 
 static void SpriteCb_GimmickIndicator(struct Sprite *sprite)
@@ -334,7 +343,17 @@ void UpdateIndicatorVisibilityAndType(u32 healthboxId, bool32 invisible)
 
     if (palTag != TAG_NONE)
     {
-        sprite->oam.paletteNum = IndexOfSpritePaletteTag(palTag);
+        u32 paletteNum;
+
+        LoadIndicatorSpritePalette(palTag);
+        paletteNum = IndexOfSpritePaletteTag(palTag);
+        if (paletteNum == 0xFF)
+        {
+            sprite->invisible = TRUE;
+            return;
+        }
+
+        sprite->oam.paletteNum = paletteNum;
         sprite->invisible = invisible;
 
         u32 *dst = (u32 *)(OBJ_VRAM0 + TILE_SIZE_4BPP * GetSpriteTileStartByTag(BATTLER_INDICATOR_TAG + battler));
@@ -394,7 +413,7 @@ void CreateIndicatorSprite(enum BattlerId battler)
     gBattleStruct->gimmick.indicatorSpriteId[battler] = spriteId;
     gSprites[spriteId].tBattler = battler;
     gSprites[spriteId].tPosX = x;
-    gSprites[spriteId].invisible = FALSE;
+    gSprites[spriteId].invisible = TRUE;
 }
 
 #undef tBattler

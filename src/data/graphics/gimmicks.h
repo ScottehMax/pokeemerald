@@ -149,28 +149,28 @@ static const struct SpriteTemplate sSpriteTemplate_BattlerIndicators[] =
     [0] =
     {
         .tileTag = BATTLER_INDICATOR_TAG,   // updated dynamically
-        .paletteTag = TAG_TERA_INDICATOR_PAL,   // updated dynamically
+        .paletteTag = TAG_NONE,   // updated dynamically
         .oam = &sOamData_GimmickIndicator,
         .callback = SpriteCb_GimmickIndicator,
     },
     [1] =
     {
         .tileTag = BATTLER_INDICATOR_TAG + 1,   // updated dynamically
-        .paletteTag = TAG_TERA_INDICATOR_PAL,   // updated dynamically
+        .paletteTag = TAG_NONE,   // updated dynamically
         .oam = &sOamData_GimmickIndicator,
         .callback = SpriteCb_GimmickIndicator,
     },
     [2] =
     {
         .tileTag = BATTLER_INDICATOR_TAG + 2,   // updated dynamically
-        .paletteTag = TAG_TERA_INDICATOR_PAL,   // updated dynamically
+        .paletteTag = TAG_NONE,   // updated dynamically
         .oam = &sOamData_GimmickIndicator,
         .callback = SpriteCb_GimmickIndicator,
     },
     [3] =
     {
         .tileTag = BATTLER_INDICATOR_TAG + 3,   // updated dynamically
-        .paletteTag = TAG_TERA_INDICATOR_PAL,   // updated dynamically
+        .paletteTag = TAG_NONE,   // updated dynamically
         .oam = &sOamData_GimmickIndicator,
         .callback = SpriteCb_GimmickIndicator,
     },

@@ -39,7 +39,6 @@ bool32 IsGimmickTriggerSpriteMatchingBattler(enum BattlerId battler);
 void HideGimmickTriggerSprite(void);
 void DestroyGimmickTriggerSprite(void);
 
-void LoadIndicatorSpritesGfx(void);
 u32 GetIndicatorPalTag(enum BattlerId battler);
 void UpdateIndicatorVisibilityAndType(u32 healthboxId, bool32 invisible);
 void UpdateIndicatorOamPriority(u32 healthboxId, u32 oamPriority);
