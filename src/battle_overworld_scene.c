@@ -1551,6 +1551,12 @@ static const u16 *GetBattleOwPlayerTrainerPalette(void)
     return gSaveBlock2Ptr->playerGender == FEMALE ? gObjectEventPal_May : gObjectEventPal_Brendan;
 }
 
+static void LoadBattleOwWallyTrainerPalette(void)
+{
+    PatchObjectPalette(gObjectEventGraphicsInfo_Wally.paletteTag, OW_TRAINER_PLAYER_PAL_SLOT);
+    ReserveLoadedBattleOwTrainerPalette(OW_TRAINER_PLAYER_PAL_SLOT, TAG_OW_TRAINER_PLAYER_PAL);
+}
+
 static void LoadBattleOwPlayerTrainerPalette(void)
 {
     const struct SpritePalette palette =
@@ -1604,7 +1610,12 @@ static void RestoreBattleOwTrainerPalettes(void)
     if (sPlayerTrainerSpriteId < MAX_SPRITES
      && gSprites[sPlayerTrainerSpriteId].inUse
      && !IsBattleOwTrainerPaletteBlended(OW_TRAINER_PLAYER_PAL_SLOT))
-        LoadBattleOwPlayerTrainerPalette();
+    {
+        if (gBattleTypeFlags & BATTLE_TYPE_CATCH_TUTORIAL)
+            LoadBattleOwWallyTrainerPalette();
+        else
+            LoadBattleOwPlayerTrainerPalette();
+    }
 
     if (sOpponentTrainerSpriteId < MAX_SPRITES
      && gSprites[sOpponentTrainerSpriteId].inUse
@@ -1630,9 +1641,18 @@ void BattleOverworldScene_CreateTrainerSprites(void)
     }
 
     template = sTrainerTemplate;
-    template.images = (gSaveBlock2Ptr->playerGender == FEMALE) ? sPicTable_BattleMay : sPicTable_BattleBrendan;
+    if (gBattleTypeFlags & BATTLE_TYPE_CATCH_TUTORIAL)
+    {
+        template.oam = gObjectEventGraphicsInfo_Wally.oam;
+        template.images = gObjectEventGraphicsInfo_Wally.images;
+        LoadBattleOwWallyTrainerPalette();
+    }
+    else
+    {
+        template.images = (gSaveBlock2Ptr->playerGender == FEMALE) ? sPicTable_BattleMay : sPicTable_BattleBrendan;
+        LoadBattleOwPlayerTrainerPalette();
+    }
     template.anims = sAnimTable_BattleTrainerFaceEast;
-    LoadBattleOwPlayerTrainerPalette();
     sPlayerTrainerSpriteId = CreateSprite(&template, 36, OW_SCENE_BASE_Y, OW_PLAYER_TRAINER_SUBPRIORITY);
     if (sPlayerTrainerSpriteId != MAX_SPRITES)
     {
@@ -2061,6 +2081,14 @@ bool8 BattleOverworldScene_CreateBattlerSprite(u8 battler)
         return FALSE;
 
     sOwBattlerSpriteIds[battler] = SPRITE_NONE;
+    if ((gBattleTypeFlags & BATTLE_TYPE_CATCH_TUTORIAL)
+     && gBattleStruct->wallyBattleState >= 4
+     && GetBattlerSide(battler) == B_SIDE_PLAYER)
+    {
+        gBattlerSpriteIds[battler] = MAX_SPRITES;
+        gHealthboxSpriteIds[battler] = MAX_SPRITES;
+        return TRUE;
+    }
 
     mon = GetBattlerMon(battler);
     if (GetMonData(mon, MON_DATA_HP) == 0)

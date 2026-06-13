@@ -283,6 +283,12 @@ void WallyBufferExecCompleted(enum BattlerId battler)
 
 static void WallyHandleDrawTrainerPic(enum BattlerId battler)
 {
+    if (BattleOverworldScene_IsEnabled())
+    {
+        BtlController_Complete(battler);
+        return;
+    }
+
     BtlController_HandleDrawTrainerPic(battler, TRAINER_PIC_WALLY, FALSE,
                                        80, 80 + 4 * (8 - GetTrainerBackPicCoords(TRAINER_PIC_WALLY)->size),
                                        30);
@@ -290,6 +296,12 @@ static void WallyHandleDrawTrainerPic(enum BattlerId battler)
 
 static void WallyHandleTrainerSlide(enum BattlerId battler)
 {
+    if (BattleOverworldScene_IsEnabled())
+    {
+        BtlController_Complete(battler);
+        return;
+    }
+
     BtlController_HandleTrainerSlide(battler, TRAINER_PIC_WALLY);
 }
 

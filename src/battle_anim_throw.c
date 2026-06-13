@@ -975,6 +975,19 @@ void AnimTask_ThrowBall_StandingTrainer(u8 taskId)
     gSprites[spriteId].sTargetX = GetBattlerSpriteCoord(gBattleAnimTarget, BATTLER_COORD_X);
     gSprites[spriteId].sTargetY = GetBallThrowTargetY(gBattleAnimTarget);
     gSprites[spriteId].callback = SpriteCallbackDummy;
+
+    if ((gBattleTypeFlags & BATTLE_TYPE_CATCH_TUTORIAL)
+     && BattleOverworldScene_GetPlayerTrainerSpriteCoords(&x, &y))
+    {
+        gSprites[spriteId].x = x + 16;
+        gSprites[spriteId].y = y - 8;
+        PlaySE12WithPanning(SE_BALL_THROW, 0);
+        gSprites[spriteId].callback = SpriteCB_Ball_Throw;
+        gTasks[taskId].tSpriteId = spriteId;
+        gTasks[taskId].func = AnimTask_ThrowBall_Step;
+        return;
+    }
+
     gSprites[gBattlerSpriteIds[GetBattlerAtPosition(B_POSITION_PLAYER_LEFT)]].callback = SpriteCB_TrainerThrowObject;
     gTasks[taskId].tSpriteId = spriteId;
     gTasks[taskId].func = AnimTask_ThrowBall_StandingTrainer_Step;

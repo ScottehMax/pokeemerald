@@ -415,7 +415,10 @@ static void CreateHealthboxSprite(enum BattlerId battler)
         if (gBattleTypeFlags & BATTLE_TYPE_SAFARI && position == B_POSITION_PLAYER_LEFT)
             healthboxSpriteId = CreateSafariPlayerHealthboxSprites();
         else if (gBattleTypeFlags & BATTLE_TYPE_CATCH_TUTORIAL && position == B_POSITION_PLAYER_LEFT)
+        {
+            gHealthboxSpriteIds[battler] = MAX_SPRITES;
             return;
+        }
         else
             healthboxSpriteId = CreateBattlerHealthboxSprites(battler);
 
