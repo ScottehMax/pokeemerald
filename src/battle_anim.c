@@ -103,6 +103,7 @@ static void PrepareOverworldMonBg(void);
 static void ResetOverworldMonBg(void);
 static void CancelOverworldMonBgSpriteHide(enum BattlerId battler);
 static void CreateUpdateMonBgTask(enum BattlerId battler, bool8 inBg2, bool8 isPartner);
+static void ClearSpriteGfxIndex(u32 tag);
 
 EWRAM_DATA static const u8 *sBattleAnimScriptPtr = NULL;
 EWRAM_DATA static const u8 *sBattleAnimScriptRetAddr[MAX_ANIM_CALL_DEPTH] = {0};
@@ -594,8 +595,12 @@ bool32 TryLoadGfx(u32 tag)
     {
         if (StoreGfxTag(tag))
         {
-            LoadCompressedSpriteSheetUsingHeap(&gBattleAnimTable[GET_TRUE_SPRITE_INDEX(tag)].pic);
-            return TRUE;
+            if (LoadCompressedSpriteSheetUsingHeap(&gBattleAnimTable[GET_TRUE_SPRITE_INDEX(tag)].pic))
+                return TRUE;
+
+            ClearSpriteGfxIndex(tag);
+            assertf(FALSE, "failed to load gfx: %u", tag);
+            return FALSE;
         }
         else
         {
@@ -1258,6 +1263,7 @@ static void CancelOverworldMonBgSpriteHide(enum BattlerId battler)
 static void Cmd_monbg(void)
 {
     bool8 toBG_2;
+    bool8 movedOverworldBattler = FALSE;
     u8 taskId;
     enum BattlerId battler;
     enum AnimBattler animBattler;
@@ -1277,7 +1283,11 @@ static void Cmd_monbg(void)
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);
         if (BattleOverworldScene_IsEnabled())
         {
-            CreateUpdateMonBgTask(battler, FALSE, FALSE);
+            if (sOverworldMonBgReady[battler])
+            {
+                CreateUpdateMonBgTask(battler, FALSE, FALSE);
+                movedOverworldBattler = TRUE;
+            }
         }
         else
         {
@@ -1293,13 +1303,17 @@ static void Cmd_monbg(void)
 
     // Move battler's partner to background
     battler ^= BIT_FLANK;
-    if (animBattler > 1 && ShouldUseBattlerBg(battler) && IsBattlerSpriteVisible(battler))
+    if (animBattler > 1
+     && (!BattleOverworldScene_IsEnabled() || !movedOverworldBattler)
+     && ShouldUseBattlerBg(battler)
+     && IsBattlerSpriteVisible(battler))
     {
         toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);
         if (BattleOverworldScene_IsEnabled())
         {
-            CreateUpdateMonBgTask(battler, FALSE, TRUE);
+            if (sOverworldMonBgReady[battler])
+                CreateUpdateMonBgTask(battler, FALSE, TRUE);
         }
         else
         {
@@ -1676,6 +1690,7 @@ static void Task_ClearMonBg(u8 taskId)
 static void Cmd_monbg_static(void)
 {
     bool8 toBG_2;
+    bool8 movedOverworldBattler = FALSE;
     enum BattlerId battler;
     enum AnimBattler animBattlerId;
 
@@ -1697,10 +1712,14 @@ static void Cmd_monbg_static(void)
     {
         toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);
+        movedOverworldBattler = BattleOverworldScene_IsEnabled() && sOverworldMonBgReady[battler];
     }
 
     battler ^= BIT_FLANK;
-    if (animBattlerId > 1 && ShouldUseBattlerBg(battler) && IsBattlerSpriteVisible(battler))
+    if (animBattlerId > 1
+     && (!BattleOverworldScene_IsEnabled() || !movedOverworldBattler)
+     && ShouldUseBattlerBg(battler)
+     && IsBattlerSpriteVisible(battler))
     {
         toBG_2 = ShouldMoveBattlerSpriteToBg2(battler);
         MoveBattlerSpriteToBG(battler, toBG_2, FALSE);

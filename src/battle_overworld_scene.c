@@ -12,6 +12,7 @@
 #include "frontier_util.h"
 #include "gpu_regs.h"
 #include "main.h"
+#include "malloc.h"
 #include "palette.h"
 #include "scanline_effect.h"
 #include "sprite.h"
@@ -30,6 +31,8 @@
 #define OW_TRAINER_OPPONENT_PAL_SLOT 13
 #define TAG_OW_TRAINER_PLAYER_PAL 0xD719
 #define TAG_OW_TRAINER_OPPONENT_PAL 0xD71A
+#define TAG_BATTLE_OW_MON_SHEET_BASE 0xD730
+#define TAG_BATTLE_OW_MON_PREVIEW_SHEET_BASE 0xD740
 #define OW_SCENE_BASE_Y 56
 #define OW_BG_DEFAULT_MAP_X 3
 #define OW_BG_DEFAULT_MAP_Y 7
@@ -50,6 +53,10 @@
 #define OW_BATTLER_OBJ_PRIORITY 2
 #define OW_PLAYER_TRAINER_SUBPRIORITY 30
 #define OW_OPPONENT_TRAINER_SUBPRIORITY 40
+#define OW_MON_FRAME_WEST 4
+#define OW_MON_FRAME_WEST_ALT 5
+#define OW_MON_FRAME_EAST_ASYM 6
+#define OW_MON_FRAME_EAST_ASYM_ALT 7
 
 struct BattleOwBgLayoutOffset
 {
@@ -190,6 +197,63 @@ static const union AnimCmd sAnim_BattleTrainerFaceEast[] =
     ANIMCMD_END,
 };
 
+static const union AnimCmd sAnim_BattleOwMonFaceWest[] =
+{
+    ANIMCMD_FRAME(0, 16),
+    ANIMCMD_FRAME(1, 16),
+    ANIMCMD_JUMP(0),
+};
+
+static const union AnimCmd sAnim_BattleOwMonFaceEast[] =
+{
+    ANIMCMD_FRAME(0, 16, .hFlip = TRUE),
+    ANIMCMD_FRAME(1, 16, .hFlip = TRUE),
+    ANIMCMD_JUMP(0),
+};
+
+static const union AnimCmd sAnim_BattleOwMonFaceEastAsym[] =
+{
+    ANIMCMD_FRAME(0, 16),
+    ANIMCMD_FRAME(1, 16),
+    ANIMCMD_JUMP(0),
+};
+
+static const union AnimCmd *const sAnimTable_BattleOwMonFaceWest[] =
+{
+    sAnim_BattleOwMonFaceWest,
+    sAnim_BattleOwMonFaceWest,
+    sAnim_BattleOwMonFaceWest,
+    sAnim_BattleOwMonFaceWest,
+    sAnim_BattleOwMonFaceWest,
+    sAnim_BattleOwMonFaceWest,
+    sAnim_BattleOwMonFaceWest,
+    sAnim_BattleOwMonFaceWest,
+};
+
+static const union AnimCmd *const sAnimTable_BattleOwMonFaceEast[] =
+{
+    sAnim_BattleOwMonFaceEast,
+    sAnim_BattleOwMonFaceEast,
+    sAnim_BattleOwMonFaceEast,
+    sAnim_BattleOwMonFaceEast,
+    sAnim_BattleOwMonFaceEast,
+    sAnim_BattleOwMonFaceEast,
+    sAnim_BattleOwMonFaceEast,
+    sAnim_BattleOwMonFaceEast,
+};
+
+static const union AnimCmd *const sAnimTable_BattleOwMonFaceEastAsym[] =
+{
+    sAnim_BattleOwMonFaceEastAsym,
+    sAnim_BattleOwMonFaceEastAsym,
+    sAnim_BattleOwMonFaceEastAsym,
+    sAnim_BattleOwMonFaceEastAsym,
+    sAnim_BattleOwMonFaceEastAsym,
+    sAnim_BattleOwMonFaceEastAsym,
+    sAnim_BattleOwMonFaceEastAsym,
+    sAnim_BattleOwMonFaceEastAsym,
+};
+
 static const union AnimCmd *const sAnimTable_BattleTrainerFaceWest[] =
 {
     sAnim_BattleTrainerFaceWest,
@@ -210,6 +274,9 @@ static enum TrainerPicID GetBattleOwOpponentTrainerPic(void);
 static enum TrainerClassID GetBattleOwOpponentTrainerClass(void);
 static const struct ObjectEventGraphicsInfo *GetBattleOwTrainerGraphicsInfo(enum TrainerPicID trainerPic, enum TrainerClassID trainerClass);
 static const struct ObjectEventGraphicsInfo *GetBattleOwMonGraphicsInfo(struct Pokemon *mon, u8 battler, u16 *species, u16 *graphicsId);
+static bool8 LoadBattleOwMonSpriteSheet(const struct ObjectEventGraphicsInfo *info, u8 battlerPosition, u16 tileTag);
+static const union AnimCmd *const *GetBattleOwMonAnimTable(const struct ObjectEventGraphicsInfo *info, u8 battlerPosition);
+static void SetBattleOwMonSpriteSheetSpan(struct Sprite *sprite);
 static void Task_BattleOverworldScene_WildShinyAnimations(u8 taskId);
 static const u16 *GetBattleOwPlayerTrainerPalette(void);
 static void BattleOverworldScene_RestoreTrainerSpriteOam(u8 spriteId, u8 subpriority);
@@ -966,11 +1033,6 @@ bool8 BattleOverworldScene_IsBattlerFacingRight(u8 battler)
 
 void BattleOverworldScene_RegisterBattlerSprite(u8 battler, u8 spriteId)
 {
-    struct Pokemon *mon;
-    u16 species;
-    u16 graphicsId;
-    const struct ObjectEventGraphicsInfo *info;
-
     if (!IsBattleOverworldSceneEnabled() || battler >= MAX_BATTLERS_COUNT)
         return;
 
@@ -979,13 +1041,7 @@ void BattleOverworldScene_RegisterBattlerSprite(u8 battler, u8 spriteId)
     if (spriteId >= MAX_SPRITES)
         return;
 
-    mon = GetBattlerMon(battler);
-    info = GetBattleOwMonGraphicsInfo(mon, battler, &species, &graphicsId);
-    if (info != NULL)
-    {
-        LoadSheetGraphicsInfo(info, graphicsId, &gSprites[spriteId]);
-        gSprites[spriteId].images = info->images;
-    }
+    SetBattleOwMonSpriteSheetSpan(&gSprites[spriteId]);
 }
 
 bool8 BattleOverworldScene_IsBattlerSprite(u8 battler, u8 spriteId)
@@ -2068,6 +2124,114 @@ static const struct ObjectEventGraphicsInfo *GetBattleOwMonGraphicsInfo(struct P
     return SpeciesToGraphicsInfo(*species, shiny, female);
 }
 
+static bool8 CopyBattleOwMonFrames(const struct ObjectEventGraphicsInfo *info, u8 firstFrame, u8 secondFrame, u8 *dest, u32 frameSize)
+{
+    u32 decompressedSize;
+    u8 *decompressed;
+    const u8 *source;
+
+    if (info->images == NULL)
+        return FALSE;
+
+    if (info->compressed && IsCompressedData((const u32 *)info->images[0].data))
+    {
+        decompressedSize = GetDecompressedDataSize((const u32 *)info->images[0].data);
+        if (decompressedSize < (secondFrame + 1) * frameSize)
+            return FALSE;
+
+        decompressed = AllocZeroed(decompressedSize);
+        if (decompressed == NULL)
+            return FALSE;
+
+        DecompressDataWithHeaderWram(info->images[0].data, decompressed);
+        memcpy(dest, decompressed + firstFrame * frameSize, frameSize);
+        memcpy(dest + frameSize, decompressed + secondFrame * frameSize, frameSize);
+        Free(decompressed);
+        return TRUE;
+    }
+
+    if (info->images[0].relativeFrames)
+    {
+        source = info->images[0].data;
+        memcpy(dest, source + firstFrame * frameSize, frameSize);
+        memcpy(dest + frameSize, source + secondFrame * frameSize, frameSize);
+    }
+    else
+    {
+        memcpy(dest, info->images[firstFrame].data, frameSize);
+        memcpy(dest + frameSize, info->images[secondFrame].data, frameSize);
+    }
+
+    return TRUE;
+}
+
+static bool8 LoadBattleOwMonSpriteSheet(const struct ObjectEventGraphicsInfo *info, u8 battlerPosition, u16 tileTag)
+{
+    u8 firstFrame;
+    u8 secondFrame;
+    u32 frameSize = info->size;
+    u32 offset = frameSize;
+    u8 *sheet;
+    u16 tileStart;
+    struct SpriteFrameImage image;
+    struct SpriteTemplate template;
+
+    if (info == NULL || info->images == NULL)
+        return FALSE;
+
+    if (IsPlayerBattlerPosition(battlerPosition) && info->anims == sAnimTable_Following_Asym)
+    {
+        firstFrame = OW_MON_FRAME_EAST_ASYM;
+        secondFrame = OW_MON_FRAME_EAST_ASYM_ALT;
+    }
+    else
+    {
+        firstFrame = OW_MON_FRAME_WEST;
+        secondFrame = OW_MON_FRAME_WEST_ALT;
+    }
+
+    sheet = AllocZeroed(frameSize * 2);
+    if (sheet == NULL)
+        return FALSE;
+
+    if (!CopyBattleOwMonFrames(info, firstFrame, secondFrame, sheet, frameSize))
+    {
+        Free(sheet);
+        return FALSE;
+    }
+
+    FreeSpriteTilesByTag(tileTag);
+
+    image.data = sheet;
+    image.size = frameSize * 2 + offset;
+    image.relativeFrames = FALSE;
+    template.tileTag = tileTag;
+    template.images = &image;
+    tileStart = LoadSpriteSheetByTemplate(&template, 0, offset);
+    Free(sheet);
+
+    return tileStart != TAG_NONE && IndexOfSpriteTileTag(tileTag) != 0xFF;
+}
+
+static const union AnimCmd *const *GetBattleOwMonAnimTable(const struct ObjectEventGraphicsInfo *info, u8 battlerPosition)
+{
+    if (IsPlayerBattlerPosition(battlerPosition))
+    {
+        if (info->anims == sAnimTable_Following_Asym)
+            return sAnimTable_BattleOwMonFaceEastAsym;
+
+        return sAnimTable_BattleOwMonFaceEast;
+    }
+
+    return sAnimTable_BattleOwMonFaceWest;
+}
+
+static void SetBattleOwMonSpriteSheetSpan(struct Sprite *sprite)
+{
+    sprite->sheetSpan = GetSpanPerImage(sprite->oam.shape, sprite->oam.size);
+    sprite->usingSheet = TRUE;
+}
+
 bool8 BattleOverworldScene_CreateBattlerSprite(u8 battler)
 {
     struct Pokemon *mon;
@@ -2260,10 +2424,8 @@ bool8 BattleOverworldScene_LoadMonSpriteGfx(struct Pokemon *mon, u8 battler)
     if (info == NULL)
         return FALSE;
 
-    LoadSheetGraphicsInfo(info, graphicsId, NULL);
     palette = GetBattleOwMonPalette(species, shiny, female);
     LoadPalette(palette, OBJ_PLTT_ID(battler), PLTT_SIZE_4BPP);
-    LoadPalette(palette, BG_PLTT_ID(8) + BG_PLTT_ID(battler), PLTT_SIZE_4BPP);
 
     return TRUE;
 }
@@ -2288,10 +2450,12 @@ bool8 BattleOverworldScene_SetMonSpriteTemplate(u16 species, u8 battler)
 
     battlerPosition = GetBattlerPosition(battler);
     gMultiuseSpriteTemplate = gMonSpritesGfxPtr->templates[battlerPosition];
-    gMultiuseSpriteTemplate.tileTag = LoadSheetGraphicsInfo(info, graphicsId, NULL);
+    gMultiuseSpriteTemplate.tileTag = TAG_BATTLE_OW_MON_SHEET_BASE + battler;
+    if (!LoadBattleOwMonSpriteSheet(info, battlerPosition, gMultiuseSpriteTemplate.tileTag))
+        return FALSE;
     gMultiuseSpriteTemplate.oam = info->oam;
-    gMultiuseSpriteTemplate.anims = info->anims;
-    gMultiuseSpriteTemplate.images = info->images;
+    gMultiuseSpriteTemplate.anims = GetBattleOwMonAnimTable(info, battlerPosition);
+    gMultiuseSpriteTemplate.images = NULL;
     gMultiuseSpriteTemplate.affineAnims = gDummySpriteAffineAnimTable;
     gMultiuseSpriteTemplate.paletteTag = TAG_NONE;
 
@@ -2302,7 +2466,6 @@ u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, 
 {
     u8 spriteId;
     u8 paletteNum;
-    u16 graphicsId;
     enum Direction direction = IsPlayerBattlerPosition(battlerPosition) ? DIR_EAST : DIR_WEST;
     const struct ObjectEventGraphicsInfo *info;
     const u16 *palette;
@@ -2320,15 +2483,19 @@ u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, 
     if (paletteNum == 0xFF)
         return MAX_SPRITES;
 
-    graphicsId = GetBattleOwMonGraphicsId(species, shiny, female);
     if (gMonSpritesGfxPtr != NULL)
         gMultiuseSpriteTemplate = gMonSpritesGfxPtr->templates[battlerPosition];
     else
         gMultiuseSpriteTemplate = gBattlerSpriteTemplates[battlerPosition];
-    gMultiuseSpriteTemplate.tileTag = LoadSheetGraphicsInfo(info, graphicsId, NULL);
+    gMultiuseSpriteTemplate.tileTag = TAG_BATTLE_OW_MON_PREVIEW_SHEET_BASE + battlerPosition;
+    if (!LoadBattleOwMonSpriteSheet(info, battlerPosition, gMultiuseSpriteTemplate.tileTag))
+    {
+        FreeSpritePaletteByTag(species);
+        return MAX_SPRITES;
+    }
     gMultiuseSpriteTemplate.oam = info->oam;
-    gMultiuseSpriteTemplate.anims = info->anims;
-    gMultiuseSpriteTemplate.images = info->images;
+    gMultiuseSpriteTemplate.anims = GetBattleOwMonAnimTable(info, battlerPosition);
+    gMultiuseSpriteTemplate.images = NULL;
     gMultiuseSpriteTemplate.affineAnims = gDummySpriteAffineAnimTable;
     gMultiuseSpriteTemplate.paletteTag = species;
 
@@ -2338,6 +2505,7 @@ u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, 
     if (spriteId == MAX_SPRITES)
     {
         FreeSpritePaletteByTag(species);
+        FreeSpriteTilesByTag(gMultiuseSpriteTemplate.tileTag);
         return MAX_SPRITES;
     }
 
@@ -2345,6 +2513,8 @@ u8 BattleOverworldScene_CreatePreviewMonSprite(u16 species, u8 battlerPosition, 
     gSprites[spriteId].oam.priority = OW_BATTLER_OBJ_PRIORITY;
     gSprites[spriteId].oam.paletteNum = paletteNum;
     gSprites[spriteId].callback = SpriteCallbackDummy;
+    SetBattleOwMonSpriteSheetSpan(&gSprites[spriteId]);
     StartSpriteAnim(&gSprites[spriteId], GetMoveDirectionAnimNum(direction));
+    AnimateSprite(&gSprites[spriteId]);
     return spriteId;
 }

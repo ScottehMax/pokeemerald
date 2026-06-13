@@ -1374,9 +1374,13 @@ bool32 IsCompressedData(const u32 *ptr)
 bool8 LoadCompressedSpriteSheetUsingHeap(const struct CompressedSpriteSheet *src)
 {
     struct SpriteSheet dest;
+    bool8 loaded;
     void *buffer;
 
     buffer = AllocZeroed(GetDecompressedDataSize(&src->data[0]));
+    if (buffer == NULL)
+        return FALSE;
+
     DecompressDataWithHeaderWram(src->data, buffer);
 
     dest.data = buffer;
@@ -1384,8 +1388,9 @@ bool8 LoadCompressedSpriteSheetUsingHeap(const struct CompressedSpriteSheet *src
     dest.tag = src->tag;
 
     LoadSpriteSheet(&dest);
+    loaded = IndexOfSpriteTileTag(src->tag) != 0xFF;
     Free(buffer);
-    return FALSE;
+    return loaded;
 }
 
 extern const u32 LZ77UnCompWRAMOptimized[];
