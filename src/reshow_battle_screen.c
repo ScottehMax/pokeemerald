@@ -17,6 +17,7 @@
 #include "battle_interface.h"
 #include "battle_anim.h"
 #include "data.h"
+#include "decompress.h"
 
 // this file's functions
 static void CB2_ReshowBattleScreenAfterMenu(void);
@@ -233,6 +234,7 @@ static void CB2_ReshowBlankBattleScreenAfterMenu(void)
         break;
     case 3:
         ResetSpriteData();
+        BattleOverworldScene_ResetSpriteReferences();
         break;
     case 4:
         FreeAllSpritePalettes();
@@ -455,12 +457,22 @@ static void CreateHealthboxSprite(enum BattlerId battler)
 
 static void CreateCaughtMonSprite(void)
 {
-    SetMultiuseSpriteTemplateToPokemon(GetMonData(GetBattlerMon(gBattlerTarget), MON_DATA_SPECIES), GetBattlerPosition(gBattlerTarget));
+    struct Pokemon *mon = GetBattlerMon(gBattlerTarget);
+    enum BattlerPosition position = GetBattlerPosition(gBattlerTarget);
+    enum Species species = GetMonData(mon, MON_DATA_SPECIES);
+
+    HandleLoadSpecialPokePic(TRUE,
+                             gMonSpritesGfxPtr->spritesGfx[position],
+                             species,
+                             GetMonData(mon, MON_DATA_PERSONALITY));
+    LoadPalette(GetMonFrontSpritePal(mon), OBJ_PLTT_ID(gBattlerTarget), PLTT_SIZE_4BPP);
+
+    SetMultiuseSpriteTemplateToPokemon(species, position);
     gBattlerSpriteIds[gBattlerTarget] = CreateSprite(&gMultiuseSpriteTemplate, DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2, GetBattlerSpriteSubpriority(gBattlerTarget));
     gSprites[gBattlerSpriteIds[gBattlerTarget]].oam.paletteNum = gBattlerTarget;
     gSprites[gBattlerSpriteIds[gBattlerTarget]].callback = SpriteCallbackDummy;
     gSprites[gBattlerSpriteIds[gBattlerTarget]].data[0] = gBattlerTarget;
-    gSprites[gBattlerSpriteIds[gBattlerTarget]].data[2] = GetMonData(GetBattlerMon(gBattlerTarget), MON_DATA_SPECIES);
+    gSprites[gBattlerSpriteIds[gBattlerTarget]].data[2] = species;
 
     StartSpriteAnim(&gSprites[gBattlerSpriteIds[gBattlerTarget]], 0);
 
