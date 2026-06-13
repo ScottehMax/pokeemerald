@@ -30,6 +30,7 @@
 #include "money.h"
 #include "malloc.h"
 #include "bg.h"
+#include "gpu_regs.h"
 #include "string_util.h"
 #include "pokemon_icon.h"
 #include "caps.h"
@@ -327,6 +328,8 @@ enum GiveCaughtMonStates
 
 #define LEVEL_UP_BANNER_START 416
 #define LEVEL_UP_BANNER_END   512
+#define LEVEL_UP_BANNER_OW_BG_SCREEN_SIZE 3
+#define LEVEL_UP_BANNER_OW_BG_DEFAULT_SCREEN_SIZE 2
 
 #define TAG_LVLUP_BANNER_MON_ICON 55130
 
@@ -336,6 +339,10 @@ static bool8 SlideInLevelUpBanner(void);
 static bool8 SlideOutLevelUpBanner(void);
 static u16 *GetLevelUpBannerBgXPtr(void);
 static u16 *GetLevelUpBannerBgYPtr(void);
+static u8 GetLevelUpBannerBgId(void);
+static void SetLevelUpBannerBgScreenSize(void);
+static void RestoreLevelUpBannerBgScreenSize(void);
+static void ApplyLevelUpBannerBgOffset(void);
 static void DrawLevelUpWindow1(void);
 static void DrawLevelUpWindow2(void);
 static void PutMonIconOnLvlUpBanner(void);
@@ -6268,9 +6275,10 @@ static void Cmd_drawlvlupbox(void)
     case 1:
         // Start level up banner
         *GetLevelUpBannerBgYPtr() = 96;
-        SetBgAttribute(BattleOverworldScene_IsEnabled() ? 1 : 2, BG_ATTR_PRIORITY, 0);
-        ShowBg(BattleOverworldScene_IsEnabled() ? 1 : 2);
+        SetLevelUpBannerBgScreenSize();
+        SetBgAttribute(GetLevelUpBannerBgId(), BG_ATTR_PRIORITY, 0);
         InitLevelUpBanner();
+        ShowBg(GetLevelUpBannerBgId());
         gBattleScripting.drawlvlupboxState = 2;
         break;
     case 2:
@@ -6279,8 +6287,10 @@ static void Cmd_drawlvlupbox(void)
         break;
     case 3:
         // Init level up box
-        gBattle_BG1_X = 0;
-        gBattle_BG1_Y = 256;
+        if (!BattleOverworldScene_IsEnabled() || IsMonGettingExpSentOut())
+            gBattle_BG1_X = 0;
+        if (!BattleOverworldScene_IsEnabled())
+            gBattle_BG1_Y = 256;
         SetBgAttribute(0, BG_ATTR_PRIORITY, 1);
         SetBgAttribute(1, BG_ATTR_PRIORITY, 0);
         ShowBg(0);
@@ -6300,7 +6310,8 @@ static void Cmd_drawlvlupbox(void)
         // Wait for draw after each page
         if (!IsDma3ManagerBusyWithBgCopy())
         {
-            gBattle_BG1_Y = 0;
+            if (!BattleOverworldScene_IsEnabled())
+                gBattle_BG1_Y = 0;
             gBattleScripting.drawlvlupboxState++;
         }
         break;
@@ -6320,17 +6331,27 @@ static void Cmd_drawlvlupbox(void)
             // Close level up box
             PlaySE(SE_SELECT);
             HandleBattleWindow(18, 7, 29, 19, WINDOW_BG1 | WINDOW_CLEAR);
+            if (BattleOverworldScene_IsEnabled())
+            {
+                ClearWindowTilemap(B_WIN_LEVEL_UP_BOX);
+                CopyWindowToVram(B_WIN_LEVEL_UP_BOX, COPYWIN_MAP);
+            }
             gBattleScripting.drawlvlupboxState++;
         }
         break;
     case 9:
+        if (IsDma3ManagerBusyWithBgCopy())
+            break;
         if (!SlideOutLevelUpBanner())
         {
             ClearWindowTilemap(B_WIN_LEVEL_UP_BANNER);
             CopyWindowToVram(B_WIN_LEVEL_UP_BANNER, COPYWIN_MAP);
 
-            ClearWindowTilemap(B_WIN_LEVEL_UP_BOX);
-            CopyWindowToVram(B_WIN_LEVEL_UP_BOX, COPYWIN_MAP);
+            if (!BattleOverworldScene_IsEnabled())
+            {
+                ClearWindowTilemap(B_WIN_LEVEL_UP_BOX);
+                CopyWindowToVram(B_WIN_LEVEL_UP_BOX, COPYWIN_MAP);
+            }
 
             if (BattleOverworldScene_IsEnabled())
                 BattleOverworldScene_KeepBaseBackgroundVisible();
@@ -6346,6 +6367,7 @@ static void Cmd_drawlvlupbox(void)
     case 10:
         if (!IsDma3ManagerBusyWithBgCopy())
         {
+            RestoreLevelUpBannerBgScreenSize();
             SetBgAttribute(0, BG_ATTR_PRIORITY, 0);
             SetBgAttribute(1, BG_ATTR_PRIORITY, 1);
             ShowBg(0);
@@ -6376,6 +6398,7 @@ static void InitLevelUpBanner(void)
 {
     *GetLevelUpBannerBgYPtr() = 0;
     *GetLevelUpBannerBgXPtr() = LEVEL_UP_BANNER_START;
+    ApplyLevelUpBannerBgOffset();
 
     LoadPalette(sLevelUpBanner_Pal, BG_PLTT_ID(6), sizeof(sLevelUpBanner_Pal));
     CopyToWindowPixelBuffer(B_WIN_LEVEL_UP_BANNER, sLevelUpBanner_Gfx, 0, 0);
@@ -6393,6 +6416,42 @@ static u16 *GetLevelUpBannerBgXPtr(void)
 static u16 *GetLevelUpBannerBgYPtr(void)
 {
     return BattleOverworldScene_IsEnabled() ? &gBattle_BG1_Y : &gBattle_BG2_Y;
+}
+
+static u8 GetLevelUpBannerBgId(void)
+{
+    return BattleOverworldScene_IsEnabled() ? 1 : 2;
+}
+
+static void SetLevelUpBannerBgScreenSize(void)
+{
+    if (BattleOverworldScene_IsEnabled())
+        SetBgAttribute(1, BG_ATTR_SCREENSIZE, LEVEL_UP_BANNER_OW_BG_SCREEN_SIZE);
+}
+
+static void RestoreLevelUpBannerBgScreenSize(void)
+{
+    if (!BattleOverworldScene_IsEnabled())
+        return;
+
+    SetBgAttribute(1, BG_ATTR_SCREENSIZE, LEVEL_UP_BANNER_OW_BG_DEFAULT_SCREEN_SIZE);
+    gBattle_BG1_X = 0;
+    gBattle_BG1_Y = 0;
+    ApplyLevelUpBannerBgOffset();
+}
+
+static void ApplyLevelUpBannerBgOffset(void)
+{
+    if (BattleOverworldScene_IsEnabled())
+    {
+        SetGpuReg(REG_OFFSET_BG1HOFS, gBattle_BG1_X);
+        SetGpuReg(REG_OFFSET_BG1VOFS, gBattle_BG1_Y);
+    }
+    else
+    {
+        SetGpuReg(REG_OFFSET_BG2HOFS, gBattle_BG2_X);
+        SetGpuReg(REG_OFFSET_BG2VOFS, gBattle_BG2_Y);
+    }
 }
 
 static bool8 SlideInLevelUpBanner(void)
