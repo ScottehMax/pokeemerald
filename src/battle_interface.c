@@ -197,12 +197,13 @@ enum
 #define OW_HEALTHBOX_TEXT_MAX_TILE_COLS (OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH * 2 + 2)
 #define OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT (5 * TILE_SIZE_1BPP)
 #define OW_HEALTHBOX_TEXT_MASK_WORDS 4
-#define OW_HEALTHBOX_TEXT_COPY_TILE_COUNT 64
+#define OW_HEALTHBOX_TEXT_COPY_TILE_COUNT 128
 
 static const u8 *GetHealthboxElementGfxPtr(u8);
 static void ClearHealthboxBackingTiles(u8 healthboxSpriteId);
 static void ApplyOverworldHealthboxTextPalette(u8 healthboxSpriteId);
 static void CopyNewHpBarBase(u8 healthbarSpriteId);
+static bool8 QueueOverworldHpBarFillUpdate(u8 healthboxSpriteId, const u8 *filledPixels);
 static void UpdateNewHpBarFillPalette(u8 healthbarSpriteId, s32 hp, s32 maxHp);
 static u8 GetNewHpBarObjTileOffset(u8 column, u8 row);
 static void RestoreHpBarStatusTileInHealthbox(u8 healthboxSpriteId);
@@ -227,7 +228,7 @@ static u8 GetComposedHealthboxTextPixel(const u8 *tileData, u8 tileWidth, u8 x, 
 static void SetComposedHealthboxTextPixel(u8 *tileData, u8 tileWidth, u8 x, u8 y, u8 color);
 static void SetOverworldHealthboxTextPixelIfVisible(u8 *tileData, u8 tileWidth, s16 x, s16 y, u8 color);
 static bool8 ComposedHealthboxTextTileIsEmpty(const u8 *tileData, u8 tileWidth, u8 tileX, u8 tileY);
-static void QueueOverworldHealthboxTextTileCopy(const u8 *src, u8 *dest);
+static void QueueOverworldHealthboxObjTileCopy(const u8 *src, u8 *dest, u8 tileCount);
 static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 sourceTileWidth, u8 copyTileWidth, u8 objectTileWidth, u8 firstRow, u8 rowCount, s8 srcYOffset, s8 destYOffset, bool8 copyEmptyCoreTiles);
 static void DrawOverworldHealthboxTextString(void *dest, const u8 *str, u8 tileWidth, s16 textX, s16 textY, u8 firstRow, u8 rowCount, s8 destYOffset);
 static void AddHealthboxSpriteTextPrinter(u8 spriteId, u8 nextSpriteId, u8 fontId, s16 left, s16 top, u8 letterSpacing, u8 lineSpacing, const union TextColor color, const u8 *str);
@@ -277,6 +278,7 @@ static const struct OamData sOamData_64x32 =
 static EWRAM_DATA u8 ALIGNED(4) sOverworldHealthboxTextTiles[OW_HEALTHBOX_TEXT_MAX_TILE_COLS * 4 * TILE_SIZE_4BPP] = {};
 static EWRAM_DATA u32 ALIGNED(4) sOverworldHealthboxTextMasks[OW_HEALTHBOX_TEXT_OBJ_MAX_HEIGHT][OW_HEALTHBOX_TEXT_MASK_WORDS] = {};
 static EWRAM_DATA u8 (*sOverworldHealthboxTextCopyTiles)[TILE_SIZE_4BPP] = NULL;
+static EWRAM_DATA u32 (*sOverworldHpBarCopyTiles)[NEW_HPBAR_FILL_TILE_COUNT][TILE_SIZE_4BPP / sizeof(u32)] = NULL;
 static EWRAM_DATA u8 sOverworldHealthboxTextCopyTileCursor = 0;
 static EWRAM_DATA u8 sOverworldStatusSpriteIds[MAX_BATTLERS_COUNT] = {0};
 static EWRAM_DATA bool8 sOverworldStatusSpriteIdsInitialized = FALSE;
@@ -869,6 +871,7 @@ u8 CreateSafariPlayerHealthboxSprites(void)
 void FreeOverworldHealthboxTextBuffers(void)
 {
     TRY_FREE_AND_SET_NULL(sOverworldHealthboxTextCopyTiles);
+    TRY_FREE_AND_SET_NULL(sOverworldHpBarCopyTiles);
     sOverworldHealthboxTextCopyTileCursor = 0;
 }
 
@@ -923,6 +926,40 @@ static void CopyNewHpBarBase(u8 healthbarSpriteId)
                       TILE_SIZE_4BPP);
         }
     }
+}
+
+static bool8 QueueOverworldHpBarFillUpdate(u8 healthboxSpriteId, const u8 *filledPixels)
+{
+    enum BattlerId battler = gSprites[healthboxSpriteId].hMain_Battler;
+    u8 healthbarSpriteId = gSprites[healthboxSpriteId].hMain_HealthBarSpriteId;
+    u32 (*tiles)[TILE_SIZE_4BPP / sizeof(u32)];
+    u8 i;
+
+    if (sOverworldHpBarCopyTiles == NULL)
+        sOverworldHpBarCopyTiles = AllocZeroed(MAX_BATTLERS_COUNT * NEW_HPBAR_FILL_TILE_COUNT * TILE_SIZE_4BPP);
+    if (sOverworldHpBarCopyTiles == NULL)
+        return FALSE;
+
+    tiles = sOverworldHpBarCopyTiles[battler];
+
+    for (i = 0; i < NEW_HPBAR_FILL_TILE_COUNT; i++)
+    {
+        u8 tileStart = (i == NEW_HPBAR_FILL_TILE_COUNT - 1) ? NEW_HPBAR_END_TILE_START : NEW_HPBAR_STRAIGHT_TILE_START;
+        CpuCopy32(gBattleInterface_NewHpBarGfx[tileStart + filledPixels[i]],
+                  tiles[i],
+                  TILE_SIZE_4BPP);
+    }
+
+    RequestSpriteCopy((const u8 *)&tiles[0],
+                      (u8 *)(OBJ_VRAM0 + (gSprites[healthbarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_FILL_TILE_OFFSET, 0)) * TILE_SIZE_4BPP),
+                      TILE_SIZE_4BPP);
+    RequestSpriteCopy((const u8 *)&tiles[1],
+                      (u8 *)(OBJ_VRAM0 + (gSprites[healthbarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_FILL_TILE_OFFSET + 1, 0)) * TILE_SIZE_4BPP),
+                      4 * TILE_SIZE_4BPP);
+    RequestSpriteCopy((const u8 *)&tiles[5],
+                      (u8 *)(OBJ_VRAM0 + (gSprites[healthbarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_FILL_TILE_OFFSET + 5, 0)) * TILE_SIZE_4BPP),
+                      3 * TILE_SIZE_4BPP);
+    return TRUE;
 }
 
 static u8 LoadNewHpBarPaletteVariant(u8 level)
@@ -1261,15 +1298,6 @@ static void UpdateOverworldHpTextInHealthboxSingles(u32 healthboxSpriteId, u32 m
     u32 spriteTileNum = gSprites[healthboxSpriteId].oam.tileNum * TILE_SIZE_4BPP;
     void *objVram;
 
-    if (maxOrCurrent == HP_MAX || maxOrCurrent == HP_BOTH)
-    {
-        ConvertIntToDecimalStringN(text, maxHp, STR_CONV_MODE_RIGHT_ALIGN, 3);
-        windowTileData = AddTextPrinterAndCreateWindowForOverworldHealthbox(text, HP_FONT, 0, 5, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, &windowId);
-        objVram = (void *)(OBJ_VRAM0 + spriteTileNum + 0xB40);
-        DrawOverworldHealthboxWindowText(objVram, windowTileData, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, 2, TILE_SIZE_1BPP - 1, TILE_SIZE_1BPP + 1, 0, -TILE_SIZE_1BPP, TRUE);
-        RemoveWindowOnOverworldHealthbox(windowId);
-    }
-
     if (maxOrCurrent == HP_CURRENT || maxOrCurrent == HP_BOTH)
     {
         ConvertIntToDecimalStringN(text, currHp, STR_CONV_MODE_RIGHT_ALIGN, 3);
@@ -1280,6 +1308,15 @@ static void UpdateOverworldHpTextInHealthboxSingles(u32 healthboxSpriteId, u32 m
         DrawOverworldHealthboxWindowText(objVram, windowTileData, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 1, 1, TILE_SIZE_1BPP - 1, TILE_SIZE_1BPP + 1, 0, -TILE_SIZE_1BPP, TRUE);
         objVram = (void *)(OBJ_VRAM0 + spriteTileNum + 0xB00);
         DrawOverworldHealthboxWindowText(objVram, windowTileData + TILE_SIZE_4BPP, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, 2, TILE_SIZE_1BPP - 1, TILE_SIZE_1BPP + 1, 0, -TILE_SIZE_1BPP, TRUE);
+        RemoveWindowOnOverworldHealthbox(windowId);
+    }
+
+    if (maxOrCurrent == HP_MAX || maxOrCurrent == HP_BOTH)
+    {
+        ConvertIntToDecimalStringN(text, maxHp, STR_CONV_MODE_RIGHT_ALIGN, 3);
+        windowTileData = AddTextPrinterAndCreateWindowForOverworldHealthbox(text, HP_FONT, 0, 5, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, &windowId);
+        objVram = (void *)(OBJ_VRAM0 + spriteTileNum + 0xB40);
+        DrawOverworldHealthboxWindowText(objVram, windowTileData, OW_HEALTHBOX_TEXT_OBJ_TILE_WIDTH, 2, 2, TILE_SIZE_1BPP - 1, TILE_SIZE_1BPP + 1, 0, -TILE_SIZE_1BPP, TRUE);
         RemoveWindowOnOverworldHealthbox(windowId);
     }
 }
@@ -2165,13 +2202,27 @@ void TryAddPokeballIconToHealthbox(u8 healthboxSpriteId, bool8 noStatus)
     healthBarSpriteId = gSprites[healthboxSpriteId].hMain_HealthBarSpriteId;
 
     if (noStatus)
-        CpuCopy32(gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE],
-                  (void *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
-                  TILE_SIZE_4BPP);
+    {
+        if (BattleOverworldScene_IsEnabled())
+            QueueOverworldHealthboxObjTileCopy((const u8 *)gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE],
+                                               (u8 *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
+                                               1);
+        else
+            CpuCopy32(gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE],
+                      (void *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
+                      TILE_SIZE_4BPP);
+    }
     else
-        CpuCopy32(gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN + NEW_HPBAR_TILES_PER_ROW],
-                  (void *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
-                  TILE_SIZE_4BPP);
+    {
+        if (BattleOverworldScene_IsEnabled())
+            QueueOverworldHealthboxObjTileCopy((const u8 *)gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN + NEW_HPBAR_TILES_PER_ROW],
+                                               (u8 *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
+                                               1);
+        else
+            CpuCopy32(gBattleInterface_NewHpBarGfx[NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN + NEW_HPBAR_TILES_PER_ROW],
+                      (void *)(OBJ_VRAM0 + (gSprites[healthBarSpriteId].oam.tileNum + GetNewHpBarObjTileOffset(NEW_HPBAR_CAUGHT_ICON_TILE_COLUMN, 1)) * TILE_SIZE_4BPP),
+                      TILE_SIZE_4BPP);
+    }
 }
 
 static void RestoreHpBarStatusTileInHealthbox(u8 healthboxSpriteId)
@@ -2390,29 +2441,45 @@ void UpdateHealthboxAttribute(u8 healthboxSpriteId, struct Pokemon *mon, u8 elem
     enum BattlerId battler = gSprites[healthboxSpriteId].hMain_Battler;
     s32 maxHp = GetMonData(mon, MON_DATA_MAX_HP);
     s32 currHp = GetMonData(mon, MON_DATA_HP);
+    bool8 isOverworld = BattleOverworldScene_IsEnabled();
+    bool8 isLevelUp = elementId == HEALTHBOX_LEVEL_UP;
+
+    if (isOverworld && isLevelUp)
+        DeferSpriteCopyRequests();
+
+    if (isOverworld)
+    {
+        u8 paletteId = IndexOfSpritePaletteTag(TAG_HEALTHBOX_PAL);
+
+        if (paletteId != 0xFF)
+        {
+            gSprites[healthboxSpriteId].oam.paletteNum = paletteId;
+            gSprites[gSprites[healthboxSpriteId].oam.affineParam].oam.paletteNum = paletteId;
+        }
+    }
 
     if (IsOnPlayerSide(battler))
     {
         u8 isDoubles = GetBattlerCoordsIndex(battler) == BATTLE_COORDS_DOUBLES;
 
-        if (elementId == HEALTHBOX_LEVEL || elementId == HEALTHBOX_ALL)
+        if (elementId == HEALTHBOX_LEVEL || elementId == HEALTHBOX_ALL || isLevelUp)
             UpdateLvlInHealthbox(healthboxSpriteId, GetMonData(mon, MON_DATA_LEVEL));
 
-        if (elementId == HEALTHBOX_ALL)
+        if (elementId == HEALTHBOX_ALL || isLevelUp)
             UpdateHpTextInHealthbox(healthboxSpriteId, HP_BOTH, currHp, maxHp);
         else if (elementId == HEALTHBOX_MAX_HP)
             UpdateHpTextInHealthbox(healthboxSpriteId, HP_MAX, currHp, maxHp);
         else if (elementId == HEALTHBOX_CURRENT_HP)
             UpdateHpTextInHealthbox(healthboxSpriteId, HP_CURRENT, currHp, maxHp);
 
-        if (elementId == HEALTHBOX_HEALTH_BAR || elementId == HEALTHBOX_ALL)
+        if (elementId == HEALTHBOX_HEALTH_BAR || elementId == HEALTHBOX_ALL || isLevelUp)
         {
             LoadBattleBarGfx(0);
             SetBattleBarStruct(battler, healthboxSpriteId, maxHp, currHp, 0);
             MoveBattleBar(battler, healthboxSpriteId, HEALTH_BAR, 0);
         }
 
-        if (!BattleOverworldScene_IsEnabled() && !isDoubles && (elementId == HEALTHBOX_EXP_BAR || elementId == HEALTHBOX_ALL))
+        if (!isOverworld && !isDoubles && (elementId == HEALTHBOX_EXP_BAR || elementId == HEALTHBOX_ALL))
         {
             enum Species species;
             u32 exp, currLevelExp;
@@ -2440,18 +2507,18 @@ void UpdateHealthboxAttribute(u8 healthboxSpriteId, struct Pokemon *mon, u8 elem
     }
     else
     {
-        if (elementId == HEALTHBOX_LEVEL || elementId == HEALTHBOX_ALL)
+        if (elementId == HEALTHBOX_LEVEL || elementId == HEALTHBOX_ALL || isLevelUp)
             UpdateLvlInHealthbox(healthboxSpriteId, GetMonData(mon, MON_DATA_LEVEL));
         if (gBattleSpritesDataPtr->battlerData[battler].hpNumbersNoBars)
         {
-            if (elementId == HEALTHBOX_ALL)
+            if (elementId == HEALTHBOX_ALL || isLevelUp)
                 UpdateHpTextInHealthbox(healthboxSpriteId, HP_BOTH, currHp, maxHp);
             else if (elementId == HEALTHBOX_MAX_HP)
                 UpdateHpTextInHealthbox(healthboxSpriteId, HP_MAX, currHp, maxHp);
             else if (elementId == HEALTHBOX_CURRENT_HP)
                 UpdateHpTextInHealthbox(healthboxSpriteId, HP_CURRENT, currHp, maxHp);
         }
-        if (elementId == HEALTHBOX_HEALTH_BAR || elementId == HEALTHBOX_ALL)
+        if (elementId == HEALTHBOX_HEALTH_BAR || elementId == HEALTHBOX_ALL || isLevelUp)
         {
             LoadBattleBarGfx(0);
             SetBattleBarStruct(battler, healthboxSpriteId, maxHp, currHp, 0);
@@ -2461,6 +2528,16 @@ void UpdateHealthboxAttribute(u8 healthboxSpriteId, struct Pokemon *mon, u8 elem
             UpdateNickInHealthbox(healthboxSpriteId, mon);
         if (elementId == HEALTHBOX_STATUS_ICON || elementId == HEALTHBOX_ALL)
             UpdateStatusIconInHealthbox(healthboxSpriteId);
+    }
+
+    if (isOverworld)
+    {
+        BuildOamBuffer();
+        if (elementId == HEALTHBOX_HEALTH_BAR || elementId == HEALTHBOX_ALL || isLevelUp)
+        {
+            FreeSpritePaletteByTag(TAG_HEALTHBOX_PALS_1);
+            FreeSpritePaletteByTag(TAG_HEALTHBOX_PALS_2);
+        }
     }
 }
 
@@ -2535,20 +2612,23 @@ static void MoveBattleBarGraphically(enum BattlerId battler, u8 whichBar)
                                   displayedHp,
                                   gBattleSpritesDataPtr->battleBars[battler].maxValue);
 
-        // Expansion draws the new HP bar as its own sprite. In OW battles the base
-        // is already installed when the healthbox is created; rewriting it here can
-        // expose an empty bar before the filled tiles are copied.
-        if (!isOverworld)
-            CopyNewHpBarBase(healthbarSpriteId);
-        for (i = 0; i < NEW_HPBAR_FILL_TILE_COUNT; i++)
+        if (isOverworld && QueueOverworldHpBarFillUpdate(healthboxSpriteId, array))
         {
-            u8 tileStart = (i == NEW_HPBAR_FILL_TILE_COUNT - 1) ? NEW_HPBAR_END_TILE_START : NEW_HPBAR_STRAIGHT_TILE_START;
-            CpuCopy32(gBattleInterface_NewHpBarGfx[tileStart + array[i]],
-                      (void *)(OBJ_VRAM0 + (baseTile + GetNewHpBarObjTileOffset(NEW_HPBAR_FILL_TILE_OFFSET + i, 0)) * TILE_SIZE_4BPP),
-                      TILE_SIZE_4BPP);
-        }
-        if (isOverworld)
             TryAddPokeballIconToHealthbox(healthboxSpriteId, TRUE);
+        }
+        else
+        {
+            CopyNewHpBarBase(healthbarSpriteId);
+            for (i = 0; i < NEW_HPBAR_FILL_TILE_COUNT; i++)
+            {
+                u8 tileStart = (i == NEW_HPBAR_FILL_TILE_COUNT - 1) ? NEW_HPBAR_END_TILE_START : NEW_HPBAR_STRAIGHT_TILE_START;
+                CpuCopy32(gBattleInterface_NewHpBarGfx[tileStart + array[i]],
+                          (void *)(OBJ_VRAM0 + (baseTile + GetNewHpBarObjTileOffset(NEW_HPBAR_FILL_TILE_OFFSET + i, 0)) * TILE_SIZE_4BPP),
+                          TILE_SIZE_4BPP);
+            }
+            if (isOverworld)
+                TryAddPokeballIconToHealthbox(healthboxSpriteId, TRUE);
+        }
         break;
     }
     case EXP_BAR:
@@ -2974,21 +3054,26 @@ static bool8 ComposedHealthboxTextTileIsEmpty(const u8 *tileData, u8 tileWidth, 
     return TRUE;
 }
 
-static void QueueOverworldHealthboxTextTileCopy(const u8 *src, u8 *dest)
+static void QueueOverworldHealthboxObjTileCopy(const u8 *src, u8 *dest, u8 tileCount)
 {
     u8 *copySrc;
+
+    if (tileCount == 0 || tileCount > OW_HEALTHBOX_TEXT_COPY_TILE_COUNT)
+        return;
 
     if (sOverworldHealthboxTextCopyTiles == NULL)
         sOverworldHealthboxTextCopyTiles = AllocZeroed(OW_HEALTHBOX_TEXT_COPY_TILE_COUNT * TILE_SIZE_4BPP);
     if (sOverworldHealthboxTextCopyTiles == NULL)
         return;
+    if (sOverworldHealthboxTextCopyTileCursor + tileCount > OW_HEALTHBOX_TEXT_COPY_TILE_COUNT)
+        sOverworldHealthboxTextCopyTileCursor = 0;
 
     copySrc = sOverworldHealthboxTextCopyTiles[sOverworldHealthboxTextCopyTileCursor];
-    CpuCopy32(src, copySrc, TILE_SIZE_4BPP);
-    RequestSpriteCopy(copySrc, dest, TILE_SIZE_4BPP);
+    CpuCopy32(src, copySrc, tileCount * TILE_SIZE_4BPP);
+    RequestSpriteCopy(copySrc, dest, tileCount * TILE_SIZE_4BPP);
 
-    sOverworldHealthboxTextCopyTileCursor++;
-    if (sOverworldHealthboxTextCopyTileCursor >= OW_HEALTHBOX_TEXT_COPY_TILE_COUNT)
+    sOverworldHealthboxTextCopyTileCursor += tileCount;
+    if (sOverworldHealthboxTextCopyTileCursor == OW_HEALTHBOX_TEXT_COPY_TILE_COUNT)
         sOverworldHealthboxTextCopyTileCursor = 0;
 }
 
@@ -3030,6 +3115,10 @@ static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 
     u8 tileY;
     s16 objectTileX;
     bool8 isCoreTile;
+    const u8 *tileSrc;
+    const u8 *runSrc;
+    u8 *runDest;
+    u8 runTileCount;
     u8 word;
     u8 bit;
     u8 bitInWord;
@@ -3138,6 +3227,10 @@ static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 
 
     for (tileY = 0; tileY < tileRows; tileY++)
     {
+        runSrc = NULL;
+        runDest = NULL;
+        runTileCount = 0;
+
         for (tileX = 0; tileX < tileCols; tileX++)
         {
             objectTileX = firstTileX + tileX;
@@ -3153,10 +3246,24 @@ static void DrawOverworldHealthboxWindowText(void *dest, u8 *windowTileData, u8 
 
             if (tileData != NULL)
             {
-                QueueOverworldHealthboxTextTileCopy(sOverworldHealthboxTextTiles + (tileY * tileCols + tileX) * TILE_SIZE_4BPP,
-                                                    tileData);
+                tileSrc = sOverworldHealthboxTextTiles + (tileY * tileCols + tileX) * TILE_SIZE_4BPP;
+                if (runTileCount != 0
+                 && tileSrc == runSrc + runTileCount * TILE_SIZE_4BPP
+                 && tileData == runDest + runTileCount * TILE_SIZE_4BPP)
+                {
+                    runTileCount++;
+                }
+                else
+                {
+                    QueueOverworldHealthboxObjTileCopy(runSrc, runDest, runTileCount);
+                    runSrc = tileSrc;
+                    runDest = tileData;
+                    runTileCount = 1;
+                }
             }
         }
+
+        QueueOverworldHealthboxObjTileCopy(runSrc, runDest, runTileCount);
     }
 }
 
@@ -3180,6 +3287,10 @@ static void DrawOverworldHealthboxTextString(void *dest, const u8 *str, u8 tileW
     s16 destY;
     s16 objectTileX;
     bool8 isCoreTile;
+    const u8 *tileSrc;
+    const u8 *runSrc;
+    u8 *runDest;
+    u8 runTileCount;
     u16 glyphId;
     u8 fgColor = OW_HEALTHBOX_TEXT_FILL_COLOR;
     const u8 *glyphPixels;
@@ -3277,6 +3388,10 @@ static void DrawOverworldHealthboxTextString(void *dest, const u8 *str, u8 tileW
 
     for (tileY = 0; tileY < tileRows; tileY++)
     {
+        runSrc = NULL;
+        runDest = NULL;
+        runTileCount = 0;
+
         for (tileX = 0; tileX < tileCols; tileX++)
         {
             objectTileX = firstTileX + tileX;
@@ -3292,10 +3407,24 @@ static void DrawOverworldHealthboxTextString(void *dest, const u8 *str, u8 tileW
 
             if (tileData != NULL)
             {
-                QueueOverworldHealthboxTextTileCopy(sOverworldHealthboxTextTiles + (tileY * tileCols + tileX) * TILE_SIZE_4BPP,
-                                                    tileData);
+                tileSrc = sOverworldHealthboxTextTiles + (tileY * tileCols + tileX) * TILE_SIZE_4BPP;
+                if (runTileCount != 0
+                 && tileSrc == runSrc + runTileCount * TILE_SIZE_4BPP
+                 && tileData == runDest + runTileCount * TILE_SIZE_4BPP)
+                {
+                    runTileCount++;
+                }
+                else
+                {
+                    QueueOverworldHealthboxObjTileCopy(runSrc, runDest, runTileCount);
+                    runSrc = tileSrc;
+                    runDest = tileData;
+                    runTileCount = 1;
+                }
             }
         }
+
+        QueueOverworldHealthboxObjTileCopy(runSrc, runDest, runTileCount);
     }
 }
 

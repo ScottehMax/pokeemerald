@@ -1567,11 +1567,12 @@ static void Task_UpdateLvlInHealthbox(u8 taskId)
     if (!gBattleSpritesDataPtr->healthBoxesData[battler].specialAnimActive)
     {
         u8 monIndex = gTasks[taskId].tExpTask_monId;
+        u8 elementId = BattleOverworldScene_IsEnabled() ? HEALTHBOX_LEVEL_UP : HEALTHBOX_ALL;
 
         if (IsDoubleBattle() == TRUE && monIndex == gBattlerPartyIndexes[BATTLE_PARTNER(battler)])
-            UpdateHealthboxAttribute(gHealthboxSpriteIds[BATTLE_PARTNER(battler)], &gParties[B_TRAINER_PLAYER][monIndex], HEALTHBOX_ALL);
+            UpdateHealthboxAttribute(gHealthboxSpriteIds[BATTLE_PARTNER(battler)], &gParties[B_TRAINER_PLAYER][monIndex], elementId);
         else
-            UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], &gParties[B_TRAINER_PLAYER][monIndex], HEALTHBOX_ALL);
+            UpdateHealthboxAttribute(gHealthboxSpriteIds[battler], &gParties[B_TRAINER_PLAYER][monIndex], elementId);
 
         gTasks[taskId].func = Task_SetControllerToWaitForString;
     }

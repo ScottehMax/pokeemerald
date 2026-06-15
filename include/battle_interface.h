@@ -105,7 +105,8 @@ enum
     HEALTHBOX_UNUSED_8,
     HEALTHBOX_STATUS_ICON,
     HEALTHBOX_SAFARI_ALL_TEXT,
-    HEALTHBOX_SAFARI_BALLS_TEXT
+    HEALTHBOX_SAFARI_BALLS_TEXT,
+    HEALTHBOX_LEVEL_UP
 };
 
 enum BattleCoordTypes GetBattlerCoordsIndex(enum BattlerId battler);

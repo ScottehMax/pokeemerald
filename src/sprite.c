@@ -786,6 +786,11 @@ void ProcessSpriteCopyRequests(void)
     }
 }
 
+void DeferSpriteCopyRequests(void)
+{
+    sShouldProcessSpriteCopyRequests = FALSE;
+}
+
 void RequestSpriteFrameImageCopy(u16 index, u16 tileNum, const struct SpriteFrameImage *images)
 {
     if (sSpriteCopyRequestCount < MAX_SPRITE_COPY_REQUESTS)
