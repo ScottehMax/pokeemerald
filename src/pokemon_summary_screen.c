@@ -310,6 +310,7 @@ static void RemoveAndCreateMonMarkingsSprite(struct Pokemon *);
 static void CreateCaughtBallSprite(struct Pokemon *);
 static void CreateSetStatusSprite(void);
 static void CreateMoveSelectorSprites(u8);
+static void LoadMoveTypeSpritePalettes(void);
 static void SpriteCB_MoveSelector(struct Sprite *);
 static void DestroyMoveSelectorSprites(u8);
 static void SetMainMoveSelectorColor(u8);
@@ -789,6 +790,8 @@ static const u8 sMovesPPLayout[] = _("{PP}{DYNAMIC 0}/{DYNAMIC 1}");
 #define TAG_MOVE_TYPES 30002
 #define TAG_MON_MARKINGS 30003
 #define TAG_CATEGORY_ICONS 30004
+#define TAG_MOVE_TYPES_2 30005
+#define TAG_MOVE_TYPES_3 30006
 
 static const struct OamData sOamData_CategoryIcons =
 {
@@ -1494,13 +1497,36 @@ static bool8 DecompressGraphics(void)
         sMonSummaryScreen->switchCounter++;
         break;
     case 12:
-        LoadPalette(gMoveTypes_Pal, OBJ_PLTT_ID(13), 3 * PLTT_SIZE_4BPP);
+        LoadMoveTypeSpritePalettes();
         LoadCompressedSpriteSheet(&gSpriteSheet_CategoryIcons);
         LoadSpritePalette(&gSpritePal_CategoryIcons);
         sMonSummaryScreen->switchCounter = 0;
         return TRUE;
     }
     return FALSE;
+}
+
+static void LoadMoveTypeSpritePalettes(void)
+{
+    static const u16 sMoveTypePaletteTags[] =
+    {
+        TAG_MOVE_TYPES,
+        TAG_MOVE_TYPES_2,
+        TAG_MOVE_TYPES_3,
+    };
+    u32 i;
+    u32 paletteNum = gTypesInfo[TYPE_NORMAL].palette;
+
+    for (i = 0; i < ARRAY_COUNT(sMoveTypePaletteTags); i++)
+    {
+        struct SpritePalette palette =
+        {
+            .data = &gMoveTypes_Pal[i * 16],
+            .tag = sMoveTypePaletteTags[i],
+        };
+
+        LoadSpritePaletteInSlot(&palette, paletteNum + i);
+    }
 }
 
 static struct BoxPokemon *GetCurrentBoxmon(void)
