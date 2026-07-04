@@ -8,6 +8,7 @@ pub mod math_util;
 pub mod blit;
 pub mod dynamic_placeholder_text_util;
 pub mod heal_location;
+pub mod mystery_event_msg;
 pub mod play_time;
 pub mod random;
 pub mod save_location;

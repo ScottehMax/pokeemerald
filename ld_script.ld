@@ -701,7 +701,7 @@ SECTIONS {
         src/text_input_strings.o(.rodata);
         src/fonts.o(.rodata);
         src/international_string_util.o(.rodata);
-        src/mystery_event_msg.o(.rodata);
+        src/mystery_event_msg.o(.rodata*);
         data/mystery_gift.o(.rodata);
         src/m4a_tables.o(.rodata);
         data/sound_data.o(.rodata);
