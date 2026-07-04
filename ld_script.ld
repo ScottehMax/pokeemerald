@@ -213,7 +213,7 @@ SECTIONS {
         src/mail.o(.text);
         src/menu_helpers.o(.text);
         src/dewford_trend.o(.text);
-        src/heal_location.o(.text);
+        src/heal_location.o(.text*);
         src/region_map.o(.text);
         src/image_processing_effects.o(.text);
         src/decoration.o(.text);
@@ -589,7 +589,7 @@ SECTIONS {
         src/mauville_old_man.o(.rodata);
         src/mail.o(.rodata);
         src/menu_helpers.o(.rodata);
-        src/heal_location.o(.rodata);
+        src/heal_location.o(.rodata*);
         src/region_map.o(.rodata);
         src/image_processing_effects.o(.rodata);
         src/decoration.o(.rodata);

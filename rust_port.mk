@@ -22,7 +22,7 @@ RUST_CORE_STAMP := $(RUST_CRATE)/target/$(RUST_TARGET)/release/.rust-core-built
 
 # Future porting tasks append source files here as they are replaced by Rust.
 # Keep paths relative to the repository root.
-PORTED_C_SRCS := src/math_util.c src/random.c
+PORTED_C_SRCS := src/math_util.c src/random.c src/heal_location.c
 
 RUST_SRCS := $(patsubst src/%.c,$(RUST_SUBDIR)/%.rs,$(PORTED_C_SRCS))
 RUST_OBJS := $(patsubst src/%.c,$(C_BUILDDIR)/%.o,$(PORTED_C_SRCS))
@@ -55,7 +55,7 @@ $(RUST_CORE_STAMP): $(RUST_CRATE_ROOT) $(RUST_SRCS) $(RUST_CARGO_MANIFEST)
 	cd $(RUST_CRATE) && PATH=/usr/local/cargo/bin:$$PATH RUSTC_BOOTSTRAP=1 $(CARGO) build -Z build-std=core --target $(RUST_TARGET) --release --lib
 	@touch $@
 
-$(C_BUILDDIR)/%.o: $(RUST_SUBDIR)/%.rs $(RUST_CORE_STAMP)
+$(RUST_OBJS): $(C_BUILDDIR)/%.o: $(RUST_SUBDIR)/%.rs $(RUST_CORE_STAMP)
 	@echo "$(RUSTC) <rust-port-flags> -o $@ $<"
 	@mkdir -p $(dir $@)
 	CORE_RLIB=$$(ls $(RUST_CRATE)/target/$(RUST_TARGET)/release/deps/libcore-*.rlib | head -n 1); \
