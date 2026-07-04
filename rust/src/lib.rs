@@ -6,6 +6,7 @@
 
 pub mod math_util;
 pub mod blit;
+pub mod dynamic_placeholder_text_util;
 pub mod heal_location;
 pub mod random;
 

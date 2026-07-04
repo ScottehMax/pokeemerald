@@ -22,7 +22,7 @@ RUST_CORE_STAMP := $(RUST_CRATE)/target/$(RUST_TARGET)/release/.rust-core-built
 
 # Future porting tasks append source files here as they are replaced by Rust.
 # Keep paths relative to the repository root.
-PORTED_C_SRCS := src/math_util.c src/random.c src/heal_location.c src/blit.c
+PORTED_C_SRCS := src/math_util.c src/random.c src/heal_location.c src/blit.c src/dynamic_placeholder_text_util.c
 
 RUST_SRCS := $(patsubst src/%.c,$(RUST_SUBDIR)/%.rs,$(PORTED_C_SRCS))
 RUST_OBJS := $(patsubst src/%.c,$(C_BUILDDIR)/%.o,$(PORTED_C_SRCS))

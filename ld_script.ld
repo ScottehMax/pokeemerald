@@ -302,7 +302,7 @@ SECTIONS {
         src/battle_pyramid.o(.text);
         src/item_menu.o(.text);
         src/list_menu.o(.text);
-        src/dynamic_placeholder_text_util.o(.text);
+        src/dynamic_placeholder_text_util.o(.text*);
         src/save_location.o(.text);
         src/item_icon.o(.text);
         src/party_menu.o(.text);
