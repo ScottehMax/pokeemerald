@@ -10,6 +10,7 @@ pub mod dynamic_placeholder_text_util;
 pub mod heal_location;
 pub mod play_time;
 pub mod random;
+pub mod save_location;
 
 #[cfg(test)]
 mod tests {

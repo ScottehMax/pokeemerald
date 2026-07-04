@@ -304,7 +304,7 @@ SECTIONS {
         src/item_menu.o(.text);
         src/list_menu.o(.text);
         src/dynamic_placeholder_text_util.o(.text*);
-        src/save_location.o(.text);
+        src/save_location.o(.text*);
         src/item_icon.o(.text);
         src/party_menu.o(.text);
         src/battle_tent.o(.text);
@@ -663,7 +663,7 @@ SECTIONS {
         src/battle_pyramid.o(.rodata);
         src/item_menu.o(.rodata);
         src/list_menu.o(.rodata);
-        src/save_location.o(.rodata);
+        src/save_location.o(.rodata*);
         src/item_icon.o(.rodata);
         src/party_menu.o(.rodata);
         src/battle_tent.o(.rodata);
