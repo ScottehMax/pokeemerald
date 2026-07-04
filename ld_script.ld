@@ -34,6 +34,7 @@ SECTIONS {
     {
         /* .bss starts at 0x3000000 */
         INCLUDE "sym_bss.ld"
+        src/play_time.o(.bss*);
         src/*.o(.bss);
         data/*.o(.bss);
 
@@ -113,7 +114,7 @@ SECTIONS {
         src/load_save.o(.text);
         src/trade.o(.text);
         src/berry_blender.o(.text);
-        src/play_time.o(.text);
+        src/play_time.o(.text*);
         src/new_game.o(.text);
         src/overworld.o(.text);
         src/fieldmap.o(.text);
