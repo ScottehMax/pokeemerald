@@ -11,7 +11,7 @@ The normal build collects C sources from `src/**/*.c`, assembles them into objec
 1. Add a C file to `PORTED_C_SRCS` in `rust_port.mk`.
 2. Add a Rust file at the matching path under `rust/src`.
 3. The original C file is removed from `C_SRCS`.
-4. The Rust crate is compiled with Cargo `-Z build-std=core` and emits the replacement object at the original C object path under `build/<variant>/src`.
+4. Cargo `-Z build-std=core` builds the target `core` artifacts, then the Rust file is compiled directly as a no_std crate root and emits the replacement object at the original C object path under `build/<variant>/src`.
 5. The final ELF/ROM links C, ASM, data, and Rust replacement objects together.
 
 Example mapping:
@@ -194,10 +194,14 @@ Build-system seam summary:
 5. Final `OBJS` includes the remaining C objects plus any Rust replacement objects.
 6. The original C file should remain in `src/` until the Rust replacement has proven equivalent; it is excluded from the build only by `PORTED_C_SRCS`.
 
-Validated Rust object command:
+Validated Rust object commands:
 
 ```sh
-cd rust && PATH=/usr/local/cargo/bin:$PATH RUSTC_BOOTSTRAP=1 cargo rustc -Z build-std=core --target thumbv4t-none-eabi --release --lib -- --emit=obj=../build/emerald/src/math_util.o -C opt-level=2 -C panic=abort -C relocation-model=static
+cd rust && PATH=/usr/local/cargo/bin:$PATH RUSTC_BOOTSTRAP=1 cargo build -Z build-std=core --target thumbv4t-none-eabi --release --lib
+
+CORE_RLIB=$(ls rust/target/thumbv4t-none-eabi/release/deps/libcore-*.rlib | head -n 1)
+COMPILER_BUILTINS_RLIB=$(ls rust/target/thumbv4t-none-eabi/release/deps/libcompiler_builtins-*.rlib | head -n 1)
+PATH=/usr/local/cargo/bin:$PATH rustc --edition=2021 --target thumbv4t-none-eabi --crate-type lib --emit=obj -C opt-level=2 -C panic=abort -C relocation-model=static -L dependency=rust/target/thumbv4t-none-eabi/release/deps --extern core=$CORE_RLIB --extern compiler_builtins=$COMPILER_BUILTINS_RLIB -o build/emerald/src/math_util.o rust/src/math_util.rs
 ```
 
 The current stable Rust image accepts this with `RUSTC_BOOTSTRAP=1`; do not add `rustup target add thumbv4t-none-eabi`.

@@ -1,9 +1,11 @@
 #![cfg_attr(not(test), no_std)]
+#![allow(unused_attributes)]
 
 // Shared Rust port support goes here. Individual ROM objects are compiled from
 // rust/src/<module>.rs by rust_port.mk so each port can replace one C object at a time.
 
 pub mod math_util;
+pub mod random;
 
 #[cfg(test)]
 mod tests {

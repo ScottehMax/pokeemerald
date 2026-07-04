@@ -1,3 +1,5 @@
+#![cfg_attr(all(not(test), target_arch = "arm"), no_std)]
+
 type U8 = u8;
 type S16 = i16;
 type S32 = i32;
