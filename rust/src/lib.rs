@@ -5,6 +5,7 @@
 // rust/src/<module>.rs by rust_port.mk so each port can replace one C object at a time.
 
 pub mod math_util;
+pub mod blit;
 pub mod heal_location;
 pub mod random;
 
