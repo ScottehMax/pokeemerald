@@ -11,8 +11,8 @@ The normal build collects C sources from `src/**/*.c`, assembles them into objec
 1. Add a C file to `PORTED_C_SRCS` in `rust_port.mk`.
 2. Add a Rust file at the matching path under `rust/src`.
 3. The original C file is removed from `C_SRCS`.
-4. The Rust file is compiled to an object under `build/<variant>/rust`.
-5. The final ELF/ROM links C, ASM, data, and Rust objects together.
+4. The Rust crate is compiled with Cargo `-Z build-std=core` and emits the replacement object at the original C object path under `build/<variant>/src`.
+5. The final ELF/ROM links C, ASM, data, and Rust replacement objects together.
 
 Example mapping:
 
@@ -21,7 +21,7 @@ src/decompress.c       -> rust/src/decompress.rs
 src/foo/bar.c          -> rust/src/foo/bar.rs
 ```
 
-The Rust object must export the same ABI-visible symbols that the removed C object provided.
+The Rust object must export the same ABI-visible symbols that the removed C object provided. It is emitted at the original object path because `ld_script.ld` has explicit `src/*.o` and per-object section placement rules.
 
 ## Required Makefile hook
 
@@ -182,7 +182,7 @@ Important Rust target caveat:
 `rustup target add thumbv4t-none-eabi` fails because Rust does not ship prebuilt artifacts for that target. Do not reintroduce that command. Future Rust ROM-object work must either:
 
 1. Compile no-core/no-std object code that does not require prebuilt target libraries.
-2. Use nightly `-Z build-std=core` or an equivalent custom target/core build strategy.
+2. Use Cargo `-Z build-std=core` or an equivalent custom target/core build strategy.
 3. Document the exact command in this file and validate it in Docker before assigning broad porting work.
 
 Build-system seam summary:
@@ -190,9 +190,17 @@ Build-system seam summary:
 1. `Makefile` computes `C_SRCS` and `C_OBJS` as usual.
 2. `Makefile` includes `rust_port.mk` immediately after `C_OBJS` is computed.
 3. `rust_port.mk` removes paths listed in `PORTED_C_SRCS` from `C_SRCS`.
-4. `rust_port.mk` maps each removed `src/<path>.c` to `rust/src/<path>.rs` and produces `build/<variant>/rust/<path>.o`.
-5. Final `OBJS` includes the remaining C objects plus any Rust objects.
+4. `rust_port.mk` maps each removed `src/<path>.c` to `rust/src/<path>.rs` and produces a Rust object at `build/<variant>/src/<path>.o`.
+5. Final `OBJS` includes the remaining C objects plus any Rust replacement objects.
 6. The original C file should remain in `src/` until the Rust replacement has proven equivalent; it is excluded from the build only by `PORTED_C_SRCS`.
+
+Validated Rust object command:
+
+```sh
+cd rust && PATH=/usr/local/cargo/bin:$PATH RUSTC_BOOTSTRAP=1 cargo rustc -Z build-std=core --target thumbv4t-none-eabi --release --lib -- --emit=obj=../build/emerald/src/math_util.o -C opt-level=2 -C panic=abort -C relocation-model=static
+```
+
+The current stable Rust image accepts this with `RUSTC_BOOTSTRAP=1`; do not add `rustup target add thumbv4t-none-eabi`.
 
 Recommended first real port:
 

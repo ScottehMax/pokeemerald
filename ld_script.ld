@@ -244,7 +244,7 @@ SECTIONS {
         src/battle_controller_link_partner.o(.text);
         src/battle_message.o(.text);
         src/cable_car.o(.text);
-        src/math_util.o(.text);
+        src/math_util.o(.text*);
         src/palette_util.o(.text);
         src/confetti_util.o(.text);
         src/save.o(.text);

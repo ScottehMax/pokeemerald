@@ -6,6 +6,7 @@ ARG RUST_TARGET=thumbv4t-none-eabi
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV RUST_TARGET=${RUST_TARGET}
+ENV PATH="/usr/local/cargo/bin:${PATH}"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

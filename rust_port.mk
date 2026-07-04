@@ -11,16 +11,20 @@
 # lets the ROM build with any mixture of original C and ported Rust objects.
 
 RUSTC ?= rustc
+CARGO ?= cargo
 RUST_TARGET ?= thumbv4t-none-eabi
 RUST_SUBDIR := rust/src
 RUST_BUILDDIR := $(OBJ_DIR)/rust
+RUST_CRATE := rust
+RUST_CRATE_ROOT := $(RUST_CRATE)/src/lib.rs
+RUST_CARGO_MANIFEST := $(RUST_CRATE)/Cargo.toml
 
 # Future porting tasks append source files here as they are replaced by Rust.
 # Keep paths relative to the repository root.
-PORTED_C_SRCS :=
+PORTED_C_SRCS := src/math_util.c
 
 RUST_SRCS := $(patsubst src/%.c,$(RUST_SUBDIR)/%.rs,$(PORTED_C_SRCS))
-RUST_OBJS := $(patsubst $(RUST_SUBDIR)/%.rs,$(RUST_BUILDDIR)/%.o,$(RUST_SRCS))
+RUST_OBJS := $(patsubst src/%.c,$(C_BUILDDIR)/%.o,$(PORTED_C_SRCS))
 
 C_SRCS := $(filter-out $(PORTED_C_SRCS),$(C_SRCS))
 C_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(C_BUILDDIR)/%.o,$(C_SRCS))
@@ -34,17 +38,14 @@ $(shell mkdir -p $(RUST_OBJ_DIRS))
 endif
 
 # Keep this intentionally close to the C target: bare-metal ARMv4T Thumb code,
-# no standard library, C ABI exports, and no unwinding.
+# no standard library, C ABI exports, and no unwinding. Cargo builds core from
+# rust-src because thumbv4t-none-eabi has no prebuilt core artifact.
 RUST_PORT_FLAGS ?= \
-	--edition=2021 \
-	--target $(RUST_TARGET) \
-	--crate-type lib \
-	--emit=obj \
 	-C opt-level=$(O_LEVEL) \
 	-C panic=abort \
 	-C relocation-model=static
 
-$(RUST_BUILDDIR)/%.o: $(RUST_SUBDIR)/%.rs
-	@echo "$(RUSTC) <rust-port-flags> -o $@ $<"
+$(RUST_OBJS): $(RUST_SRCS) $(RUST_CRATE_ROOT) $(RUST_CARGO_MANIFEST)
+	@echo "$(CARGO) rustc <rust-port-flags> -o $@"
 	@mkdir -p $(dir $@)
-	$(RUSTC) $(RUST_PORT_FLAGS) -o $@ $<
+	cd $(RUST_CRATE) && PATH=/usr/local/cargo/bin:$$PATH RUSTC_BOOTSTRAP=1 $(CARGO) rustc -Z build-std=core --target $(RUST_TARGET) --release --lib -- --emit=obj=../$@ $(RUST_PORT_FLAGS)
