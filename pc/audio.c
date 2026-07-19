@@ -27,6 +27,10 @@ struct PcMixState
 {
     u32 phase;
     u32 noise;
+    u16 oscillatorFrequency;
+    u16 sourceFrequency;
+    u8 sweepTimer;
+    bool8 oscillatorEnabled;
     const struct WaveData *decodedWave;
     s8 *decoded;
     u32 decodedSize;
@@ -36,6 +40,7 @@ struct PcMixState
 static struct PcMixState sDirectState[MAX_DIRECTSOUND_CHANNELS];
 static struct PcMixState sCgbState[4];
 static u64 sSampleAccumulator;
+static u32 sCgbSweepAccumulator;
 static s16 sOutput[PC_AUDIO_MAX_FRAME_SAMPLES * 2];
 
 static u8 ReadTrackByte(struct MusicPlayerTrack *track)
@@ -849,9 +854,10 @@ static void UpdateDirectEnvelope(struct SoundInfo *soundInfo, struct SoundChanne
     channel->envelopeVolumeLeft = (u32)channel->leftVolume * scaledEnvelope >> 8;
 }
 
-static void ResetStartingCgbChannels(struct SoundInfo *soundInfo)
+static u8 ResetStartingCgbChannels(struct SoundInfo *soundInfo)
 {
     u8 i;
+    u8 starting = 0;
 
     for (i = 0; i < 4; i++)
     {
@@ -859,8 +865,81 @@ static void ResetStartingCgbChannels(struct SoundInfo *soundInfo)
         {
             sCgbState[i].phase = 0;
             sCgbState[i].noise = 0x7FFF;
+            starting |= 1 << i;
         }
     }
+    return starting;
+}
+
+static u32 CalculateCgbSweepFrequency(u32 frequency, u8 sweep)
+{
+    u32 delta = frequency >> (sweep & 7);
+
+    if (sweep & 0x08)
+        return frequency - delta;
+    return frequency + delta;
+}
+
+static void SyncCgbOscillatorState(struct SoundInfo *soundInfo, u8 starting)
+{
+    u8 i;
+
+    for (i = 0; i < 4; i++)
+    {
+        struct CgbChannel *channel = &soundInfo->cgbChans[i];
+        struct PcMixState *state = &sCgbState[i];
+        u16 frequency = channel->frequency & 0x7FF;
+
+        if (starting & (1 << i))
+        {
+            u8 sweepPeriod = (channel->sweep >> 4) & 7;
+
+            state->oscillatorFrequency = frequency;
+            state->sourceFrequency = frequency;
+            state->sweepTimer = sweepPeriod == 0 ? 8 : sweepPeriod;
+            state->oscillatorEnabled = ChannelIsOn((struct SoundChannel *)channel);
+
+            // Triggering pulse channel 1 performs one overflow calculation,
+            // but does not apply its result to the oscillator yet.
+            if (i == 0
+             && (channel->sweep & 7) != 0
+             && CalculateCgbSweepFrequency(frequency, channel->sweep) > 0x7FF)
+                state->oscillatorEnabled = FALSE;
+        }
+        else if (state->sourceFrequency != frequency)
+        {
+            state->sourceFrequency = frequency;
+            state->oscillatorFrequency = frequency;
+        }
+    }
+}
+
+static void ClockCgbSweep(struct CgbChannel *channel)
+{
+    struct PcMixState *state = &sCgbState[0];
+    u8 sweep = channel->sweep;
+    u8 sweepPeriod = (sweep >> 4) & 7;
+    u32 frequency;
+
+    if (!state->oscillatorEnabled || !ChannelIsOn((struct SoundChannel *)channel))
+        return;
+    if (--state->sweepTimer != 0)
+        return;
+
+    state->sweepTimer = sweepPeriod == 0 ? 8 : sweepPeriod;
+    if (sweepPeriod == 0 || (sweep & 7) == 0)
+        return;
+
+    frequency = CalculateCgbSweepFrequency(state->oscillatorFrequency, sweep);
+    if (frequency > 0x7FF)
+    {
+        state->oscillatorEnabled = FALSE;
+        return;
+    }
+
+    state->oscillatorFrequency = frequency;
+    if (CalculateCgbSweepFrequency(frequency, sweep) > 0x7FF)
+        state->oscillatorEnabled = FALSE;
 }
 
 static s32 MixDirectSample(struct SoundInfo *soundInfo, struct SoundChannel *channel)
@@ -922,10 +1001,10 @@ static s32 MixDirectSample(struct SoundInfo *soundInfo, struct SoundChannel *cha
     return sample;
 }
 
-static double CgbFrequency(const struct CgbChannel *channel)
+static double CgbFrequency(const struct CgbChannel *channel, u8 index)
 {
     u32 type = channel->type & TONEDATA_TYPE_CGB;
-    u32 value = channel->frequency;
+    u32 value = index == 0 ? sCgbState[0].oscillatorFrequency : channel->frequency;
 
     if (type == 4)
     {
@@ -959,9 +1038,12 @@ static u8 CgbWaveVolumeNumerator(u8 envelopeVolume)
 static s32 MixCgbDacEighths(struct CgbChannel *channel, u8 index)
 {
     struct PcMixState *state = &sCgbState[index];
-    u64 step = (u64)(CgbFrequency(channel) * 4294967296.0 / PC_AUDIO_RATE);
+    u64 step = (u64)(CgbFrequency(channel, index) * 4294967296.0 / PC_AUDIO_RATE);
     u32 type = channel->type & TONEDATA_TYPE_CGB;
     u32 envelope = channel->envelopeVolume;
+
+    if (!state->oscillatorEnabled)
+        return 0;
 
     if (type == 4)
     {
@@ -1167,6 +1249,13 @@ static void MixFrame(struct SoundInfo *soundInfo)
         s32 cgbRight = 0;
         u8 i;
 
+        sCgbSweepAccumulator += 128;
+        if (sCgbSweepAccumulator >= PC_AUDIO_RATE)
+        {
+            sCgbSweepAccumulator -= PC_AUDIO_RATE;
+            ClockCgbSweep(&soundInfo->cgbChans[0]);
+        }
+
         GetDirectBusSample(soundInfo, pcmOffset, directFrame, &left, &right);
 
         for (i = 0; i < 4; i++)
@@ -1197,6 +1286,7 @@ void SoundMain(void)
 {
     struct SoundInfo *soundInfo = SOUND_INFO_PTR;
     struct MusicPlayerInfo *mplayInfo;
+    u8 startingCgbChannels;
     u8 i;
 
     if (soundInfo == NULL || soundInfo->ident != ID_NUMBER)
@@ -1208,9 +1298,10 @@ void SoundMain(void)
          mplayInfo = mplayInfo->musicPlayerNext)
         MPlayMain(mplayInfo);
 
-    ResetStartingCgbChannels(soundInfo);
+    startingCgbChannels = ResetStartingCgbChannels(soundInfo);
     if (soundInfo->CgbSound != NULL)
         soundInfo->CgbSound();
+    SyncCgbOscillatorState(soundInfo, startingCgbChannels);
     for (i = 0; i < soundInfo->maxChans; i++)
         UpdateDirectEnvelope(soundInfo, &soundInfo->chans[i]);
     MixFrame(soundInfo);
