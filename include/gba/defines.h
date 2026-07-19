@@ -19,6 +19,14 @@
 
 #define ALIGNED(n) __attribute__((aligned(n)))
 
+// agbcc rounds records stored in the save format to four-byte boundaries.
+// Native x86 ABIs do not, so make that part of the format explicit on PC.
+#if PLATFORM_PC
+#define GBA_SAVE_RECORD ALIGNED(4)
+#else
+#define GBA_SAVE_RECORD
+#endif
+
 #define SOUND_INFO_PTR (*(struct SoundInfo **)0x3007FF0)
 #define INTR_CHECK     (*(u16 *)0x3007FF8)
 #define INTR_VECTOR    (*(void **)0x3007FFC)

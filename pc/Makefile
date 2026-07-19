@@ -36,7 +36,7 @@ PC_CFLAGS := -std=gnu11 -O1 -g -fcommon -fno-pic -fno-pie \
 	-Wno-incompatible-pointer-types-discards-qualifiers -Wno-pointer-to-int-cast \
 	-Wno-tautological-constant-out-of-range-compare -Wno-unknown-attributes \
 	-Wno-unused-function -Wno-unused-variable
-WIN_PC_CFLAGS := $(filter-out -fno-pic -fno-pie,$(PC_CFLAGS))
+WIN_PC_CFLAGS := $(filter-out -fno-pic -fno-pie,$(PC_CFLAGS)) -mno-ms-bitfields
 PC_HEADERS := $(wildcard $(PC_DIR)/include/*.h)
 
 SDL_LIBS := $(shell pkg-config --libs sdl2 2>/dev/null || printf '%s' '-Wl,-l:libSDL2-2.0.so.0')

@@ -72,11 +72,28 @@ struct
     SAVEBLOCK_CHUNK(struct PokemonStorage, 8), // SECTOR_ID_PKMN_STORAGE_END
 };
 
-// These will produce an error if a save struct is larger than the space
-// alloted for it in the flash.
-STATIC_ASSERT(sizeof(struct SaveBlock2) <= SECTOR_DATA_SIZE, SaveBlock2FreeSpace);
-STATIC_ASSERT(sizeof(struct SaveBlock1) <= SECTOR_DATA_SIZE * (SECTOR_ID_SAVEBLOCK1_END - SECTOR_ID_SAVEBLOCK1_START + 1), SaveBlock1FreeSpace);
-STATIC_ASSERT(sizeof(struct PokemonStorage) <= SECTOR_DATA_SIZE * (SECTOR_ID_PKMN_STORAGE_END - SECTOR_ID_PKMN_STORAGE_START + 1), PokemonStorageFreeSpace);
+// The save checksum covers raw structure bytes, so these layouts are part of
+// the cartridge file format rather than merely an in-memory implementation.
+STATIC_ASSERT(sizeof(struct Time) == 8, TimeSaveLayout);
+STATIC_ASSERT(sizeof(struct Pokeblock) == 8, PokeblockSaveLayout);
+STATIC_ASSERT(sizeof(struct BerryTree) == 8, BerryTreeSaveLayout);
+STATIC_ASSERT(sizeof(struct Mail) == 36, MailSaveLayout);
+STATIC_ASSERT(sizeof(struct BattleDomeTrainer) == 4, BattleDomeTrainerSaveLayout);
+STATIC_ASSERT(sizeof(struct LinkBattleRecords) == 88, LinkBattleRecordsSaveLayout);
+
+STATIC_ASSERT(sizeof(struct SaveBlock2) == 0xF2C, SaveBlock2Layout);
+STATIC_ASSERT(offsetof(struct SaveBlock2, encryptionKey) == 0xAC, SaveBlock2EncryptionKeyLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock2, frontier) == 0x64C, SaveBlock2FrontierLayout);
+
+STATIC_ASSERT(sizeof(struct SaveBlock1) == 0x3D88, SaveBlock1Layout);
+STATIC_ASSERT(offsetof(struct SaveBlock1, money) == 0x490, SaveBlock1MoneyLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock1, berryTrees) == 0x169C, SaveBlock1BerryTreesLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock1, externalEventData) == 0x31B3, SaveBlock1ExternalEventDataLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock1, waldaPhrase) == 0x3D70, SaveBlock1WaldaPhraseLayout);
+
+STATIC_ASSERT(sizeof(struct PokemonStorage) == 0x83D0, PokemonStorageLayout);
+STATIC_ASSERT(offsetof(struct PokemonStorage, boxes) == 0x4, PokemonStorageBoxesLayout);
+STATIC_ASSERT(offsetof(struct PokemonStorage, boxNames) == 0x8344, PokemonStorageBoxNamesLayout);
 
 COMMON_DATA u16 gLastWrittenSector = 0;
 COMMON_DATA u32 gLastSaveCounter = 0;

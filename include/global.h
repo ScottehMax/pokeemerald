@@ -208,7 +208,7 @@ struct UCoords32
     u32 y;
 };
 
-struct Time
+struct GBA_SAVE_RECORD Time
 {
     /*0x00*/ s16 days;
     /*0x02*/ s8 hours;
@@ -377,7 +377,7 @@ struct RentalMon
     //u8 padding2[2];
 };
 
-struct BattleDomeTrainer
+struct GBA_SAVE_RECORD BattleDomeTrainer
 {
     u16 trainerId:10;
     u16 isEliminated:1;
@@ -606,7 +606,7 @@ struct ItemSlot
     u16 quantity;
 };
 
-struct Pokeblock
+struct GBA_SAVE_RECORD Pokeblock
 {
     u8 color;
     u8 spicy;
@@ -719,7 +719,7 @@ struct MauvilleOldManTrader
     u8 language[NUM_TRADER_ITEMS];
 };
 
-typedef union OldMan
+typedef union GBA_SAVE_RECORD OldMan
 {
     struct MauvilleManCommon common;
     struct MauvilleManBard bard;
@@ -741,7 +741,7 @@ struct LinkBattleRecord
     u16 draws;
 };
 
-struct LinkBattleRecords
+struct GBA_SAVE_RECORD LinkBattleRecords
 {
     struct LinkBattleRecord entries[LINK_B_RECORDS_COUNT];
     u8 languages[LINK_B_RECORDS_COUNT];
@@ -774,7 +774,7 @@ struct ContestWinner
     //u8 padding;
 };
 
-struct Mail
+struct GBA_SAVE_RECORD Mail
 {
     /*0x00*/ u16 words[MAIL_WORDS_COUNT];
     /*0x12*/ u8 playerName[PLAYER_NAME_LENGTH + 1];
