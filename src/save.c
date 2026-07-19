@@ -78,17 +78,25 @@ STATIC_ASSERT(sizeof(struct Time) == 8, TimeSaveLayout);
 STATIC_ASSERT(sizeof(struct Pokeblock) == 8, PokeblockSaveLayout);
 STATIC_ASSERT(sizeof(struct BerryTree) == 8, BerryTreeSaveLayout);
 STATIC_ASSERT(sizeof(struct Mail) == 36, MailSaveLayout);
+STATIC_ASSERT(sizeof(OldMan) == 0x40, OldManSaveLayout);
 STATIC_ASSERT(sizeof(struct BattleDomeTrainer) == 4, BattleDomeTrainerSaveLayout);
 STATIC_ASSERT(sizeof(struct LinkBattleRecords) == 88, LinkBattleRecordsSaveLayout);
 
 STATIC_ASSERT(sizeof(struct SaveBlock2) == 0xF2C, SaveBlock2Layout);
+STATIC_ASSERT(offsetof(struct SaveBlock2, pokedex) == 0x18, SaveBlock2PokedexLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock2, pokedex.owned) == 0x28, SaveBlock2PokedexOwnedLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock2, pokedex.seen) == 0x5C, SaveBlock2PokedexSeenLayout);
 STATIC_ASSERT(offsetof(struct SaveBlock2, encryptionKey) == 0xAC, SaveBlock2EncryptionKeyLayout);
 STATIC_ASSERT(offsetof(struct SaveBlock2, frontier) == 0x64C, SaveBlock2FrontierLayout);
 
 STATIC_ASSERT(sizeof(struct SaveBlock1) == 0x3D88, SaveBlock1Layout);
 STATIC_ASSERT(offsetof(struct SaveBlock1, money) == 0x490, SaveBlock1MoneyLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock1, seen1) == 0x988, SaveBlock1PokedexSeen1Layout);
+STATIC_ASSERT(offsetof(struct SaveBlock1, flags) == 0x1270, SaveBlock1FlagsLayout);
 STATIC_ASSERT(offsetof(struct SaveBlock1, berryTrees) == 0x169C, SaveBlock1BerryTreesLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock1, dewfordTrends) == 0x2E68, SaveBlock1DewfordTrendsLayout);
 STATIC_ASSERT(offsetof(struct SaveBlock1, externalEventData) == 0x31B3, SaveBlock1ExternalEventDataLayout);
+STATIC_ASSERT(offsetof(struct SaveBlock1, seen2) == 0x3B24, SaveBlock1PokedexSeen2Layout);
 STATIC_ASSERT(offsetof(struct SaveBlock1, waldaPhrase) == 0x3D70, SaveBlock1WaldaPhraseLayout);
 
 STATIC_ASSERT(sizeof(struct PokemonStorage) == 0x83D0, PokemonStorageLayout);

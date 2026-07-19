@@ -419,8 +419,6 @@ static u16 ApplyColorEffects(const struct PixelStack *stack, bool8 effectsEnable
     u8 evb = (REG_BLDALPHA >> 8) & 0x1F;
     u8 evy = REG_BLDY & 0x1F;
 
-    if (!effectsEnabled)
-        return stack->top.color;
     if (eva > 16)
         eva = 16;
     if (evb > 16)
@@ -428,7 +426,13 @@ static u16 ApplyColorEffects(const struct PixelStack *stack, bool8 effectsEnable
     if (evy > 16)
         evy = 16;
 
-    if ((stack->top.semiTransparent || (effect == 1 && firstTarget)) && secondTarget)
+    // Semi-transparent OBJ pixels force alpha blending even where a window
+    // disables the regular BLDCNT color effect.
+    if (stack->top.semiTransparent && secondTarget)
+        return BlendColors(stack->top.color, stack->second.color, eva, evb);
+    if (!effectsEnabled)
+        return stack->top.color;
+    if (effect == 1 && firstTarget && secondTarget)
         return BlendColors(stack->top.color, stack->second.color, eva, evb);
     if (effect == 2 && firstTarget)
         return BrightenColor(stack->top.color, evy);

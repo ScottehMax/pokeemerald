@@ -112,6 +112,7 @@ static void LoadFlyDestIcons(void);
 static void CreateFlyDestIcons(void);
 static void TryCreateRedOutlineFlyDestIcons(void);
 static void SpriteCB_FlyDestIcon(struct Sprite *sprite);
+static void StopFlyDestIconCallbacks(void);
 static void CB_FadeInFlyMap(void);
 static void CB_HandleFlyMapInput(void);
 static void CB_ExitFlyMap(void);
@@ -1928,6 +1929,17 @@ static void SpriteCB_FlyDestIcon(struct Sprite *sprite)
     }
 }
 
+static void StopFlyDestIconCallbacks(void)
+{
+    u32 i;
+
+    for (i = 0; i < MAX_SPRITES; i++)
+    {
+        if (gSprites[i].inUse && gSprites[i].callback == SpriteCB_FlyDestIcon)
+            gSprites[i].callback = SpriteCallbackDummy;
+    }
+}
+
 #undef sIconMapSec
 #undef sFlickerTimer
 
@@ -2019,6 +2031,7 @@ static void CB_ExitFlyMap(void)
             {
                 SetMainCallback2(CB2_ReturnToPartyMenuFromFlyMap);
             }
+            StopFlyDestIconCallbacks();
             TRY_FREE_AND_SET_NULL(sFlyMap);
             FreeAllWindowBuffers();
         }

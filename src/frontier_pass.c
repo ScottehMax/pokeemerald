@@ -704,6 +704,13 @@ static void VBlankCB_FrontierPass(void)
     TransferPlttBuffer();
 }
 
+static void VBlankCB_FrontierMap(void)
+{
+    LoadOam();
+    ProcessSpriteCopyRequests();
+    TransferPlttBuffer();
+}
+
 static void CB2_FrontierPass(void)
 {
     RunTasks();
@@ -1436,7 +1443,7 @@ static bool32 InitFrontierMap(void)
         ShowBg(1);
         ShowBg(2);
         InitFrontierMapSprites();
-        SetVBlankCallback(VBlankCB_FrontierPass);
+        SetVBlankCallback(VBlankCB_FrontierMap);
         BlendPalettes(PALETTES_ALL, 16, RGB_WHITE);
         BeginNormalPaletteFade(PALETTES_ALL, 0, 16, 0, RGB_WHITE);
         break;

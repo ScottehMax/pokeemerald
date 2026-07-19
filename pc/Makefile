@@ -38,6 +38,7 @@ PC_CFLAGS := -std=gnu11 -O1 -g -fcommon -fno-pic -fno-pie \
 	-Wno-unused-function -Wno-unused-variable
 WIN_PC_CFLAGS := $(filter-out -fno-pic -fno-pie,$(PC_CFLAGS)) -mno-ms-bitfields
 PC_HEADERS := $(wildcard $(PC_DIR)/include/*.h)
+GAME_HEADERS := $(shell find include -type f -name '*.h') $(wildcard *.h)
 
 SDL_LIBS := $(shell pkg-config --libs sdl2 2>/dev/null || printf '%s' '-Wl,-l:libSDL2-2.0.so.0')
 
@@ -105,18 +106,18 @@ $(FRONTEND): $(PC_DIR)/frontend.c $(PC_HEADERS)
 	@mkdir -p $(@D)
 	$(FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include $< $(SDL_LIBS) -o $@
 
-$(PLATFORM_OBJ_DIR)/%.o: $(PC_DIR)/%.c $(PC_HEADERS)
+$(PLATFORM_OBJ_DIR)/%.o: $(PC_DIR)/%.c $(PC_HEADERS) $(GAME_HEADERS)
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
 	$(CORE_CC) $(PC_CPPFLAGS) $(PC_CFLAGS) -O3 -c $< -o $@
 
-$(GAME_OBJ_DIR)/%.o: src/%.c $(PREPROC) | check-assets
+$(GAME_OBJ_DIR)/%.o: src/%.c $(GAME_HEADERS) $(PREPROC) | check-assets
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
 	@echo "PC CC $<"
 	@$(CORE_CC) $(PC_CPPFLAGS) -E $< \
 		| $(PREPROC) -i -g build/assets $< charmap.txt \
 		| $(CORE_CC) $(PC_CPPFLAGS) $(PC_CFLAGS) -x c -c -o $@ -
 
-$(WIN_GAME_OBJ_DIR)/%.o: src/%.c $(PREPROC) | check-assets
+$(WIN_GAME_OBJ_DIR)/%.o: src/%.c $(GAME_HEADERS) $(PREPROC) | check-assets
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
 	@echo "WIN PC CC $<"
 	@$(WIN_CORE_CC) $(PC_CPPFLAGS) -E $< \
@@ -139,7 +140,7 @@ $(SONG_OBJ_DIR)/%.o: sound/songs/midi/%.s sound/MPlayDef.s $(PREPROC)
 		| ../$(PREPROC) -ie songs/midi/$*.s ../charmap.txt \
 		| $(PC_AS) --32 -I. -o ../$@ -
 
-$(WIN_PLATFORM_OBJ_DIR)/%.o: $(PC_DIR)/%.c $(PC_HEADERS)
+$(WIN_PLATFORM_OBJ_DIR)/%.o: $(PC_DIR)/%.c $(PC_HEADERS) $(GAME_HEADERS)
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
 	$(WIN_CORE_CC) $(PC_CPPFLAGS) $(WIN_PC_CFLAGS) -O3 -c $< -o $@
 
