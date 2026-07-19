@@ -47,6 +47,17 @@ static void PushPixel(struct PixelStack *stack, u16 color, u8 layer, bool8 semiT
     stack->top.semiTransparent = semiTransparent;
 }
 
+static void PushObjectPixel(struct PixelStack *stack, u16 color, bool8 semiTransparent)
+{
+    // OAM evaluation resolves overlapping sprites into a single OBJ layer
+    // before that layer enters the color-effects compositor.
+    if (stack->top.layer != (1 << 4))
+        stack->second = stack->top;
+    stack->top.color = color;
+    stack->top.layer = 1 << 4;
+    stack->top.semiTransparent = semiTransparent;
+}
+
 static bool8 ReadTextBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
 {
     const u8 *vram = (const u8 *)VRAM;
@@ -357,7 +368,7 @@ static void DrawSpritesForPriority(struct PixelStack *line,
             if (objectMode == 2)
                 objectWindow[screenX] = TRUE;
             else if (windowMasks[screenX] & (1 << 4))
-                PushPixel(&line[screenX], color, 1 << 4, objectMode == 1);
+                PushObjectPixel(&line[screenX], color, objectMode == 1);
         }
     }
 }
