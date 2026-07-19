@@ -328,10 +328,14 @@ void ply_endtie(struct MusicPlayerInfo *mplayInfo, struct MusicPlayerTrack *trac
     }
 }
 
-static struct SoundChannel *FindDirectChannel(u8 priority)
+static struct SoundChannel *FindDirectChannel(u8 priority,
+                                              struct MusicPlayerTrack *track)
 {
     struct SoundInfo *soundInfo = SOUND_INFO_PTR;
     struct SoundChannel *best = NULL;
+    u8 bestPriority = priority;
+    struct MusicPlayerTrack *bestTrack = track;
+    bool8 foundStopping = FALSE;
     u8 i;
 
     for (i = 0; i < soundInfo->maxChans; i++)
@@ -340,24 +344,46 @@ static struct SoundChannel *FindDirectChannel(u8 priority)
 
         if (!ChannelIsOn(channel))
             return channel;
-        if (best == NULL
-         || ((channel->statusFlags & SOUND_CHANNEL_SF_STOP) && !(best->statusFlags & SOUND_CHANNEL_SF_STOP))
-         || (channel->priority < best->priority))
+
+        if (channel->statusFlags & SOUND_CHANNEL_SF_STOP)
+        {
+            if (!foundStopping)
+            {
+                foundStopping = TRUE;
+                best = channel;
+                bestPriority = channel->priority;
+                bestTrack = channel->track;
+                continue;
+            }
+        }
+        else if (foundStopping)
+        {
+            continue;
+        }
+
+        if (channel->priority < bestPriority
+         || (channel->priority == bestPriority
+          && (uintptr_t)channel->track > (uintptr_t)bestTrack))
+        {
             best = channel;
+            bestPriority = channel->priority;
+            bestTrack = channel->track;
+        }
     }
 
-    if (best != NULL && best->priority <= priority)
-        return best;
-    return NULL;
+    return best;
 }
 
-static struct SoundChannel *FindCgbChannel(u8 type, u8 priority)
+static struct SoundChannel *FindCgbChannel(u8 type, u8 priority,
+                                          struct MusicPlayerTrack *track)
 {
     struct CgbChannel *channel = &SOUND_INFO_PTR->cgbChans[type - 1];
 
     if (!(channel->statusFlags & SOUND_CHANNEL_SF_ON)
      || (channel->statusFlags & SOUND_CHANNEL_SF_STOP)
-     || channel->priority <= priority)
+     || channel->priority < priority
+     || (channel->priority == priority
+      && (uintptr_t)channel->track >= (uintptr_t)track))
         return (struct SoundChannel *)channel;
     return NULL;
 }
@@ -413,7 +439,9 @@ void ply_note(u32 noteCommand,
     if (priority < mplayInfo->priority)
         priority = 255;
     cgbType = tone->type & TONEDATA_TYPE_CGB;
-    channel = cgbType ? FindCgbChannel(cgbType, priority) : FindDirectChannel(priority);
+    channel = cgbType
+            ? FindCgbChannel(cgbType, priority, track)
+            : FindDirectChannel(priority, track);
     if (channel == NULL)
         return;
 

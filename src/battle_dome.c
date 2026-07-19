@@ -4156,6 +4156,9 @@ static void Task_HandleInfoCardInput(u8 taskId)
             }
 
             FreeMonIconPalettes();
+#ifdef PLATFORM_PC
+            ResetSpriteData();
+#endif
             FREE_AND_SET_NULL(sInfoCard);
             FreeAllWindowBuffers();
 
@@ -5069,7 +5072,9 @@ static void Task_HandleTourneyTreeInput(u8 taskId)
             gTasks[newTaskId].tPrevTaskId = taskId;
 
             gTasks[taskId].tState = STATE_SHOW_INFOCARD_TRAINER + 1;
+#ifndef PLATFORM_PC
             sInfoCard->pos = 0;
+#endif
         }
         break;
     case STATE_SHOW_INFOCARD_TRAINER + 1:
