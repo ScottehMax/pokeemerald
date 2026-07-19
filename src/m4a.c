@@ -71,7 +71,9 @@ void m4aSoundInit(void)
 {
     s32 i;
 
+#ifndef PLATFORM_PC
     CpuCopy32((void *)((s32)SoundMainRAM & ~1), SoundMainRAM_Buffer, sizeof(SoundMainRAM_Buffer));
+#endif
 
     SoundInit(&gSoundInfo);
     MPlayExtender(gCgbChans);
@@ -342,12 +344,16 @@ void ClearChain(void *x)
 
 void Clear64byte(void *x)
 {
+#ifdef PLATFORM_PC
+    memset(x, 0, 64);
+#else
 #if __STDC_VERSION__ < 202311L
     void (*func)(void *) = *(&gMPlayJumpTable[35]);
 #else
     void (*func)(...) = *(&gMPlayJumpTable[35]);
 #endif
     func(x);
+#endif
 }
 
 void SoundInit(struct SoundInfo *soundInfo)
@@ -420,11 +426,13 @@ void SampleFreqSet(u32 freq)
 
     m4aSoundVSyncOn();
 
+#ifndef PLATFORM_PC
     while (*(vu8 *)REG_ADDR_VCOUNT == 159)
         ;
 
     while (*(vu8 *)REG_ADDR_VCOUNT != 159)
         ;
+#endif
 
     REG_TM0CNT_H = TIMER_ENABLE | TIMER_1CLK;
 }
@@ -1734,7 +1742,12 @@ void SetPokemonCryProgress(u32 val)
 
 bool32 IsPokemonCryPlaying(struct MusicPlayerInfo *mplayInfo)
 {
-    struct MusicPlayerTrack *track = mplayInfo->tracks;
+    struct MusicPlayerTrack *track;
+
+    if (mplayInfo == NULL)
+        return FALSE;
+
+    track = mplayInfo->tracks;
 
     if (track->chan && track->chan->track == track)
         return TRUE;

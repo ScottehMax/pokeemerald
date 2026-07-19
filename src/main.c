@@ -24,6 +24,9 @@
 #include "main.h"
 #include "trainer_hill.h"
 #include "constants/rgb.h"
+#if PLATFORM_PC
+#include "pc_platform.h"
+#endif
 
 static void VBlankIntr(void);
 static void HBlankIntr(void);
@@ -100,7 +103,9 @@ void AgbMain(void)
     InitIntrHandlers();
     m4aSoundInit();
     EnableVCountIntrAtLine150();
+#if !PLATFORM_PC
     InitRFU();
+#endif
     RtcInit();
     CheckForFlashMemory();
     InitMainCallbacks();
@@ -136,8 +141,10 @@ void AgbMain(void)
          && JOY_HELD_RAW(A_BUTTON)
          && JOY_HELD_RAW(B_START_SELECT) == B_START_SELECT)
         {
+#if !PLATFORM_PC
             rfu_REQ_stopMode();
             rfu_waitREQComplete();
+#endif
             DoSoftReset();
         }
 
@@ -162,6 +169,9 @@ void AgbMain(void)
             }
         }
 
+#if PLATFORM_PC
+        PcPlatformRunTestHooks();
+#endif
         PlayTimeCounter_Update();
         MapMusicMain();
         WaitForVBlank();
@@ -202,14 +212,24 @@ void SetMainCallback2(MainCallback callback)
 
 void StartTimer1(void)
 {
+#if PLATFORM_PC
+    PcPlatformStartTimer1();
+#else
     REG_TM1CNT_H = 0x80;
+#endif
 }
 
 void SeedRngAndSetTrainerId(void)
 {
+#if PLATFORM_PC
+    u16 val = PcPlatformStopTimer1();
+#else
     u16 val = REG_TM1CNT_L;
+#endif
     SeedRng(val);
+#if !PLATFORM_PC
     REG_TM1CNT_H = 0;
+#endif
     sTrainerId = val;
 }
 
@@ -298,9 +318,10 @@ void InitIntrHandlers(void)
     for (i = 0; i < INTR_COUNT; i++)
         gIntrTable[i] = gIntrTableTemplate[i];
 
+#if !PLATFORM_PC
     DmaCopy32(3, IntrMain, IntrMain_Buffer, sizeof(IntrMain_Buffer));
-
     INTR_VECTOR = IntrMain_Buffer;
+#endif
 
     SetVBlankCallback(NULL);
     SetHBlankCallback(NULL);
@@ -411,8 +432,15 @@ static void WaitForVBlank(void)
 {
     gMain.intrCheck &= ~INTR_FLAG_VBLANK;
 
+#if PLATFORM_PC
+    PcPlatformWaitForFrame();
+    VCountIntr();
+    VBlankIntr();
+    PcPlatformPresentFrame(HBlankIntr);
+#else
     while (!(gMain.intrCheck & INTR_FLAG_VBLANK))
         ;
+#endif
 }
 
 void SetTrainerHillVBlankCounter(u32 *counter)

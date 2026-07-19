@@ -403,11 +403,15 @@ extern const struct PokemonCrySong gPokemonCrySongTemplate;
 
 extern const struct ToneData voicegroup_dummy;
 
+#ifdef PLATFORM_PC
+#define NUM_MUSIC_PLAYERS 4
+#define MAX_LINES 0
+#else
 extern char gNumMusicPlayers[];
 extern char gMaxLines[];
-
 #define NUM_MUSIC_PLAYERS ((u16)gNumMusicPlayers)
 #define MAX_LINES ((u32)gMaxLines)
+#endif
 
 u32 umul3232H32(u32 multiplier, u32 multiplicand);
 void SoundMain(void);

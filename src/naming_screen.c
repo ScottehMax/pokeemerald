@@ -702,6 +702,10 @@ static bool8 MainState_Exit(void)
         SetMainCallback2(sNamingScreen->returnCallback);
         DestroyTask(FindTaskIdByFunc(Task_NamingScreen));
         FreeAllWindowBuffers();
+#ifdef PLATFORM_PC
+        ResetVHBlank();
+        ResetSpriteData();
+#endif
         FREE_AND_SET_NULL(sNamingScreen);
     }
     return FALSE;
@@ -2584,5 +2588,3 @@ static const struct SpritePalette sSpritePalettes[] =
     {gNamingScreenMenu_Pal[4], PALTAG_OK_BUTTON},
     {}
 };
-
-

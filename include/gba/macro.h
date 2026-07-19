@@ -54,6 +54,14 @@
 
 #define CpuFastCopy(src, dest, size) CpuFastSet(src, dest, ((size)/(32/8) & 0x1FFFFF))
 
+#if PLATFORM_PC
+#include "pc_platform.h"
+#define DmaSetUnchecked(dmaNum, src, dest, control) \
+    PcDmaSet((dmaNum), \
+             (const void *)(uintptr_t)(src), \
+             (void *)(uintptr_t)(dest), \
+             (control))
+#else
 #define DmaSetUnchecked(dmaNum, src, dest, control) \
 {                                                 \
     vu32 *dmaRegs = (vu32 *)REG_ADDR_DMA##dmaNum; \
@@ -62,6 +70,7 @@
     dmaRegs[2] = (vu32)(control);                 \
     dmaRegs[2];                                   \
 }
+#endif
 
 #if MODERN
 // NOTE: Assumes 16-bit DMAs.
@@ -230,6 +239,9 @@
 #define DmaClear16Defvars(dmaNum, dest, size) DmaClearDefvars(dmaNum, dest, size, 16)
 #define DmaClear32Defvars(dmaNum, dest, size) DmaClearDefvars(dmaNum, dest, size, 32)
 
+#if PLATFORM_PC
+#define DmaStop(dmaNum) PcDmaStop(dmaNum)
+#else
 #define DmaStop(dmaNum)                                         \
 {                                                               \
     vu16 *dmaRegs = (vu16 *)REG_ADDR_DMA##dmaNum;               \
@@ -237,6 +249,7 @@
     dmaRegs[5] &= ~DMA_ENABLE;                                  \
     dmaRegs[5];                                                 \
 }
+#endif
 
 #define IntrEnable(flags)                                       \
 {                                                               \

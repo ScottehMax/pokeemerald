@@ -441,6 +441,9 @@ bool8 IsDma3ManagerBusyWithBgCopy(void)
 {
     int i;
 
+#ifdef PLATFORM_PC
+    ProcessDma3Requests();
+#endif
     for (i = 0; i < 0x80; i++)
     {
         u8 div = i / 0x20;
@@ -1238,10 +1241,16 @@ bool32 IsInvalidBg32(u8 bg)
 
 bool32 IsTileMapOutsideWram(u8 bg)
 {
+#ifdef PLATFORM_PC
+    // Native heap and static buffers are not located in the GBA WRAM address
+    // ranges. A configured non-null buffer is writable host memory.
+    return sGpuBgConfigs2[bg].tilemap == NULL;
+#else
     if (sGpuBgConfigs2[bg].tilemap > (void *)IWRAM_END)
         return TRUE;
     else if (sGpuBgConfigs2[bg].tilemap == NULL)
         return TRUE;
     else
         return FALSE;
+#endif
 }

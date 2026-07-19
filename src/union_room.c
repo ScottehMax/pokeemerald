@@ -3296,6 +3296,10 @@ void InitUnionRoom(void)
     struct WirelessLink_URoom *data;
 
     sUnionRoomPlayerName[0] = EOS;
+#if PLATFORM_PC
+    // The native port has no RFU adapter, so there is nothing to scan for.
+    return;
+#endif
     CreateTask(Task_InitUnionRoom, 0);
     sWirelessLinkMain.uRoom = sWirelessLinkMain.uRoom; // Needed to match.
     sWirelessLinkMain.uRoom = data = AllocZeroed(sizeof(struct WirelessLink_URoom));

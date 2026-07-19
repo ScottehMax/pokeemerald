@@ -1655,6 +1655,14 @@ void ShowPokemonStorageSystemPC(void)
     LockPlayerFieldControls();
 }
 
+#if PLATFORM_PC
+void PcStorageTestEnterMoveMons(void)
+{
+    CleanupOverworldWindowsAndTilemaps();
+    EnterPokeStorage(OPTION_MOVE_MONS);
+}
+#endif
+
 static void FieldTask_ReturnToPcMenu(void)
 {
     u8 taskId;
@@ -1988,6 +1996,8 @@ static void VBlankCB_PokeStorage(void)
 static void CB2_PokeStorage(void)
 {
     RunTasks();
+    if (sStorage == NULL)
+        return;
     DoScheduledBgTilemapCopiesToVram();
     ScrollBackground();
     UpdateCloseBoxButtonFlash();
@@ -3788,6 +3798,7 @@ static void GiveChosenBagItem(void)
 
 static void FreePokeStorageData(void)
 {
+    SetVBlankCallback(NULL);
     TilemapUtil_Free();
     MultiMove_Free();
     FREE_AND_SET_NULL(sStorage);
@@ -5078,7 +5089,8 @@ static bool8 ResetReleaseMonSpritePtr(void)
 
 static void SetMovingMonPriority(u8 priority)
 {
-    sStorage->movingMonSprite->oam.priority = priority;
+    if (sStorage->movingMonSprite != NULL)
+        sStorage->movingMonSprite->oam.priority = priority;
 }
 
 static void SpriteCB_HeldMon(struct Sprite *sprite)

@@ -2662,7 +2662,7 @@ static void UpdateSelectedMonSpriteId(void)
     {
         u16 spriteId = sPokedexView->monSpriteIds[i];
 
-        if (gSprites[spriteId].x2 == 0 && gSprites[spriteId].y2 == 0 && spriteId != 0xFFFF)
+        if (spriteId != 0xFFFF && gSprites[spriteId].x2 == 0 && gSprites[spriteId].y2 == 0)
             sPokedexView->selectedMonSpriteId = spriteId;
     }
 }
@@ -3075,8 +3075,10 @@ static void SpriteCB_Scrollbar(struct Sprite *sprite)
 {
     if (sPokedexView->currentPage != PAGE_MAIN && sPokedexView->currentPage != PAGE_SEARCH_RESULTS)
         DestroySprite(sprite);
-    else
+    else if (sPokedexView->pokemonListCount > 1)
         sprite->y2 = sPokedexView->selectedPokemon * 120 / (sPokedexView->pokemonListCount - 1);
+    else
+        sprite->y2 = 0;
 }
 
 static void SpriteCB_ScrollArrow(struct Sprite *sprite)

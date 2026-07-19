@@ -25,6 +25,14 @@ endif
 # Default make rule
 all: rom
 
+.PHONY: pc pc-windows
+
+pc:
+	$(MAKE) -f pc/Makefile all
+
+pc-windows:
+	$(MAKE) -f pc/Makefile windows
+
 # Toolchain selection
 TOOLCHAIN := $(DEVKITARM)
 # don't use dkP's base_tools anymore
@@ -159,7 +167,7 @@ MAKEFLAGS += --no-print-directory
 # Delete files that weren't built properly
 .DELETE_ON_ERROR:
 
-RULES_NO_SCAN += libagbsyscall clean clean-assets tidy tidymodern tidynonmodern generated clean-generated
+RULES_NO_SCAN += libagbsyscall clean clean-assets tidy tidymodern tidynonmodern generated clean-generated pc pc-windows
 .PHONY: all rom modern compare
 .PHONY: $(RULES_NO_SCAN)
 

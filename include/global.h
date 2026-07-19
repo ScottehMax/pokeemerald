@@ -3,6 +3,13 @@
 
 #include <string.h>
 #include <limits.h>
+#if PLATFORM_PC
+// musl exposes this POSIX extension from limits.h; Emerald uses PAGE_SIZE as
+// an enum member in the Pokédex UI.
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+#endif
 #include "config.h" // we need to define config before gba headers as print stuff needs the functions nulled before defines.
 #include "gba/gba.h"
 #include "gametypes.h"
@@ -18,11 +25,17 @@
 #include "constants/trainer_hill.h"
 
 // Prevent cross-jump optimization.
+#if PLATFORM_PC
+#define BLOCK_CROSS_JUMP ((void)0);
+#define asm_unified(x) ((void)0)
+#define NAKED
+#else
 #define BLOCK_CROSS_JUMP asm("");
 
 // to help in decompiling
 #define asm_unified(x) asm(".syntax unified\n" x "\n.syntax divided")
 #define NAKED __attribute__((naked))
+#endif
 
 #if MODERN
 #define asm __asm__

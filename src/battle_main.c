@@ -5154,20 +5154,10 @@ static void HandleEndTurn_FinishBattle(void)
 
 static void FreeResetData_ReturnToOvOrDoEvolutions(void)
 {
-    if (!gPaletteFade.active)
-    {
-        ResetSpriteData();
-        if (gLeveledUpInBattle == 0 || gBattleOutcome != B_OUTCOME_WON)
-        {
-            gBattleMainFunc = ReturnFromBattleToOverworld;
-            return;
-        }
-        else
-        {
-            gBattleMainFunc = TryEvolvePokemon;
-        }
-    }
+    if (gPaletteFade.active)
+        return;
 
+    ResetSpriteData();
     FreeAllWindowBuffers();
     if (!(gBattleTypeFlags & BATTLE_TYPE_LINK))
     {
@@ -5175,6 +5165,11 @@ static void FreeResetData_ReturnToOvOrDoEvolutions(void)
         FreeBattleResources();
         FreeBattleSpritesData();
     }
+
+    if (gLeveledUpInBattle == 0 || gBattleOutcome != B_OUTCOME_WON)
+        gBattleMainFunc = ReturnFromBattleToOverworld;
+    else
+        gBattleMainFunc = TryEvolvePokemon;
 }
 
 static void TryEvolvePokemon(void)

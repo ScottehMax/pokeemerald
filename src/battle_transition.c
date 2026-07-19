@@ -1044,6 +1044,10 @@ bool8 IsBattleTransitionDone(void)
     if (gTasks[taskId].tTransitionDone)
     {
         DestroyTask(taskId);
+#if PLATFORM_PC
+        SetVBlankCallback(NULL);
+        SetHBlankCallback(NULL);
+#endif
         FREE_AND_SET_NULL(sTransitionData);
         return TRUE;
     }

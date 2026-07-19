@@ -102,8 +102,12 @@ bool8 RunScriptCommand(struct ScriptContext *ctx)
 
             if (ctx->scriptPtr == gNullScriptPtr)
             {
+#if PLATFORM_PC
+                return FALSE;
+#else
                 while (1)
                     asm("svc 2"); // HALT
+#endif
             }
 
             cmdCode = *(ctx->scriptPtr);
