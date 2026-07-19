@@ -13,11 +13,12 @@
 #define M4A_COMMAND_TIE 0xCF
 #define M4A_CLOCK_BASE 0x80
 #define PC_AUDIO_MAX_FRAME_SAMPLES 805
-#define PC_AUDIO_MIX_HEADROOM 4
+#define PC_AUDIO_MIX_TO_S16_DIVISOR 4
 #define WAVE_LOOP_FLAG 0xC0
 
 extern void *const gMPlayJumpTableTemplate[];
 extern const u8 gClockTable[];
+extern const u8 gCgb3Vol[];
 extern const s8 gDeltaEncodingTable[];
 
 char SoundMainRAM[1];
@@ -769,9 +770,10 @@ static void BeginPseudoEchoOrStop(struct SoundChannel *channel)
         StopMixedChannel(channel);
 }
 
-static void UpdateDirectEnvelope(struct SoundChannel *channel)
+static void UpdateDirectEnvelope(struct SoundInfo *soundInfo, struct SoundChannel *channel)
 {
     u8 envelope;
+    u32 scaledEnvelope;
 
     if (!ChannelIsOn(channel))
         return;
@@ -842,73 +844,31 @@ static void UpdateDirectEnvelope(struct SoundChannel *channel)
         }
     }
     channel->envelopeVolume = envelope;
-    channel->envelopeVolumeRight = (u32)channel->rightVolume * envelope >> 8;
-    channel->envelopeVolumeLeft = (u32)channel->leftVolume * envelope >> 8;
+    scaledEnvelope = (u32)envelope * (soundInfo->masterVolume + 1) >> 4;
+    channel->envelopeVolumeRight = (u32)channel->rightVolume * scaledEnvelope >> 8;
+    channel->envelopeVolumeLeft = (u32)channel->leftVolume * scaledEnvelope >> 8;
 }
 
-static void UpdateCgbEnvelope(struct CgbChannel *channel, u8 index)
+static void ResetStartingCgbChannels(struct SoundInfo *soundInfo)
 {
-    u8 envelope = channel->envelopeVolume;
+    u8 i;
 
-    if (!(channel->statusFlags & SOUND_CHANNEL_SF_ON))
-        return;
-    if (channel->statusFlags & SOUND_CHANNEL_SF_START)
+    for (i = 0; i < 4; i++)
     {
-        sCgbState[index].phase = 0;
-        sCgbState[index].noise = 0x7FFF;
-        if (channel->statusFlags & SOUND_CHANNEL_SF_STOP)
+        if (soundInfo->cgbChans[i].statusFlags & SOUND_CHANNEL_SF_START)
         {
-            StopMixedChannel((struct SoundChannel *)channel);
-            return;
+            sCgbState[i].phase = 0;
+            sCgbState[i].noise = 0x7FFF;
         }
-        channel->statusFlags = SOUND_CHANNEL_SF_ENV_ATTACK;
-        envelope = channel->attack == 0 ? 255 : 0;
-        if (channel->attack == 0)
-            channel->statusFlags = SOUND_CHANNEL_SF_ENV_DECAY;
     }
-    else if (channel->statusFlags & SOUND_CHANNEL_SF_STOP)
-    {
-        u8 amount = channel->release == 0 ? 255 : (8 - (channel->release & 7)) * 4;
-        if (envelope <= amount)
-        {
-            StopMixedChannel((struct SoundChannel *)channel);
-            return;
-        }
-        envelope -= amount;
-    }
-    else if ((channel->statusFlags & SOUND_CHANNEL_SF_ENV) == SOUND_CHANNEL_SF_ENV_ATTACK)
-    {
-        u8 amount = (8 - (channel->attack & 7)) * 8;
-        if ((u16)envelope + amount >= 255)
-        {
-            envelope = 255;
-            channel->statusFlags = SOUND_CHANNEL_SF_ENV_DECAY;
-        }
-        else
-            envelope += amount;
-    }
-    else if ((channel->statusFlags & SOUND_CHANNEL_SF_ENV) == SOUND_CHANNEL_SF_ENV_DECAY)
-    {
-        u8 goal = channel->sustain * 17;
-        u8 amount = channel->decay == 0 ? 255 : (8 - (channel->decay & 7)) * 2;
-        if (envelope <= goal + amount)
-        {
-            envelope = goal;
-            channel->statusFlags = SOUND_CHANNEL_SF_ENV_SUSTAIN;
-        }
-        else
-            envelope -= amount;
-    }
-    channel->envelopeVolume = envelope;
 }
 
-static s32 MixDirectSample(struct SoundChannel *channel)
+static s32 MixDirectSample(struct SoundInfo *soundInfo, struct SoundChannel *channel)
 {
     struct PcMixState *state = GetDirectState(channel);
     const s8 *base;
-    u64 phase;
+    u32 phase;
     u32 advance;
-    u32 fraction;
     s32 sample;
     s32 nextSample;
 
@@ -916,12 +876,19 @@ static s32 MixDirectSample(struct SoundChannel *channel)
         return 0;
     base = GetDirectSampleBase(channel);
     sample = *channel->currentPointer;
-    nextSample = channel->currentPointer[1];
-    fraction = state->phase;
-    sample += ((s64)(nextSample - sample) * fraction) >> 32;
-    phase = (u64)fraction + (((u64)channel->frequency << 32) / PC_AUDIO_RATE);
-    advance = phase >> 32;
-    state->phase = phase;
+    if (channel->type & TONEDATA_TYPE_FIX)
+    {
+        advance = 1;
+        state->phase = 0;
+    }
+    else
+    {
+        nextSample = channel->currentPointer[1];
+        sample += (nextSample - sample) * (s32)state->phase >> 23;
+        phase = state->phase + channel->frequency * soundInfo->divFreq;
+        advance = phase >> 23;
+        state->phase = phase & 0x7FFFFF;
+    }
 
     while (advance != 0 && ChannelIsOn(channel))
     {
@@ -972,11 +939,29 @@ static double CgbFrequency(const struct CgbChannel *channel)
     return (type == 3 ? 65536.0 : 131072.0) / (2048 - value);
 }
 
-static s32 MixCgbSample(struct CgbChannel *channel, u8 index)
+static u8 CgbWaveVolumeNumerator(u8 envelopeVolume)
+{
+    switch (gCgb3Vol[envelopeVolume])
+    {
+    case 0x20: // 100%
+        return 4;
+    case 0x40: // 50%
+        return 2;
+    case 0x60: // 25%
+        return 1;
+    case 0x80: // 75%
+        return 3;
+    default:
+        return 0;
+    }
+}
+
+static s32 MixCgbDacEighths(struct CgbChannel *channel, u8 index)
 {
     struct PcMixState *state = &sCgbState[index];
     u64 step = (u64)(CgbFrequency(channel) * 4294967296.0 / PC_AUDIO_RATE);
     u32 type = channel->type & TONEDATA_TYPE_CGB;
+    u32 envelope = channel->envelopeVolume;
 
     if (type == 4)
     {
@@ -993,7 +978,7 @@ static s32 MixCgbSample(struct CgbChannel *channel, u8 index)
             if (shortMode)
                 state->noise = (state->noise & ~(1 << 6)) | (feedback << 6);
         }
-        return (state->noise & 1) ? -112 : 112;
+        return (state->noise & 1) ? -(s32)envelope * 4 : (s32)envelope * 4;
     }
 
     state->phase += step;
@@ -1003,14 +988,41 @@ static s32 MixCgbSample(struct CgbChannel *channel, u8 index)
         u8 position = state->phase >> 27;
         u8 packed = wave[position >> 1];
         u8 value = (position & 1) ? (packed & 0xF) : (packed >> 4);
-        return ((s32)value - 8) * 16;
+        u8 volume = CgbWaveVolumeNumerator(envelope);
+
+        return ((s32)value * 2 - 15) * volume;
     }
     else
     {
         static const u8 dutyThreshold[] = {1, 2, 4, 6};
         u8 duty = (uintptr_t)channel->wavePointer & 3;
         u8 position = state->phase >> 29;
-        return position < dutyThreshold[duty] ? 112 : -112;
+        u8 threshold = dutyThreshold[duty];
+
+        // The output capacitor removes the pulse wave's duty-dependent DC.
+        return (position < threshold ? 8 - threshold : -(s32)threshold) * envelope;
+    }
+}
+
+static s32 ScaleCgbBus(s32 dacEighths, u8 masterVolume)
+{
+    // Four 4-bit PSG channels form a 6-bit sum, then occupy the 9-bit mix path
+    // by shifting three bits. Direct Sound shifts its signed 8-bit sample once.
+    // dacEighths already contains the PSG x8 shift; x16 applies NR50 / 8 and
+    // converts the resulting 9-bit value to the shared x256 Direct Sound bus.
+    return dacEighths * (masterVolume + 1) * 16;
+}
+
+static s32 ApplyCgbOutputRatio(s32 sample)
+{
+    switch (REG_SOUNDCNT_H & 3)
+    {
+    case SOUND_CGB_MIX_QUARTER:
+        return sample / 4;
+    case SOUND_CGB_MIX_HALF:
+        return sample / 2;
+    default:
+        return sample;
     }
 }
 
@@ -1023,58 +1035,119 @@ static s16 ClipSample(s32 value)
     return value;
 }
 
-static s8 ConvertPcmBufferSample(s16 value)
-{
-    s32 sample = (s32)value * PC_AUDIO_MIX_HEADROOM / 256;
-
-    if (sample > 127)
-        return 127;
-    if (sample < -128)
-        return -128;
-    return sample;
-}
-
-static void UpdatePcmBuffer(struct SoundInfo *soundInfo, u32 frameCount)
+static u32 GetPcmBufferOffset(const struct SoundInfo *soundInfo)
 {
     u32 samplesPerVBlank = soundInfo->pcmSamplesPerVBlank;
     u32 offset;
-    u32 i;
 
-    if (frameCount == 0 || samplesPerVBlank == 0 || samplesPerVBlank > PCM_DMA_BUF_SIZE)
-        return;
-
-    if (gPcmDmaCounter < 2)
+    if (soundInfo->pcmDmaCounter < 2)
         offset = 0;
     else
-        offset = (soundInfo->pcmDmaPeriod + 1 - gPcmDmaCounter) * samplesPerVBlank;
+        offset = (soundInfo->pcmDmaPeriod + 1 - soundInfo->pcmDmaCounter) * samplesPerVBlank;
     if (offset + samplesPerVBlank > PCM_DMA_BUF_SIZE)
         offset = 0;
+    return offset;
+}
 
-    for (i = 0; i < samplesPerVBlank; i++)
+static s8 AddDirectPcmSample(s8 current, s32 contribution)
+{
+    return (s8)((u8)current + (u8)contribution);
+}
+
+static s32 ScaleDirectSample(s32 sample, u8 volume)
+{
+    return sample * (s32)volume >> 8;
+}
+
+static void InitializeDirectPcmBuffer(struct SoundInfo *soundInfo, u32 offset)
+{
+    u32 samplesPerVBlank = soundInfo->pcmSamplesPerVBlank;
+    s8 *right = soundInfo->pcmBuffer + offset;
+    s8 *left = soundInfo->pcmBuffer + PCM_DMA_BUF_SIZE + offset;
+
+    if (soundInfo->reverb == 0)
     {
-        u32 sourceFrame = (u64)i * frameCount / samplesPerVBlank;
+        memset(right, 0, samplesPerVBlank);
+        memset(left, 0, samplesPerVBlank);
+        return;
+    }
 
-        soundInfo->pcmBuffer[offset + i]
-            = ConvertPcmBufferSample(sOutput[sourceFrame * 2]);
-        soundInfo->pcmBuffer[PCM_DMA_BUF_SIZE + offset + i]
-            = ConvertPcmBufferSample(sOutput[sourceFrame * 2 + 1]);
+    {
+        u32 delayedOffset = soundInfo->pcmDmaCounter == 2 ? 0 : offset + samplesPerVBlank;
+        s8 *delayedRight = soundInfo->pcmBuffer + delayedOffset;
+        s8 *delayedLeft = soundInfo->pcmBuffer + PCM_DMA_BUF_SIZE + delayedOffset;
+        u32 i;
+
+        for (i = 0; i < samplesPerVBlank; i++)
+        {
+            s32 mixed = right[i] + left[i] + delayedRight[i] + delayedLeft[i];
+
+            mixed = mixed * soundInfo->reverb >> 9;
+            if (mixed & 0x80)
+                mixed++;
+            right[i] = mixed;
+            left[i] = mixed;
+        }
     }
 }
 
-static s32 ScaleMixedSample(s32 sample,
-                            u8 channelVolume,
-                            u8 envelopeVolume,
-                            u8 masterVolume)
+static void MixDirectPcmBuffer(struct SoundInfo *soundInfo, u32 offset)
 {
-    u32 envelope = (u32)envelopeVolume * (masterVolume + 1) >> 4;
-    u32 volume = (u32)channelVolume * envelope >> 8;
+    u32 samplesPerVBlank = soundInfo->pcmSamplesPerVBlank;
+    s8 *right = soundInfo->pcmBuffer + offset;
+    s8 *left = soundInfo->pcmBuffer + PCM_DMA_BUF_SIZE + offset;
+    u32 frame;
 
-    return sample * (s32)volume;
+    InitializeDirectPcmBuffer(soundInfo, offset);
+    for (frame = 0; frame < samplesPerVBlank; frame++)
+    {
+        u8 i;
+
+        for (i = 0; i < soundInfo->maxChans; i++)
+        {
+            struct SoundChannel *channel = &soundInfo->chans[i];
+            s32 sample;
+
+            if (!ChannelIsOn(channel))
+                continue;
+            sample = MixDirectSample(soundInfo, channel);
+            right[frame] = AddDirectPcmSample(
+                right[frame],
+                ScaleDirectSample(sample, channel->envelopeVolumeRight));
+            left[frame] = AddDirectPcmSample(
+                left[frame],
+                ScaleDirectSample(sample, channel->envelopeVolumeLeft));
+        }
+    }
+}
+
+static void GetDirectBusSample(const struct SoundInfo *soundInfo,
+                               u32 offset,
+                               u32 frame,
+                               s32 *left,
+                               s32 *right)
+{
+    s32 fifoA = soundInfo->pcmBuffer[offset + frame];
+    s32 fifoB = soundInfo->pcmBuffer[PCM_DMA_BUF_SIZE + offset + frame];
+    u32 scaleA = (REG_SOUNDCNT_H & SOUND_A_MIX_FULL) ? 256 : 128;
+    u32 scaleB = (REG_SOUNDCNT_H & SOUND_B_MIX_FULL) ? 256 : 128;
+
+    *left = 0;
+    *right = 0;
+    if (REG_SOUNDCNT_H & SOUND_A_LEFT_OUTPUT)
+        *left += fifoA * (s32)scaleA;
+    if (REG_SOUNDCNT_H & SOUND_A_RIGHT_OUTPUT)
+        *right += fifoA * (s32)scaleA;
+    if (REG_SOUNDCNT_H & SOUND_B_LEFT_OUTPUT)
+        *left += fifoB * (s32)scaleB;
+    if (REG_SOUNDCNT_H & SOUND_B_RIGHT_OUTPUT)
+        *right += fifoB * (s32)scaleB;
 }
 
 static void MixFrame(struct SoundInfo *soundInfo)
 {
     u32 frameCount;
+    u32 pcmOffset;
     u32 frame;
 
     sSampleAccumulator += (u64)PC_AUDIO_RATE * 10000;
@@ -1082,48 +1155,41 @@ static void MixFrame(struct SoundInfo *soundInfo)
     sSampleAccumulator %= 597275;
     if (frameCount > PC_AUDIO_MAX_FRAME_SAMPLES)
         frameCount = PC_AUDIO_MAX_FRAME_SAMPLES;
+    pcmOffset = GetPcmBufferOffset(soundInfo);
+    MixDirectPcmBuffer(soundInfo, pcmOffset);
 
     for (frame = 0; frame < frameCount; frame++)
     {
-        s32 left = 0;
-        s32 right = 0;
+        u32 directFrame = (u64)frame * soundInfo->pcmSamplesPerVBlank / frameCount;
+        s32 left;
+        s32 right;
+        s32 cgbLeft = 0;
+        s32 cgbRight = 0;
         u8 i;
 
-        for (i = 0; i < soundInfo->maxChans; i++)
-        {
-            struct SoundChannel *channel = &soundInfo->chans[i];
-            s32 sample;
-            u32 envelope;
-
-            if (!ChannelIsOn(channel))
-                continue;
-            sample = MixDirectSample(channel);
-            envelope = channel->envelopeVolume;
-            left += ScaleMixedSample(sample, channel->leftVolume, envelope, soundInfo->masterVolume);
-            right += ScaleMixedSample(sample, channel->rightVolume, envelope, soundInfo->masterVolume);
-        }
+        GetDirectBusSample(soundInfo, pcmOffset, directFrame, &left, &right);
 
         for (i = 0; i < 4; i++)
         {
             struct CgbChannel *channel = &soundInfo->cgbChans[i];
-            struct SoundChannel *common = (struct SoundChannel *)channel;
             s32 sample;
-            u32 envelope;
 
             if (!(channel->statusFlags & SOUND_CHANNEL_SF_ON))
                 continue;
-            sample = MixCgbSample(channel, i);
-            envelope = channel->envelopeVolume;
-            left += ScaleMixedSample(sample, common->leftVolume, envelope, soundInfo->masterVolume);
-            right += ScaleMixedSample(sample, common->rightVolume, envelope, soundInfo->masterVolume);
+            sample = MixCgbDacEighths(channel, i);
+            if (channel->pan & (0x10 << i))
+                cgbLeft += ScaleCgbBus(sample, (REG_NR50 >> 4) & 7);
+            if (channel->pan & (1 << i))
+                cgbRight += ScaleCgbBus(sample, REG_NR50 & 7);
         }
+        left += ApplyCgbOutputRatio(cgbLeft);
+        right += ApplyCgbOutputRatio(cgbRight);
 
-        // Direct Sound and PSG are separate hardware buses on the GBA. Leave
-        // enough headroom when combining their nine possible voices for SDL.
-        sOutput[frame * 2] = ClipSample(left / PC_AUDIO_MIX_HEADROOM);
-        sOutput[frame * 2 + 1] = ClipSample(right / PC_AUDIO_MIX_HEADROOM);
+        // The hardware compositor and bias have a signed 10-bit range. In this
+        // x256 bus scale, division by four maps it onto signed 16-bit output.
+        sOutput[frame * 2] = ClipSample(left / PC_AUDIO_MIX_TO_S16_DIVISOR);
+        sOutput[frame * 2 + 1] = ClipSample(right / PC_AUDIO_MIX_TO_S16_DIVISOR);
     }
-    UpdatePcmBuffer(soundInfo, frameCount);
     PcPlatformQueueAudio(sOutput, frameCount);
 }
 
@@ -1142,10 +1208,11 @@ void SoundMain(void)
          mplayInfo = mplayInfo->musicPlayerNext)
         MPlayMain(mplayInfo);
 
+    ResetStartingCgbChannels(soundInfo);
+    if (soundInfo->CgbSound != NULL)
+        soundInfo->CgbSound();
     for (i = 0; i < soundInfo->maxChans; i++)
-        UpdateDirectEnvelope(&soundInfo->chans[i]);
-    for (i = 0; i < 4; i++)
-        UpdateCgbEnvelope(&soundInfo->cgbChans[i], i);
+        UpdateDirectEnvelope(soundInfo, &soundInfo->chans[i]);
     MixFrame(soundInfo);
 
     soundInfo->ident = ID_NUMBER;
