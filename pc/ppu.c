@@ -58,6 +58,23 @@ static void PushObjectPixel(struct PixelStack *stack, u16 color, bool8 semiTrans
     stack->top.semiTransparent = semiTransparent;
 }
 
+static s32 ApplyMosaic(s32 coordinate, u8 size)
+{
+    return coordinate - coordinate % size;
+}
+
+static void ApplyBgMosaic(u16 control, s32 *screenX, s32 *screenY)
+{
+    u16 mosaic;
+
+    if (!(control & BGCNT_MOSAIC))
+        return;
+
+    mosaic = ReadIo16(REG_OFFSET_MOSAIC);
+    *screenX = ApplyMosaic(*screenX, (mosaic & 0xF) + 1);
+    *screenY = ApplyMosaic(*screenY, ((mosaic >> 4) & 0xF) + 1);
+}
+
 static bool8 ReadTextBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
 {
     const u8 *vram = (const u8 *)VRAM;
@@ -68,19 +85,31 @@ static bool8 ReadTextBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
     u32 size = control >> 14;
     u32 width = (size & 1) ? 512 : 256;
     u32 height = (size & 2) ? 512 : 256;
-    u32 x = (screenX + hofs) & (width - 1);
-    u32 y = (screenY + vofs) & (height - 1);
-    u32 tileX = x >> 3;
-    u32 tileY = y >> 3;
-    u32 block = (tileX >> 5) + (tileY >> 5) * (width >> 8);
+    u32 x;
+    u32 y;
+    u32 tileX;
+    u32 tileY;
+    u32 block;
     u32 mapBase = ((control >> 8) & 0x1F) * BG_SCREEN_SIZE;
-    u32 mapOffset = block * BG_SCREEN_SIZE + ((tileY & 31) * 32 + (tileX & 31)) * 2;
-    u16 entry = *(const u16 *)(vram + mapBase + mapOffset);
-    u32 tile = entry & 0x3FF;
-    u32 pixelX = x & 7;
-    u32 pixelY = y & 7;
+    u32 mapOffset;
+    u16 entry;
+    u32 tile;
+    u32 pixelX;
+    u32 pixelY;
     u32 charBase = ((control >> 2) & 3) * BG_CHAR_SIZE;
     u8 paletteIndex;
+
+    ApplyBgMosaic(control, &screenX, &screenY);
+    x = (screenX + hofs) & (width - 1);
+    y = (screenY + vofs) & (height - 1);
+    tileX = x >> 3;
+    tileY = y >> 3;
+    block = (tileX >> 5) + (tileY >> 5) * (width >> 8);
+    mapOffset = block * BG_SCREEN_SIZE + ((tileY & 31) * 32 + (tileX & 31)) * 2;
+    entry = *(const u16 *)(vram + mapBase + mapOffset);
+    tile = entry & 0x3FF;
+    pixelX = x & 7;
+    pixelY = y & 7;
 
     if (entry & 0x400)
         pixelX = 7 - pixelX;
@@ -120,14 +149,18 @@ static bool8 ReadAffineBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
     u32 rawY = *(vu32 *)(REG_BASE + registerBase + 12);
     s32 referenceX = SignExtend28(rawX);
     s32 referenceY = SignExtend28(rawY);
-    s32 x = (referenceX + pa * screenX + pb * screenY) >> 8;
-    s32 y = (referenceY + pc * screenX + pd * screenY) >> 8;
+    s32 x;
+    s32 y;
     u32 size = 128u << (control >> 14);
     u32 tileMapWidth = size >> 3;
     u32 mapBase = ((control >> 8) & 0x1F) * BG_SCREEN_SIZE;
     u32 charBase = ((control >> 2) & 3) * BG_CHAR_SIZE;
     u8 tile;
     u8 paletteIndex;
+
+    ApplyBgMosaic(control, &screenX, &screenY);
+    x = (referenceX + pa * screenX + pb * screenY) >> 8;
+    y = (referenceY + pc * screenX + pd * screenY) >> 8;
 
     if (control & (1 << 13))
     {
@@ -151,6 +184,9 @@ static bool8 ReadAffineBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
 static bool8 ReadBitmapPixel(u8 mode, s32 x, s32 y, u16 *color)
 {
     const u8 *vram = (const u8 *)VRAM;
+    u16 control = ReadIo16(REG_OFFSET_BG2CNT);
+
+    ApplyBgMosaic(control, &x, &y);
 
     if (mode == 3)
     {
@@ -254,6 +290,9 @@ static void DrawSpritesForPriority(struct PixelStack *line,
     const u16 *oam = (const u16 *)OAM;
     const u8 *vram = (const u8 *)VRAM;
     const u16 *palette = (const u16 *)OBJ_PLTT;
+    u16 mosaic = ReadIo16(REG_OFFSET_MOSAIC);
+    u8 mosaicWidth = ((mosaic >> 8) & 0xF) + 1;
+    u8 mosaicHeight = ((mosaic >> 12) & 0xF) + 1;
     s32 sprite;
 
     for (sprite = 127; sprite >= 0; sprite--)
@@ -265,6 +304,7 @@ static void DrawSpritesForPriority(struct PixelStack *line,
         bool8 affine = (attr0 & (1 << 8)) != 0;
         bool8 doubleSize = affine && (attr0 & (1 << 9));
         u8 objectMode = (attr0 >> 10) & 3;
+        bool8 mosaicEnabled = (attr0 & (1 << 12)) != 0;
         bool8 color256 = (attr0 & (1 << 13)) != 0;
         u8 shape = attr0 >> 14;
         u8 size = attr1 >> 14;
@@ -302,6 +342,8 @@ static void DrawSpritesForPriority(struct PixelStack *line,
 
         for (screenX = objectX; screenX < objectX + drawWidth; screenX++)
         {
+            s32 drawX;
+            s32 drawY;
             s32 sourceX;
             s32 sourceY;
             u32 tileNumber;
@@ -312,6 +354,14 @@ static void DrawSpritesForPriority(struct PixelStack *line,
             if (screenX < 0 || screenX >= DISPLAY_WIDTH)
                 continue;
 
+            drawX = screenX - objectX;
+            drawY = y - objectY;
+            if (mosaicEnabled)
+            {
+                drawX = ApplyMosaic(drawX, mosaicWidth);
+                drawY = ApplyMosaic(drawY, mosaicHeight);
+            }
+
             if (affine)
             {
                 u8 matrix = (attr1 >> 9) & 0x1F;
@@ -320,16 +370,16 @@ static void DrawSpritesForPriority(struct PixelStack *line,
                 s16 pb = matrixBase[4];
                 s16 pc = matrixBase[8];
                 s16 pd = matrixBase[12];
-                s32 relativeX = screenX - objectX - drawWidth / 2;
-                s32 relativeY = y - objectY - drawHeight / 2;
+                s32 relativeX = drawX - drawWidth / 2;
+                s32 relativeY = drawY - drawHeight / 2;
 
                 sourceX = ((pa * relativeX + pb * relativeY) >> 8) + width / 2;
                 sourceY = ((pc * relativeX + pd * relativeY) >> 8) + height / 2;
             }
             else
             {
-                sourceX = screenX - objectX;
-                sourceY = y - objectY;
+                sourceX = drawX;
+                sourceY = drawY;
                 if (attr1 & (1 << 12))
                     sourceX = width - 1 - sourceX;
                 if (attr1 & (1 << 13))
