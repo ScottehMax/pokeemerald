@@ -56,3 +56,14 @@ original addresses.
 
 The save file is `pokeemerald.sav` beside the launcher unless `--save PATH` is
 provided.
+
+## Filesystem Storage
+
+The Pokémon Storage System has a PC-only `STORAGE` entry. It reads individual
+boxed Pokémon from `./storage/` relative to the directory where the game is
+started. Files use the standard 80-byte encrypted Gen III boxed Pokémon data
+and the `.ek3` extension.
+
+Press `R` from the STORAGE screen to open the normal box interface in
+storage-transfer mode. Each transfer updates the save file before removing the
+source copy, so an I/O error cannot silently discard a Pokémon.

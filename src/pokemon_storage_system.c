@@ -23,6 +23,11 @@
 #include "overworld.h"
 #include "palette.h"
 #include "pc_screen_effect.h"
+#if PLATFORM_PC
+#include "pc_services.h"
+#include "pc_storage_menu.h"
+#include "save.h"
+#endif
 #include "pokemon.h"
 #include "pokemon_icon.h"
 #include "pokemon_summary_screen.h"
@@ -56,6 +61,9 @@ enum {
     OPTION_DEPOSIT,
     OPTION_MOVE_MONS,
     OPTION_MOVE_ITEMS,
+#if PLATFORM_PC
+    OPTION_PC_STORAGE,
+#endif
     OPTION_EXIT,
     OPTIONS_COUNT
 };
@@ -93,6 +101,10 @@ enum {
     MSG_ITEM_IS_HELD,
     MSG_CHANGED_TO_ITEM,
     MSG_CANT_STORE_MAIL,
+#if PLATFORM_PC
+    MSG_MOVED_TO_PC_STORAGE,
+    MSG_PC_STORAGE_FAILED,
+#endif
 };
 
 // IDs for how to resolve variables in the above messages
@@ -609,6 +621,9 @@ static void Task_HandleWallpapers(u8);
 static void Task_NameBox(u8);
 static void Task_PrintCantStoreMail(u8);
 static void Task_HandleMovingMonFromParty(u8);
+#if PLATFORM_PC
+static void Task_StoreMonInPcStorage(u8);
+#endif
 
 // Input handlers
 static u8 InBoxInput_Normal(void);
@@ -654,6 +669,10 @@ static void SetMovingMonPriority(u8);
 static void SpriteCB_HeldMon(struct Sprite *);
 static struct Sprite *CreateMonIconSprite(u16, u32, s16, s16, u8, u8);
 static void DestroyBoxMonIcon(struct Sprite *);
+#if PLATFORM_PC
+static void CreateBoxMonIconAtPos(u8);
+static void DestroyBoxMonIconAtPosition(u8);
+#endif
 
 // Pokémon data
 static void MoveMon(void);
@@ -876,6 +895,13 @@ static void UnkUtil_Run(void);
 static void UnkUtil_CpuRun(struct UnkUtilData *);
 static void UnkUtil_DmaRun(struct UnkUtilData *);
 
+#if PLATFORM_PC
+static const u8 sText_PcStorage[] = _("STORAGE");
+static const u8 sText_PcStorageDescription[] = _("Move POKéMON to and from STORAGE.");
+static const u8 sText_MovedToPcStorage[] = _("{DYNAMIC 0} moved to STORAGE.");
+static const u8 sText_PcStorageFailed[] = _("The .ek3 file could not be saved.");
+#endif
+
 struct {
     const u8 *text;
     const u8 *desc;
@@ -885,6 +911,9 @@ struct {
     [OPTION_DEPOSIT]    = {gText_DepositPokemon,  gText_DepositMonDescription},
     [OPTION_MOVE_MONS]  = {gText_MovePokemon,     gText_MoveMonDescription},
     [OPTION_MOVE_ITEMS] = {gText_MoveItems,       gText_MoveItemsDescription},
+#if PLATFORM_PC
+    [OPTION_PC_STORAGE] = {sText_PcStorage, sText_PcStorageDescription},
+#endif
     [OPTION_EXIT]       = {gText_SeeYa,           gText_SeeYaDescription}
 };
 
@@ -894,7 +923,11 @@ static const struct WindowTemplate sWindowTemplate_MainMenu =
     .tilemapLeft = 1,
     .tilemapTop = 1,
     .width = 17,
+#if PLATFORM_PC
+    .height = 12,
+#else
     .height = 10,
+#endif
     .paletteNum = 15,
     .baseBlock = 0x1,
 };
@@ -1095,6 +1128,10 @@ static const struct StorageMessage sMessages[] =
     [MSG_ITEM_IS_HELD]         = {gText_ItemIsNowHeld,           MSG_VAR_ITEM_NAME},
     [MSG_CHANGED_TO_ITEM]      = {gText_ChangedToNewItem,        MSG_VAR_ITEM_NAME},
     [MSG_CANT_STORE_MAIL]      = {gText_MailCantBeStored,        MSG_VAR_NONE},
+#if PLATFORM_PC
+    [MSG_MOVED_TO_PC_STORAGE]  = {sText_MovedToPcStorage, MSG_VAR_MON_NAME_1},
+    [MSG_PC_STORAGE_FAILED]    = {sText_PcStorageFailed,  MSG_VAR_NONE},
+#endif
 };
 
 static const struct WindowTemplate sYesNoWindowTemplate =
@@ -1527,6 +1564,9 @@ enum {
     STATE_HANDLE_INPUT,
     STATE_ERROR_MSG,
     STATE_ENTER_PC,
+#if PLATFORM_PC
+    STATE_ENTER_PC_STORAGE,
+#endif
 };
 
 #define tState          data[0]
@@ -1596,6 +1636,13 @@ static void Task_PCMainMenu(u8 taskId)
                 AddTextPrinterParameterized2(0, FONT_NORMAL, gText_JustOnePkmn, 0, NULL, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY);
                 task->tState = STATE_ERROR_MSG;
             }
+#if PLATFORM_PC
+            else if (task->tInput == OPTION_PC_STORAGE)
+            {
+                FadeScreen(FADE_TO_BLACK, 0);
+                task->tState = STATE_ENTER_PC_STORAGE;
+            }
+#endif
             else
             {
                 // Enter PC
@@ -1644,6 +1691,17 @@ static void Task_PCMainMenu(u8 taskId)
             DestroyTask(taskId);
         }
         break;
+#if PLATFORM_PC
+    case STATE_ENTER_PC_STORAGE:
+        if (!gPaletteFade.active)
+        {
+            RemoveWindow(task->tWindowId);
+            DestroyTask(taskId);
+            CleanupOverworldWindowsAndTilemaps();
+            ShowPcStorageMenu();
+        }
+        break;
+#endif
     }
 }
 
@@ -1655,11 +1713,25 @@ void ShowPokemonStorageSystemPC(void)
     LockPlayerFieldControls();
 }
 
+static void FieldTask_ReturnToPcMenu(void);
+
 #if PLATFORM_PC
 void PcStorageTestEnterMoveMons(void)
 {
     CleanupOverworldWindowsAndTilemaps();
     EnterPokeStorage(OPTION_MOVE_MONS);
+}
+
+void PcStorageEnterBox(void)
+{
+    EnterPokeStorage(OPTION_PC_STORAGE);
+}
+
+void PcStorageExitToPcMenu(void)
+{
+    sPreviousBoxOption = OPTION_PC_STORAGE;
+    gFieldCallback = FieldTask_ReturnToPcMenu;
+    SetMainCallback2(CB2_ReturnToField);
 }
 #endif
 
@@ -1698,6 +1770,14 @@ static void CreateMainMenu(u8 whichMenu, s16 *windowIdPtr)
 
 static void CB2_ExitPokeStorage(void)
 {
+#if PLATFORM_PC
+    if (GetCurrentBoxOption() == OPTION_PC_STORAGE)
+    {
+        gFieldCallback = PcStorageMenuReturnToField;
+        SetMainCallback2(CB2_ReturnToField);
+        return;
+    }
+#endif
     sPreviousBoxOption = GetCurrentBoxOption();
     gFieldCallback = FieldTask_ReturnToPcMenu;
     SetMainCallback2(CB2_ReturnToField);
@@ -2359,6 +2439,16 @@ static void Task_PokeStorageMain(u8 taskId)
             }
             break;
         case INPUT_DEPOSIT:
+#if PLATFORM_PC
+            if (sStorage->boxOption == OPTION_PC_STORAGE)
+            {
+                if (ItemIsMail(sStorage->displayMonItemId))
+                    sStorage->state = MSTATE_ERROR_HAS_MAIL;
+                else
+                    SetPokeStorageTask(Task_StoreMonInPcStorage);
+                break;
+            }
+#endif
             if (!IsRemovingLastPartyMon())
             {
                 if (ItemIsMail(sStorage->displayMonItemId))
@@ -2653,6 +2743,22 @@ static void Task_OnSelectedMon(u8 taskId)
             SetPokeStorageTask(Task_WithdrawMon);
             break;
         case MENU_STORE:
+#if PLATFORM_PC
+            if (sStorage->boxOption == OPTION_PC_STORAGE)
+            {
+                if (ItemIsMail(sStorage->displayMonItemId))
+                {
+                    sStorage->state = 4;
+                }
+                else
+                {
+                    PlaySE(SE_SELECT);
+                    ClearBottomWindow();
+                    SetPokeStorageTask(Task_StoreMonInPcStorage);
+                }
+                break;
+            }
+#endif
             if (IsRemovingLastPartyMon())
             {
                 sStorage->state = 3;
@@ -3383,6 +3489,54 @@ static void Task_PrintCantStoreMail(u8 taskId)
         break;
     }
 }
+
+#if PLATFORM_PC
+static void Task_StoreMonInPcStorage(u8 taskId)
+{
+    u8 boxId = StorageGetCurrentBox();
+    u8 boxPosition = GetCursorPosition();
+
+    switch (sStorage->state)
+    {
+    case 0:
+        CopyBoxMonAt(boxId, boxPosition, &sStorage->tempMon.box);
+        if (!PcStorageWriteMon(&sStorage->tempMon.box))
+        {
+            PlaySE(SE_FAILURE);
+            PrintMessage(MSG_PC_STORAGE_FAILED);
+            sStorage->state = 2;
+            break;
+        }
+
+        DestroyBoxMonIconAtPosition(boxPosition);
+        ZeroBoxMonAt(boxId, boxPosition);
+        if (TrySavingData(SAVE_NORMAL) != SAVE_STATUS_OK)
+        {
+            SetBoxMonAt(boxId, boxPosition, &sStorage->tempMon.box);
+            CreateBoxMonIconAtPos(boxPosition);
+            PcStorageRollbackWrite();
+            PlaySE(SE_FAILURE);
+            PrintMessage(MSG_PC_STORAGE_FAILED);
+        }
+        else
+        {
+            PrintMessage(MSG_MOVED_TO_PC_STORAGE);
+        }
+        RefreshDisplayMonData();
+        sStorage->state = 2;
+        break;
+    case 2:
+        if (JOY_NEW(A_BUTTON | B_BUTTON | DPAD_ANY))
+        {
+            ClearBottomWindow();
+            RefreshDisplayMon();
+            StartDisplayMonMosaicEffect();
+            SetPokeStorageTask(Task_PokeStorageMain);
+        }
+        break;
+    }
+}
+#endif
 
 // Handle options menu that shows when the box title bar is selected
 static void Task_HandleBoxOptions(u8 taskId)
@@ -4316,7 +4470,12 @@ static void PrintMessage(u8 id)
 
     DynamicPlaceholderTextUtil_ExpandPlaceholders(sStorage->messageText, sMessages[id].text);
     FillWindowPixelBuffer(WIN_MESSAGE, PIXEL_FILL(1));
-    AddTextPrinterParameterized(WIN_MESSAGE, FONT_NORMAL, sStorage->messageText, 0, 1, TEXT_SKIP_DRAW, NULL);
+#if PLATFORM_PC
+    if (id == MSG_MOVED_TO_PC_STORAGE)
+        AddTextPrinterParameterized(WIN_MESSAGE, FONT_NARROW, sStorage->messageText, 0, 1, TEXT_SKIP_DRAW, NULL);
+    else
+#endif
+        AddTextPrinterParameterized(WIN_MESSAGE, FONT_NORMAL, sStorage->messageText, 0, 1, TEXT_SKIP_DRAW, NULL);
     DrawTextBorderOuter(WIN_MESSAGE, 2, 14);
     PutWindowTilemap(WIN_MESSAGE);
     CopyWindowToVram(WIN_MESSAGE, COPYWIN_GFX);
@@ -7665,6 +7824,15 @@ static bool8 SetMenuTexts_Mon(void)
                 return FALSE;
         }
         break;
+#if PLATFORM_PC
+    case OPTION_PC_STORAGE:
+        if (sCursorArea != CURSOR_AREA_IN_BOX || species == SPECIES_NONE)
+            return FALSE;
+        SetMenuText(MENU_STORE);
+        SetMenuText(MENU_SUMMARY);
+        SetMenuText(MENU_CANCEL);
+        return TRUE;
+#endif
     case OPTION_MOVE_ITEMS:
     default:
         return FALSE;

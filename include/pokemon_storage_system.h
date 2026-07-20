@@ -36,6 +36,8 @@ u8 *StringCopyAndFillWithSpaces(u8 *dst, const u8 *src, u16 n);
 void ShowPokemonStorageSystemPC(void);
 #if PLATFORM_PC
 void PcStorageTestEnterMoveMons(void);
+void PcStorageEnterBox(void);
+void PcStorageExitToPcMenu(void);
 #endif
 void ResetPokemonStorageSystem(void);
 s16 CompactPartySlots(void);

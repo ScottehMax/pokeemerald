@@ -19,12 +19,14 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_setup.h"
+#include "event_scripts.h"
 #include "field_screen_effect.h"
 #include "main.h"
 #include "overworld.h"
 #include "pokedex.h"
 #include "pokemon.h"
 #include "pokemon_storage_system.h"
+#include "script.h"
 #include "pc_platform.h"
 #include "pc_ppu.h"
 #include "pc_services.h"
@@ -86,6 +88,8 @@ static u32 sTestCenterWarpFrame;
 static bool8 sTestCenterWarpPending;
 static u32 sTestStorageFrame;
 static bool8 sTestStoragePending;
+static u32 sTestFsStorageFrame;
+static bool8 sTestFsStoragePending;
 static u32 sTestPokedexFrame;
 static bool8 sTestPokedexPending;
 static u64 sTimer1StartNs;
@@ -369,6 +373,28 @@ static void ParseTestStorageFrame(const char *spec)
     sTestStoragePending = TRUE;
 }
 
+static void ParseTestFsStorageFrame(const char *spec)
+{
+    char *end;
+    unsigned long frame;
+
+    sTestFsStorageFrame = UINT32_MAX;
+    sTestFsStoragePending = FALSE;
+    if (spec == NULL || *spec == '\0')
+        return;
+
+    errno = 0;
+    frame = strtoul(spec, &end, 0);
+    if (errno != 0 || end == spec || *end != '\0' || frame > UINT32_MAX)
+    {
+        fprintf(stderr, "invalid POKEEMERALD_PC_TEST_FS_STORAGE_AT value: %s\n", spec);
+        return;
+    }
+
+    sTestFsStorageFrame = (u32)frame;
+    sTestFsStoragePending = TRUE;
+}
+
 static void ParseTestPokedexFrame(const char *spec)
 {
     char *end;
@@ -475,6 +501,7 @@ bool32 PcPlatformInit(const char *sharedPath)
     ParseTestBattleFrame(getenv("POKEEMERALD_PC_TEST_BATTLE_AT"));
     ParseTestCenterWarpFrame(getenv("POKEEMERALD_PC_TEST_CENTER_AT"));
     ParseTestStorageFrame(getenv("POKEEMERALD_PC_TEST_STORAGE_AT"));
+    ParseTestFsStorageFrame(getenv("POKEEMERALD_PC_TEST_FS_STORAGE_AT"));
     ParseTestPokedexFrame(getenv("POKEEMERALD_PC_TEST_POKEDEX_AT"));
     sTestTrainerIdReportPending = getenv("POKEEMERALD_PC_TEST_REPORT_ID") != NULL;
     sFrameCounter = 0;
@@ -658,6 +685,18 @@ void PcPlatformRunTestHooks(void)
         PcStorageTestEnterMoveMons();
         sTestStoragePending = FALSE;
         fprintf(stderr, "PC storage test: menu requested at frame %u\n", sFrameCounter);
+    }
+
+    if (sTestFsStoragePending
+     && sFrameCounter >= sTestFsStorageFrame
+     && gMain.callback2 == CB2_Overworld
+     && !gMain.inBattle)
+    {
+        if (!CheckBoxMonSanityAt(0, 0))
+            CreateBoxMonAt(0, 0, SPECIES_TREECKO, 16, 31, FALSE, 0, OT_ID_PLAYER_ID, 0);
+        ScriptContext_SetupScript(EventScript_PC);
+        sTestFsStoragePending = FALSE;
+        fprintf(stderr, "PC filesystem storage test: menu requested at frame %u\n", sFrameCounter);
     }
 
     if (sTestCenterWarpPending
