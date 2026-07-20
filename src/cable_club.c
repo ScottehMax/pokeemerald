@@ -7,6 +7,7 @@
 #include "data.h"
 #include "event_data.h"
 #include "field_message_box.h"
+#include "field_screen_effect.h"
 #include "field_specials.h"
 #include "field_weather.h"
 #include "international_string_util.h"
@@ -109,7 +110,16 @@ static void FieldCB_StartPcLinkup(void)
 
 static void CB2_ReturnFromPcLinkCode(void)
 {
-    gFieldCallback = FieldCB_StartPcLinkup;
+    if (sPcLinkCode[0] == EOS)
+    {
+        gSpecialVar_Result = LINKUP_FAILED;
+        gLinkType = 0;
+        gFieldCallback = FieldCB_ContinueScript;
+    }
+    else
+    {
+        gFieldCallback = FieldCB_StartPcLinkup;
+    }
     CB2_ReturnToField();
 }
 #endif
@@ -255,6 +265,10 @@ static void Task_LinkupStart(u8 taskId)
         ResetLinkPlayerCount();
         ResetLinkPlayers();
         tWindowId = AddWindow(&sWindowTemplate_LinkPlayerCount);
+#if PLATFORM_PC
+        HideFieldMessageBox();
+        ShowFieldMessage(gText_AwaitingLinkup);
+#endif
     }
     else if (data[0] > 9)
     {
@@ -268,12 +282,17 @@ static void Task_LinkupAwaitConnection(u8 taskId)
     u32 playerCount = GetLinkPlayerCount_2();
 
     if (CheckLinkCanceledBeforeConnection(taskId) == TRUE
-     || CheckLinkCanceled(taskId) == TRUE
-     || playerCount < 2)
+     || CheckLinkCanceled(taskId) == TRUE)
+        return;
+
+    if (playerCount < 2)
         return;
 
     SetSuppressLinkErrorMessage(TRUE);
     gTasks[taskId].data[3] = 0;
+#if PLATFORM_PC
+    HideFieldMessageBox();
+#endif
     if (IsLinkMaster() == TRUE)
     {
         PlaySE(SE_PIN);

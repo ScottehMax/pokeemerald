@@ -46,6 +46,17 @@ enum {
     INPUT_START,
 };
 
+enum {
+    ICON_NONE,
+    ICON_PLAYER,
+    ICON_PC,
+    ICON_MON,
+    ICON_WALDA_DAD,
+#if PLATFORM_PC
+    ICON_TEALA,
+#endif
+};
+
 #define KBROW_COUNT 4
 #define KBCOL_COUNT 8
 
@@ -1380,14 +1391,20 @@ static void NamingScreen_CreatePlayerIcon(void);
 static void NamingScreen_CreatePCIcon(void);
 static void NamingScreen_CreateMonIcon(void);
 static void NamingScreen_CreateWaldaDadIcon(void);
+#if PLATFORM_PC
+static void NamingScreen_CreateTealaIcon(void);
+#endif
 
 static void (*const sIconFunctions[])(void) =
 {
-    NamingScreen_NoIcon,
-    NamingScreen_CreatePlayerIcon,
-    NamingScreen_CreatePCIcon,
-    NamingScreen_CreateMonIcon,
-    NamingScreen_CreateWaldaDadIcon,
+    [ICON_NONE]      = NamingScreen_NoIcon,
+    [ICON_PLAYER]    = NamingScreen_CreatePlayerIcon,
+    [ICON_PC]        = NamingScreen_CreatePCIcon,
+    [ICON_MON]       = NamingScreen_CreateMonIcon,
+    [ICON_WALDA_DAD] = NamingScreen_CreateWaldaDadIcon,
+#if PLATFORM_PC
+    [ICON_TEALA]     = NamingScreen_CreateTealaIcon,
+#endif
 };
 
 static void CreateInputTargetIcon(void)
@@ -1437,6 +1454,17 @@ static void NamingScreen_CreateWaldaDadIcon(void)
     gSprites[spriteId].oam.priority = 3;
     StartSpriteAnim(&gSprites[spriteId], ANIM_STD_GO_SOUTH);
 }
+
+#if PLATFORM_PC
+static void NamingScreen_CreateTealaIcon(void)
+{
+    u8 spriteId;
+
+    spriteId = CreateObjectGraphicsSprite(OBJ_EVENT_GFX_TEALA, SpriteCallbackDummy, 56, 37, 0);
+    gSprites[spriteId].oam.priority = 3;
+    StartSpriteAnim(&gSprites[spriteId], ANIM_STD_GO_SOUTH);
+}
+#endif
 
 //--------------------------------------------------
 // Keyboard handling
@@ -2098,7 +2126,7 @@ static const struct NamingScreenTemplate sPlayerNamingScreenTemplate =
 {
     .copyExistingString = FALSE,
     .maxChars = PLAYER_NAME_LENGTH,
-    .iconFunction = 1,
+    .iconFunction = ICON_PLAYER,
     .addGenderIcon = FALSE,
     .initialPage = KBPAGE_LETTERS_UPPER,
     .unused = 35,
@@ -2109,7 +2137,7 @@ static const struct NamingScreenTemplate sPCBoxNamingTemplate =
 {
     .copyExistingString = FALSE,
     .maxChars = BOX_NAME_LENGTH,
-    .iconFunction = 2,
+    .iconFunction = ICON_PC,
     .addGenderIcon = FALSE,
     .initialPage = KBPAGE_LETTERS_UPPER,
     .unused = 19,
@@ -2120,7 +2148,7 @@ static const struct NamingScreenTemplate sMonNamingScreenTemplate =
 {
     .copyExistingString = FALSE,
     .maxChars = POKEMON_NAME_LENGTH,
-    .iconFunction = 3,
+    .iconFunction = ICON_MON,
     .addGenderIcon = TRUE,
     .initialPage = KBPAGE_LETTERS_UPPER,
     .unused = 35,
@@ -2131,7 +2159,7 @@ static const struct NamingScreenTemplate sWaldaWordsScreenTemplate =
 {
     .copyExistingString = TRUE,
     .maxChars = WALDA_PHRASE_LENGTH,
-    .iconFunction = 4,
+    .iconFunction = ICON_WALDA_DAD,
     .addGenderIcon = FALSE,
     .initialPage = KBPAGE_LETTERS_UPPER,
     .unused = 11,
@@ -2145,7 +2173,7 @@ static const struct NamingScreenTemplate sLinkCodeNamingScreenTemplate =
 {
     .copyExistingString = FALSE,
     .maxChars = PC_LINK_CODE_LENGTH,
-    .iconFunction = 0,
+    .iconFunction = ICON_TEALA,
     .addGenderIcon = FALSE,
     .initialPage = KBPAGE_LETTERS_UPPER,
     .unused = 0,

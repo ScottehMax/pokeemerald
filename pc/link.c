@@ -90,7 +90,7 @@ struct PcLinkClient
     u16 commandQueueCount;
     u16 latestKeyCommands[CMD_LENGTH];
     bool8 haveLatestKeyCommands;
-    u64 openedAt;
+    u64 stateStartedAt;
     u64 lastServerSend;
     u64 lastPunchSend;
     u64 lastRetrySend;
@@ -538,6 +538,8 @@ static void ReceivePackets(u64 now)
             sLink.peer.sin_family = AF_INET;
             sLink.peer.sin_addr.s_addr = packet.peerAddress;
             sLink.peer.sin_port = packet.peerPort;
+            if (sLink.state == PC_LINK_STATE_RENDEZVOUS)
+                sLink.stateStartedAt = now;
             sLink.state = PC_LINK_STATE_PUNCHING;
             sLink.lastPunchSend = 0;
             continue;
@@ -661,7 +663,7 @@ bool32 PcLinkOpen(void)
     sLink.commandQueuePosition = 0;
     sLink.commandQueueCount = 0;
     sLink.haveLatestKeyCommands = FALSE;
-    sLink.openedAt = now;
+    sLink.stateStartedAt = now;
     sLink.lastServerSend = 0;
     sLink.lastPunchSend = 0;
     sLink.lastRetrySend = now;
@@ -709,9 +711,8 @@ u32 PcLinkMain(u16 *sendCmd, u16 (*recvCmds)[CMD_LENGTH])
      && now - sLink.lastPunchSend >= PC_LINK_PUNCH_INTERVAL_MS)
         SendPunch(now);
 
-    if (sLink.state != PC_LINK_STATE_CONNECTED
-     && sLink.state != PC_LINK_STATE_ERROR
-     && now - sLink.openedAt >= PC_LINK_CONNECT_TIMEOUT_MS)
+    if (sLink.state == PC_LINK_STATE_PUNCHING
+     && now - sLink.stateStartedAt >= PC_LINK_CONNECT_TIMEOUT_MS)
     {
         fprintf(stderr, "PC link connection timed out\n");
         sLink.state = PC_LINK_STATE_ERROR;
