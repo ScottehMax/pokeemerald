@@ -44,8 +44,10 @@ SDL_LIBS := $(shell pkg-config --libs sdl2 2>/dev/null || printf '%s' '-Wl,-l:li
 
 FRONTEND := $(BUILD_DIR)/pokeemerald-pc
 CORE := $(BUILD_DIR)/pokeemerald-core
+LINK_SERVER := $(BUILD_DIR)/pokeemerald-link-server
 WIN_FRONTEND := $(WIN_BUILD_DIR)/pokeemerald-pc.exe
 WIN_CORE := $(WIN_BUILD_DIR)/pokeemerald-core.exe
+WIN_LINK_SERVER := $(WIN_BUILD_DIR)/pokeemerald-link-server.exe
 WIN_ASM_ELF := $(WIN_OBJ_DIR)/pokeemerald-asm.elf.o
 WIN_ASM_OBJ := $(WIN_OBJ_DIR)/pokeemerald-asm.o
 
@@ -78,6 +80,7 @@ PLATFORM_C_SRCS := \
 	$(PC_DIR)/audio.c \
 	$(PC_DIR)/bios.c \
 	$(PC_DIR)/core_main.c \
+	$(PC_DIR)/link.c \
 	$(PC_DIR)/platform.c \
 	$(PC_DIR)/ppu.c \
 	$(PC_DIR)/services.c
@@ -88,23 +91,29 @@ DATA_S_SRCS := $(wildcard data/*.s)
 DATA_S_OBJS := $(patsubst data/%.s,$(DATA_OBJ_DIR)/%.o,$(DATA_S_SRCS))
 SONG_S_SRCS := $(wildcard sound/songs/midi/*.s)
 SONG_S_OBJS := $(patsubst sound/songs/midi/%.s,$(SONG_OBJ_DIR)/%.o,$(SONG_S_SRCS))
-.PHONY: all frontend core core-objects windows windows-core-objects clean check-assets
+.PHONY: all frontend core server core-objects windows windows-core-objects clean check-assets
 
-all: frontend core
+all: frontend core server
 
 frontend: $(FRONTEND)
 
 core: $(CORE)
 
+server: $(LINK_SERVER)
+
 core-objects: check-assets $(PLATFORM_C_OBJS) $(GAME_C_OBJS) $(DATA_S_OBJS) $(SONG_S_OBJS)
 
-windows: $(WIN_FRONTEND) $(WIN_CORE) $(WIN_SDL_DLL) $(WIN_SDL_LICENSE)
+windows: $(WIN_FRONTEND) $(WIN_CORE) $(WIN_LINK_SERVER) $(WIN_SDL_DLL) $(WIN_SDL_LICENSE)
 
 windows-core-objects: check-assets $(WIN_PLATFORM_C_OBJS) $(WIN_GAME_C_OBJS) $(WIN_ASM_OBJ)
 
 $(FRONTEND): $(PC_DIR)/frontend.c $(PC_HEADERS)
 	@mkdir -p $(@D)
 	$(FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include $< $(SDL_LIBS) -o $@
+
+$(LINK_SERVER): $(PC_DIR)/link_server.c $(PC_DIR)/include/pc_link_protocol.h
+	@mkdir -p $(@D)
+	$(FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include $< -o $@
 
 $(PLATFORM_OBJ_DIR)/%.o: $(PC_DIR)/%.c $(PC_HEADERS) $(GAME_HEADERS)
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
@@ -185,11 +194,16 @@ $(WIN_FRONTEND): $(PC_DIR)/frontend.c $(PC_HEADERS) $(SDL2_STAMP)
 	$(WIN_FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include \
 		$< $(SDL2_WIN64_DIR)/lib/libSDL2.dll.a -o $@
 
+$(WIN_LINK_SERVER): $(PC_DIR)/link_server.c $(PC_DIR)/include/pc_link_protocol.h
+	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
+	$(WIN_FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include \
+		$< -lws2_32 -o $@
+
 $(WIN_CORE): $(WIN_PLATFORM_C_OBJS) $(WIN_GAME_C_OBJS) $(WIN_ASM_OBJ) | check-assets
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
 	$(WIN_CORE_CC) -Wl,--image-base,0x10000000 -Wl,--stack,1048576 -Wl,--no-dynamicbase \
 		$(WIN_PLATFORM_C_OBJS) $(WIN_GAME_C_OBJS) $(WIN_ASM_OBJ) \
-		-lm -o $@
+		-lws2_32 -lm -o $@
 
 $(WIN_SDL_DLL): $(SDL2_STAMP)
 	@mkdir -p $(@D)

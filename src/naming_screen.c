@@ -27,6 +27,9 @@
 #include "overworld.h"
 #include "walda_phrase.h"
 #include "main.h"
+#if PLATFORM_PC
+#include "pc_link.h"
+#endif
 #include "constants/event_objects.h"
 #include "constants/rgb.h"
 
@@ -1730,6 +1733,9 @@ static void (*const sDrawTextEntryBoxFuncs[])(void) =
     [NAMING_SCREEN_CAUGHT_MON] = DrawMonTextEntryBox,
     [NAMING_SCREEN_NICKNAME]   = DrawMonTextEntryBox,
     [NAMING_SCREEN_WALDA]      = DrawNormalTextEntryBox,
+#if PLATFORM_PC
+    [NAMING_SCREEN_LINK_CODE]  = DrawNormalTextEntryBox,
+#endif
 };
 
 static void DrawTextEntryBox(void)
@@ -2132,6 +2138,21 @@ static const struct NamingScreenTemplate sWaldaWordsScreenTemplate =
     .title = gText_TellHimTheWords,
 };
 
+#if PLATFORM_PC
+static const u8 sText_ConnectCode[] = _("CONNECT CODE");
+
+static const struct NamingScreenTemplate sLinkCodeNamingScreenTemplate =
+{
+    .copyExistingString = FALSE,
+    .maxChars = PC_LINK_CODE_LENGTH,
+    .iconFunction = 0,
+    .addGenderIcon = FALSE,
+    .initialPage = KBPAGE_LETTERS_UPPER,
+    .unused = 0,
+    .title = sText_ConnectCode,
+};
+#endif
+
 static const struct NamingScreenTemplate *const sNamingScreenTemplates[] =
 {
     [NAMING_SCREEN_PLAYER]     = &sPlayerNamingScreenTemplate,
@@ -2139,6 +2160,9 @@ static const struct NamingScreenTemplate *const sNamingScreenTemplates[] =
     [NAMING_SCREEN_CAUGHT_MON] = &sMonNamingScreenTemplate,
     [NAMING_SCREEN_NICKNAME]   = &sMonNamingScreenTemplate,
     [NAMING_SCREEN_WALDA]      = &sWaldaWordsScreenTemplate,
+#if PLATFORM_PC
+    [NAMING_SCREEN_LINK_CODE]  = &sLinkCodeNamingScreenTemplate,
+#endif
 };
 
 static const struct OamData sOam_8x8 =

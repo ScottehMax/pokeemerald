@@ -27,6 +27,9 @@
 #include "link_rfu.h"
 #include "constants/rgb.h"
 #include "constants/trade.h"
+#if PLATFORM_PC
+#include "pc_link.h"
+#endif
 
 // Window IDs for the link error screens
 enum {
@@ -356,7 +359,11 @@ static void InitLink(void)
         gSendCmd[i] = LINKCMD_NONE;
 
     sLinkOpen = TRUE;
+#if PLATFORM_PC
+    PcLinkOpen();
+#else
     EnableSerial();
+#endif
 }
 
 static void Task_TriggerHandshake(u8 taskId)
@@ -374,7 +381,9 @@ void OpenLink(void)
 
     if (!gWirelessCommType)
     {
+#if !PLATFORM_PC
         ResetSerial();
+#endif
         InitLink();
         gLinkCallback = LinkCB_RequestPlayerDataExchange;
         gLinkVSyncDisabled = FALSE;
@@ -407,7 +416,11 @@ void CloseLink(void)
     if (gWirelessCommType)
         LinkRfu_Shutdown();
     sLinkOpen = FALSE;
+#if PLATFORM_PC
+    PcLinkClose();
+#else
     DisableSerial();
+#endif
 }
 
 static void TestBlockTransfer(u8 nothing, u8 is, u8 used)
@@ -502,11 +515,21 @@ u16 LinkMain2(const u16 *heldKeys)
     gLinkHeldKeys = *heldKeys;
     if (gLinkStatus & LINK_STAT_CONN_ESTABLISHED)
     {
+#if PLATFORM_PC
+        ProcessRecvCmds(PcLinkGetId());
+#else
         ProcessRecvCmds(SIO_MULTI_CNT->id);
+#endif
         if (gLinkCallback != NULL)
             gLinkCallback();
         TrySetLinkErrorBuffer();
     }
+#if PLATFORM_PC
+    else if (PcLinkHasError())
+    {
+        TrySetLinkErrorBuffer();
+    }
+#endif
     return gLinkStatus;
 }
 
@@ -1028,7 +1051,11 @@ u8 GetMultiplayerId(void)
     if (gWirelessCommType == TRUE)
         return Rfu_GetMultiplayerId();
 
+#if PLATFORM_PC
+    return PcLinkGetId();
+#else
     return SIO_MULTI_CNT->id;
+#endif
 }
 
 u8 BitmaskAllOtherLinkPlayers(void)
@@ -1734,12 +1761,20 @@ static void CB2_PrintErrorMessage(void)
 
 bool8 GetSioMultiSI(void)
 {
+#if PLATFORM_PC
+    return PcLinkHasError();
+#else
     return (REG_SIOCNT & SIO_MULTI_SI) != 0;
+#endif
 }
 
 static bool8 IsSioMultiMaster(void)
 {
+#if PLATFORM_PC
+    return PcLinkGetId() == 0;
+#else
     return (REG_SIOCNT & SIO_MULTI_SD) && (REG_SIOCNT & SIO_MULTI_SI) == 0;
+#endif
 }
 
 bool8 IsLinkConnectionEstablished(void)
@@ -1792,7 +1827,11 @@ bool8 HandleLinkConnection(void)
 
     if (gWirelessCommType == 0)
     {
+#if PLATFORM_PC
+        gLinkStatus = PcLinkMain(gSendCmd, gRecvCmds);
+#else
         gLinkStatus = LinkMain1(&gShouldAdvanceLinkState, gSendCmd, gRecvCmds);
+#endif
         LinkMain2(&gMain.heldKeys);
         if ((gLinkStatus & LINK_STAT_RECEIVED_NOTHING) && IsSendingKeysOverCable() == TRUE)
             return TRUE;
@@ -2093,6 +2132,9 @@ static void DequeueRecvCmds(u16 (*recvCmds)[CMD_LENGTH])
 
 void LinkVSync(void)
 {
+#if PLATFORM_PC
+    return;
+#else
     if (gLink.isMaster)
     {
         switch (gLink.state)
@@ -2135,6 +2177,7 @@ void LinkVSync(void)
             }
         }
     }
+#endif
 }
 
 void Timer3Intr(void)

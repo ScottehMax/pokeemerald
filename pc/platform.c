@@ -21,6 +21,7 @@
 #include "battle_setup.h"
 #include "event_scripts.h"
 #include "field_screen_effect.h"
+#include "link.h"
 #include "main.h"
 #include "overworld.h"
 #include "pokedex.h"
@@ -28,6 +29,7 @@
 #include "pokemon_storage_system.h"
 #include "script.h"
 #include "pc_platform.h"
+#include "pc_link.h"
 #include "pc_ppu.h"
 #include "pc_services.h"
 #include "pc_shared.h"
@@ -36,6 +38,8 @@
 #include "constants/pokedex.h"
 #include "constants/pokemon.h"
 #include "constants/species.h"
+#include "constants/characters.h"
+#include "constants/trainers.h"
 
 #define NS_PER_FRAME 16742706ull
 #define GBA_CLOCK_HZ 16777216ull
@@ -90,6 +94,12 @@ static u32 sTestStorageFrame;
 static bool8 sTestStoragePending;
 static u32 sTestFsStorageFrame;
 static bool8 sTestFsStoragePending;
+static u32 sTestLinkFrame;
+static bool8 sTestLinkPending;
+static bool8 sTestLinkReportPending;
+static u32 sTestLinkBattleFrame;
+static bool8 sTestLinkBattlePending;
+static u8 sTestLinkCode[PC_LINK_CODE_LENGTH + 1];
 static u32 sTestPokedexFrame;
 static bool8 sTestPokedexPending;
 static u64 sTimer1StartNs;
@@ -395,6 +405,73 @@ static void ParseTestFsStorageFrame(const char *spec)
     sTestFsStoragePending = TRUE;
 }
 
+static void ParseTestLink(const char *frameSpec, const char *codeSpec)
+{
+    char *end;
+    unsigned long frame;
+    size_t length;
+    size_t i;
+
+    sTestLinkFrame = UINT32_MAX;
+    sTestLinkPending = FALSE;
+    sTestLinkReportPending = FALSE;
+    if (frameSpec == NULL || *frameSpec == '\0' || codeSpec == NULL)
+        return;
+
+    errno = 0;
+    frame = strtoul(frameSpec, &end, 0);
+    length = strlen(codeSpec);
+    if (errno != 0
+     || end == frameSpec
+     || *end != '\0'
+     || frame > UINT32_MAX
+     || length == 0
+     || length > PC_LINK_CODE_LENGTH)
+    {
+        fprintf(stderr, "invalid PC link test configuration\n");
+        return;
+    }
+
+    memset(sTestLinkCode, EOS, sizeof(sTestLinkCode));
+    for (i = 0; i < length; i++)
+    {
+        if (codeSpec[i] >= 'A' && codeSpec[i] <= 'Z')
+            sTestLinkCode[i] = CHAR_A + codeSpec[i] - 'A';
+        else if (codeSpec[i] >= 'a' && codeSpec[i] <= 'z')
+            sTestLinkCode[i] = CHAR_A + codeSpec[i] - 'a';
+        else if (codeSpec[i] >= '0' && codeSpec[i] <= '9')
+            sTestLinkCode[i] = CHAR_0 + codeSpec[i] - '0';
+        else
+        {
+            fprintf(stderr, "PC link test code must be alphanumeric\n");
+            return;
+        }
+    }
+    sTestLinkFrame = (u32)frame;
+    sTestLinkPending = TRUE;
+}
+
+static void ParseTestLinkBattleFrame(const char *spec)
+{
+    char *end;
+    unsigned long frame;
+
+    sTestLinkBattleFrame = UINT32_MAX;
+    sTestLinkBattlePending = FALSE;
+    if (spec == NULL || *spec == '\0')
+        return;
+
+    errno = 0;
+    frame = strtoul(spec, &end, 0);
+    if (errno != 0 || end == spec || *end != '\0' || frame > UINT32_MAX)
+    {
+        fprintf(stderr, "invalid POKEEMERALD_PC_TEST_LINK_BATTLE_AT value: %s\n", spec);
+        return;
+    }
+    sTestLinkBattleFrame = (u32)frame;
+    sTestLinkBattlePending = TRUE;
+}
+
 static void ParseTestPokedexFrame(const char *spec)
 {
     char *end;
@@ -502,6 +579,9 @@ bool32 PcPlatformInit(const char *sharedPath)
     ParseTestCenterWarpFrame(getenv("POKEEMERALD_PC_TEST_CENTER_AT"));
     ParseTestStorageFrame(getenv("POKEEMERALD_PC_TEST_STORAGE_AT"));
     ParseTestFsStorageFrame(getenv("POKEEMERALD_PC_TEST_FS_STORAGE_AT"));
+    ParseTestLink(getenv("POKEEMERALD_PC_TEST_LINK_AT"),
+                  getenv("POKEEMERALD_PC_TEST_LINK_CODE"));
+    ParseTestLinkBattleFrame(getenv("POKEEMERALD_PC_TEST_LINK_BATTLE_AT"));
     ParseTestPokedexFrame(getenv("POKEEMERALD_PC_TEST_POKEDEX_AT"));
     sTestTrainerIdReportPending = getenv("POKEEMERALD_PC_TEST_REPORT_ID") != NULL;
     sFrameCounter = 0;
@@ -645,6 +725,55 @@ void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)
 
 void PcPlatformRunTestHooks(void)
 {
+    if (sTestLinkReportPending && gReceivedRemoteLinkPlayers)
+    {
+        fprintf(stderr,
+                "PC link test: player data exchanged as player %u at frame %u\n",
+                GetMultiplayerId() + 1,
+                sFrameCounter);
+        gHeldKeyCodeToSend = LINK_KEY_CODE_EMPTY;
+        StartSendingKeysToLink();
+        sTestLinkReportPending = FALSE;
+    }
+
+    if (sTestLinkPending
+     && sFrameCounter >= sTestLinkFrame
+     && gMain.callback2 == CB2_Overworld
+     && !gMain.inBattle)
+    {
+        PcLinkSetCode(sTestLinkCode);
+        gLinkType = LINKTYPE_TRADE_SETUP;
+        OpenLinkTimed();
+        sTestLinkReportPending = TRUE;
+        sTestLinkPending = FALSE;
+        fprintf(stderr, "PC link test: connection requested at frame %u\n", sFrameCounter);
+    }
+
+    if (sTestLinkBattlePending
+     && sFrameCounter >= sTestLinkBattleFrame
+     && gReceivedRemoteLinkPlayers
+     && gMain.callback2 == CB2_Overworld
+     && !gMain.inBattle)
+    {
+        ZeroPlayerPartyMons();
+        CreateMon(&gPlayerParty[0], SPECIES_TREECKO, 16, 31, FALSE, 0, OT_ID_PLAYER_ID, 0);
+        SetMonMoveSlot(&gPlayerParty[0], MOVE_POUND, 0);
+        CalculatePlayerPartyCount();
+        SaveLinkPlayers(2);
+        gLinkType = LINKTYPE_BATTLE;
+        gLinkPlayers[0].linkType = LINKTYPE_BATTLE;
+        ClearLinkCallback_2();
+        gBattleTypeFlags = BATTLE_TYPE_LINK | BATTLE_TYPE_TRAINER;
+        gTrainerBattleOpponent_A = TRAINER_LINK_OPPONENT;
+        CleanupOverworldWindowsAndTilemaps();
+        gMain.savedCallback = CB2_ReturnToField;
+        SetMainCallback2(CB2_InitBattle);
+        sTestLinkBattlePending = FALSE;
+        sTestBattleState = PC_TEST_BATTLE_REQUESTED;
+        __atomic_store_n(&sShared->testBattleState, sTestBattleState, __ATOMIC_RELEASE);
+        fprintf(stderr, "PC link test: battle requested at frame %u\n", sFrameCounter);
+    }
+
     if (sTestTrainerIdReportPending
      && gMain.callback2 == CB2_Overworld
      && !gMain.inBattle)

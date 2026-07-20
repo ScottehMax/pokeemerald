@@ -15,6 +15,7 @@
 #include "load_save.h"
 #include "m4a.h"
 #include "menu.h"
+#include "naming_screen.h"
 #include "overworld.h"
 #include "palette.h"
 #include "union_room.h"
@@ -34,6 +35,9 @@
 #include "constants/cable_club.h"
 #include "constants/songs.h"
 #include "constants/trainers.h"
+#if PLATFORM_PC
+#include "pc_link.h"
+#endif
 
 static const struct WindowTemplate sWindowTemplate_LinkPlayerCount = {
     .bg = 0,
@@ -80,7 +84,7 @@ static void Task_ReestablishLinkAwaitConfirmation(u8 taskId);
 #define tTimer      data[4]
 #define tWindowId   data[5]
 
-static void CreateLinkupTask(u8 minPlayers, u8 maxPlayers)
+static void CreateLinkupTaskInternal(u8 minPlayers, u8 maxPlayers)
 {
     if (FindTaskIdByFunc(Task_LinkupStart) == TASK_NONE)
     {
@@ -90,6 +94,42 @@ static void CreateLinkupTask(u8 minPlayers, u8 maxPlayers)
         gTasks[taskId1].tMinPlayers = minPlayers;
         gTasks[taskId1].tMaxPlayers = maxPlayers;
     }
+}
+
+#if PLATFORM_PC
+static u8 sPcLinkCode[PC_LINK_CODE_LENGTH + 1];
+static u8 sPcLinkMinPlayers;
+static u8 sPcLinkMaxPlayers;
+
+static void FieldCB_StartPcLinkup(void)
+{
+    PcLinkSetCode(sPcLinkCode);
+    CreateLinkupTaskInternal(sPcLinkMinPlayers, sPcLinkMaxPlayers);
+}
+
+static void CB2_ReturnFromPcLinkCode(void)
+{
+    gFieldCallback = FieldCB_StartPcLinkup;
+    CB2_ReturnToField();
+}
+#endif
+
+static void CreateLinkupTask(u8 minPlayers, u8 maxPlayers)
+{
+#if PLATFORM_PC
+    sPcLinkMinPlayers = minPlayers;
+    sPcLinkMaxPlayers = maxPlayers;
+    memset(sPcLinkCode, EOS, sizeof(sPcLinkCode));
+    CleanupOverworldWindowsAndTilemaps();
+    DoNamingScreen(NAMING_SCREEN_LINK_CODE,
+                   sPcLinkCode,
+                   0,
+                   0,
+                   0,
+                   CB2_ReturnFromPcLinkCode);
+#else
+    CreateLinkupTaskInternal(minPlayers, maxPlayers);
+#endif
 }
 
 static void PrintNumPlayersInLink(u16 windowId, u32 numPlayers)

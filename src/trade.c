@@ -3888,6 +3888,7 @@ static bool8 DoTradeAnim_Cable(void)
             PlayNewMapMusic(sTradeAnim->cachedMapMusic);
             if (sTradeAnim)
             {
+                SetVBlankCallback(NULL);
                 FreeAllWindowBuffers();
                 Free(GetBgTilemapBuffer(3));
                 Free(GetBgTilemapBuffer(1));
@@ -4385,6 +4386,7 @@ static bool8 DoTradeAnim_Wireless(void)
             PlayNewMapMusic(sTradeAnim->cachedMapMusic);
             if (sTradeAnim)
             {
+                SetVBlankCallback(NULL);
                 FreeAllWindowBuffers();
                 Free(GetBgTilemapBuffer(3));
                 Free(GetBgTilemapBuffer(1));
@@ -4826,6 +4828,7 @@ static void CB2_FreeTradeAnim(void)
 {
     if (!gPaletteFade.active)
     {
+        SetVBlankCallback(NULL);
         FreeAllWindowBuffers();
         Free(GetBgTilemapBuffer(3));
         Free(GetBgTilemapBuffer(1));

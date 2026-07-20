@@ -67,3 +67,36 @@ and the `.ek3` extension.
 Press `R` from the STORAGE screen to open the normal box interface in
 storage-transfer mode. Each transfer updates the save file before removing the
 source copy, so an I/O error cannot silently discard a Pokémon.
+
+## Link Play
+
+PC link play supports two-player wired Cable Club activities. Both players use
+the Direct Corner attendant and enter the same connect code when prompted. The
+code is case-insensitive and can contain up to eight characters.
+
+For two instances on the same computer, start the rendezvous server before the
+games:
+
+```sh
+./build/pc/pokeemerald-link-server
+```
+
+On Windows, use `pokeemerald-link-server.exe` from the cross-build directory.
+
+The clients use `127.0.0.1:8765` by default. Each instance must use a different
+save path.
+
+For internet play, run the server on a publicly reachable host and allow UDP
+port 8765 through that host's firewall. Point both clients at it before starting
+the game:
+
+```sh
+POKEEMERALD_LINK_SERVER=example.com:8765 ./build/pc/pokeemerald-pc
+```
+
+The server only matches codes and exchanges the clients' observed UDP
+endpoints. Game traffic then travels directly between peers using UDP hole
+punching, so the players do not need to configure port forwarding. The server
+can use a different address or port with `--bind ADDRESS` and `--port PORT`.
+Symmetric NATs that assign a different public port for each destination may
+still prevent direct peer-to-peer connectivity.
