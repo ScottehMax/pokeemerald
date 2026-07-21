@@ -28,6 +28,7 @@
 #include "pokemon.h"
 #include "pokemon_storage_system.h"
 #include "script.h"
+#include "pc_diagnostics.h"
 #include "pc_platform.h"
 #include "pc_link.h"
 #include "pc_ppu.h"
@@ -104,6 +105,9 @@ static u32 sTestPokedexFrame;
 static bool8 sTestPokedexPending;
 static u64 sTimer1StartNs;
 static bool8 sTestTrainerIdReportPending;
+static u32 sTestCrashFrame;
+static bool8 sTestCrashPending;
+static const char *sTestCrashKind;
 
 static u64 GetMonotonicNs(void)
 {
@@ -494,6 +498,26 @@ static void ParseTestPokedexFrame(const char *spec)
     sTestPokedexPending = TRUE;
 }
 
+static void ParseTestCrash(const char *frameSpec, const char *kind)
+{
+    char *end;
+    unsigned long frame;
+
+    sTestCrashPending = FALSE;
+    if (frameSpec == NULL || *frameSpec == '\0')
+        return;
+    errno = 0;
+    frame = strtoul(frameSpec, &end, 0);
+    if (errno != 0 || end == frameSpec || *end != '\0' || frame > UINT32_MAX)
+    {
+        fprintf(stderr, "invalid POKEEMERALD_PC_TEST_CRASH_AT value: %s\n", frameSpec);
+        return;
+    }
+    sTestCrashFrame = (u32)frame;
+    sTestCrashKind = kind == NULL || *kind == '\0' ? "read" : kind;
+    sTestCrashPending = TRUE;
+}
+
 bool32 PcPlatformInit(const char *sharedPath)
 {
     const char *testInput;
@@ -561,6 +585,7 @@ bool32 PcPlatformInit(const char *sharedPath)
         PcPlatformShutdown();
         return FALSE;
     }
+    PcDiagnosticsInit(sShared);
 
     if (!PcServicesInit(sShared->savePath))
     {
@@ -583,6 +608,8 @@ bool32 PcPlatformInit(const char *sharedPath)
                   getenv("POKEEMERALD_PC_TEST_LINK_CODE"));
     ParseTestLinkBattleFrame(getenv("POKEEMERALD_PC_TEST_LINK_BATTLE_AT"));
     ParseTestPokedexFrame(getenv("POKEEMERALD_PC_TEST_POKEDEX_AT"));
+    ParseTestCrash(getenv("POKEEMERALD_PC_TEST_CRASH_AT"),
+                   getenv("POKEEMERALD_PC_TEST_CRASH_KIND"));
     sTestTrainerIdReportPending = getenv("POKEEMERALD_PC_TEST_REPORT_ID") != NULL;
     sFrameCounter = 0;
     sTimer1StartNs = 0;
@@ -725,6 +752,15 @@ void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)
 
 void PcPlatformRunTestHooks(void)
 {
+    if (sTestCrashPending && sFrameCounter >= sTestCrashFrame)
+    {
+        sTestCrashPending = FALSE;
+        fprintf(stderr, "PC diagnostics test: triggering %s crash at frame %u\n",
+                sTestCrashKind,
+                sFrameCounter);
+        PcDiagnosticsTriggerTestCrash(sTestCrashKind);
+    }
+
     if (sTestLinkReportPending && gReceivedRemoteLinkPlayers)
     {
         fprintf(stderr,

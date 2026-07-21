@@ -25,6 +25,7 @@
 #include "trainer_hill.h"
 #include "constants/rgb.h"
 #if PLATFORM_PC
+#include "pc_diagnostics.h"
 #include "pc_platform.h"
 #endif
 
@@ -136,6 +137,9 @@ void AgbMain(void)
     for (;;)
     {
         ReadKeys();
+#if PLATFORM_PC
+        PcDiagnosticsFrame();
+#endif
 
         if (gSoftResetDisabled == FALSE
          && JOY_HELD_RAW(A_BUTTON)
@@ -197,11 +201,35 @@ static void InitMainCallbacks(void)
 
 static void CallCallbacks(void)
 {
+#if PLATFORM_PC
+    MainCallback callback;
+
+    callback = gMain.callback1;
+    if (callback != NULL)
+    {
+        PcDiagnosticsEnterMain(PC_DIAGNOSTIC_DISPATCH_MAIN_1, callback);
+        if (!PcDiagnosticsIsExecutable(callback))
+            PcDiagnosticsInvalidCallback(PC_DIAGNOSTIC_DISPATCH_MAIN_1, 0, callback);
+        callback();
+        PcDiagnosticsLeaveMain();
+    }
+
+    callback = gMain.callback2;
+    if (callback != NULL)
+    {
+        PcDiagnosticsEnterMain(PC_DIAGNOSTIC_DISPATCH_MAIN_2, callback);
+        if (!PcDiagnosticsIsExecutable(callback))
+            PcDiagnosticsInvalidCallback(PC_DIAGNOSTIC_DISPATCH_MAIN_2, 0, callback);
+        callback();
+        PcDiagnosticsLeaveMain();
+    }
+#else
     if (gMain.callback1)
         gMain.callback1();
 
     if (gMain.callback2)
         gMain.callback2();
+#endif
 }
 
 void SetMainCallback2(MainCallback callback)

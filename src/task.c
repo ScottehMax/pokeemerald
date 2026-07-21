@@ -1,5 +1,8 @@
 #include "global.h"
 #include "task.h"
+#if PLATFORM_PC
+#include "pc_diagnostics.h"
+#endif
 
 COMMON_DATA struct Task gTasks[NUM_TASKS] = {0};
 
@@ -115,7 +118,17 @@ void RunTasks(void)
     {
         do
         {
+#if PLATFORM_PC
+            TaskFunc func = gTasks[taskId].func;
+
+            PcDiagnosticsEnterTask(taskId, func, gTasks[taskId].data);
+            if (!PcDiagnosticsIsExecutable(func))
+                PcDiagnosticsInvalidCallback(PC_DIAGNOSTIC_DISPATCH_TASK, taskId, func);
+            func(taskId);
+            PcDiagnosticsLeaveTask();
+#else
             gTasks[taskId].func(taskId);
+#endif
             taskId = gTasks[taskId].next;
         } while (taskId != TAIL_SENTINEL);
     }

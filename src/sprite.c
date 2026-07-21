@@ -2,6 +2,9 @@
 #include "sprite.h"
 #include "main.h"
 #include "palette.h"
+#if PLATFORM_PC
+#include "pc_diagnostics.h"
+#endif
 
 #define MAX_SPRITE_COPY_REQUESTS 64
 
@@ -314,7 +317,17 @@ void AnimateSprites(void)
 
         if (sprite->inUse)
         {
+#if PLATFORM_PC
+            void (*callback)(struct Sprite *) = sprite->callback;
+
+            PcDiagnosticsEnterSprite(i, callback, sprite->data);
+            if (!PcDiagnosticsIsExecutable(callback))
+                PcDiagnosticsInvalidCallback(PC_DIAGNOSTIC_DISPATCH_SPRITE, i, callback);
+            callback(sprite);
+            PcDiagnosticsLeaveSprite();
+#else
             sprite->callback(sprite);
+#endif
 
             if (sprite->inUse)
                 AnimateSprite(sprite);
@@ -603,7 +616,19 @@ u8 CreateSpriteAndAnimate(const struct SpriteTemplate *template, s16 x, s16 y, u
             if (index == MAX_SPRITES)
                 return MAX_SPRITES;
 
+#if PLATFORM_PC
+            {
+                void (*callback)(struct Sprite *) = gSprites[i].callback;
+
+                PcDiagnosticsEnterSprite(i, callback, sprite->data);
+                if (!PcDiagnosticsIsExecutable(callback))
+                    PcDiagnosticsInvalidCallback(PC_DIAGNOSTIC_DISPATCH_SPRITE, i, callback);
+                callback(sprite);
+                PcDiagnosticsLeaveSprite();
+            }
+#else
             gSprites[i].callback(sprite);
+#endif
 
             if (gSprites[i].inUse)
                 AnimateSprite(sprite);

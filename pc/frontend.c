@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "pc_sdl.h"
+#include "pc_crash_report.h"
 #include "pc_shared.h"
 
 #include <errno.h>
@@ -370,6 +371,7 @@ int main(int argc, char **argv)
     }
 #endif
     ResetSharedState(shared, savePath, 0);
+    memset(framePixels, 0, sizeof(framePixels));
 
     if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {
@@ -518,6 +520,8 @@ int main(int argc, char **argv)
                 }
                 else
                 {
+                    char reportPath[PC_PATH_MAX];
+
                     if (exitStatus < 0)
                     {
                         fprintf(stderr, "pokeemerald-core terminated by signal %d\n", -exitStatus);
@@ -528,6 +532,15 @@ int main(int argc, char **argv)
                         fprintf(stderr, "pokeemerald-core exited with status %d\n", exitStatus);
                         result = 1;
                     }
+                    if (exitStatus != 0
+                     && PcWriteCrashReport(shared,
+                                           corePath,
+                                           savePath,
+                                           lastFrame == UINT32_MAX ? NULL : framePixels,
+                                           exitStatus,
+                                           reportPath,
+                                           sizeof(reportPath)) == 0)
+                        fprintf(stderr, "crash report written to %s\n", reportPath);
                     running = 0;
                 }
             }

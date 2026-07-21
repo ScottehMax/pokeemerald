@@ -5,6 +5,9 @@
 #include "util.h"
 #include "constants/event_objects.h"
 #include "constants/map_scripts.h"
+#if PLATFORM_PC
+#include "pc_diagnostics.h"
+#endif
 
 #define RAM_SCRIPT_MAGIC 51
 
@@ -82,7 +85,19 @@ bool8 RunScriptCommand(struct ScriptContext *ctx)
         // Continue to bytecode if no function or it returns TRUE
         if (ctx->nativePtr)
         {
+#if PLATFORM_PC
+            bool8 (*callback)(void) = ctx->nativePtr;
+            bool8 finished;
+
+            PcDiagnosticsEnterScript(ctx->scriptPtr, UINT32_MAX, callback);
+            if (!PcDiagnosticsIsExecutable(callback))
+                PcDiagnosticsInvalidCallback(PC_DIAGNOSTIC_DISPATCH_SCRIPT_NATIVE, 0, callback);
+            finished = callback();
+            PcDiagnosticsLeaveScript();
+            if (finished == TRUE)
+#else
             if (ctx->nativePtr() == TRUE)
+#endif
                 ctx->mode = SCRIPT_MODE_BYTECODE;
             return TRUE;
         }
@@ -120,8 +135,23 @@ bool8 RunScriptCommand(struct ScriptContext *ctx)
                 return FALSE;
             }
 
+#if PLATFORM_PC
+            {
+                ScrCmdFunc callback = *func;
+                bool8 shouldWait;
+
+                PcDiagnosticsEnterScript(ctx->scriptPtr - 1, cmdCode, callback);
+                if (!PcDiagnosticsIsExecutable(callback))
+                    PcDiagnosticsInvalidCallback(PC_DIAGNOSTIC_DISPATCH_SCRIPT_COMMAND, cmdCode, callback);
+                shouldWait = callback(ctx);
+                PcDiagnosticsLeaveScript();
+                if (shouldWait == TRUE)
+                    return TRUE;
+            }
+#else
             if ((*func)(ctx) == TRUE)
                 return TRUE;
+#endif
         }
     }
 

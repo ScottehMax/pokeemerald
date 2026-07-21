@@ -1,0 +1,548 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include "pc_crash_report.h"
+#include "pc_shared.h"
+
+#include <errno.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <dbghelp.h>
+#else
+#include <elf.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
+struct PcSymbolizer
+{
+#ifdef _WIN32
+    HANDLE process;
+    DWORD64 moduleBase;
+    int initialized;
+#else
+    Elf32_Sym *symbols;
+    size_t symbolCount;
+    char *strings;
+    size_t stringsSize;
+#endif
+};
+
+static const char *GetAccessName(uint32_t access)
+{
+    switch (access)
+    {
+    case PC_CRASH_ACCESS_READ:
+        return "read";
+    case PC_CRASH_ACCESS_WRITE:
+        return "write";
+    case PC_CRASH_ACCESS_EXECUTE:
+        return "execute";
+    default:
+        return "unknown";
+    }
+}
+
+static const char *GetDispatchName(uint32_t kind)
+{
+    switch (kind)
+    {
+    case PC_DIAGNOSTIC_DISPATCH_MAIN_1:
+        return "main callback 1";
+    case PC_DIAGNOSTIC_DISPATCH_MAIN_2:
+        return "main callback 2";
+    case PC_DIAGNOSTIC_DISPATCH_TASK:
+        return "task";
+    case PC_DIAGNOSTIC_DISPATCH_SPRITE:
+        return "sprite";
+    case PC_DIAGNOSTIC_DISPATCH_SCRIPT_NATIVE:
+        return "native script";
+    case PC_DIAGNOSTIC_DISPATCH_SCRIPT_COMMAND:
+        return "script command";
+    default:
+        return "none";
+    }
+}
+
+static uint64_t HashFile(const char *path)
+{
+    unsigned char buffer[64 * 1024];
+    uint64_t hash = UINT64_C(1469598103934665603);
+    FILE *file = fopen(path, "rb");
+    size_t count;
+
+    if (file == NULL)
+        return 0;
+    while ((count = fread(buffer, 1, sizeof(buffer), file)) != 0)
+    {
+        size_t i;
+
+        for (i = 0; i < count; i++)
+        {
+            hash ^= buffer[i];
+            hash *= UINT64_C(1099511628211);
+        }
+    }
+    fclose(file);
+    return hash;
+}
+
+static int EnsureDirectory(const char *path)
+{
+#ifdef _WIN32
+    if (CreateDirectoryA(path, NULL) || GetLastError() == ERROR_ALREADY_EXISTS)
+        return 0;
+#else
+    if (mkdir(path, 0700) == 0 || errno == EEXIST)
+        return 0;
+#endif
+    return -1;
+}
+
+static int BuildReportPaths(const char *savePath,
+                            char *reportPath,
+                            size_t reportPathSize,
+                            char *imagePath,
+                            size_t imagePathSize)
+{
+    char directory[PC_PATH_MAX];
+    char stamp[32];
+    const char *separator;
+    struct tm local;
+    time_t now = time(NULL);
+    unsigned long processId;
+    size_t prefixLength;
+
+    separator = strrchr(savePath, '/');
+#ifdef _WIN32
+    {
+        const char *backslash = strrchr(savePath, '\\');
+
+        if (backslash != NULL && (separator == NULL || backslash > separator))
+            separator = backslash;
+    }
+#endif
+    prefixLength = separator == NULL ? 0 : (size_t)(separator - savePath + 1);
+    if (prefixLength + sizeof("crash-reports") > sizeof(directory))
+        return -1;
+    if (prefixLength != 0)
+        memcpy(directory, savePath, prefixLength);
+    memcpy(directory + prefixLength, "crash-reports", sizeof("crash-reports"));
+    if (EnsureDirectory(directory) != 0)
+        return -1;
+
+#ifdef _WIN32
+    localtime_s(&local, &now);
+    processId = GetCurrentProcessId();
+#else
+    localtime_r(&now, &local);
+    processId = (unsigned long)getpid();
+#endif
+    strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &local);
+    if (snprintf(reportPath,
+                 reportPathSize,
+                 "%s%cpokeemerald-crash-%s-%lu.txt",
+                 directory,
+#ifdef _WIN32
+                 '\\',
+#else
+                 '/',
+#endif
+                 stamp,
+                 processId) >= (int)reportPathSize)
+        return -1;
+    if (snprintf(imagePath,
+                 imagePathSize,
+                 "%s%cpokeemerald-crash-%s-%lu.ppm",
+                 directory,
+#ifdef _WIN32
+                 '\\',
+#else
+                 '/',
+#endif
+                 stamp,
+                 processId) >= (int)imagePathSize)
+        return -1;
+    return 0;
+}
+
+static int WriteFrame(const char *path, const uint32_t *pixels)
+{
+    FILE *file = fopen(path, "wb");
+    int x;
+    int y;
+
+    if (file == NULL)
+        return -1;
+    fprintf(file, "P6\n%d %d\n255\n", PC_FRAME_WIDTH, PC_FRAME_HEIGHT);
+    for (y = 0; y < PC_FRAME_HEIGHT; y++)
+    {
+        for (x = 0; x < PC_FRAME_WIDTH; x++)
+        {
+            uint32_t pixel = pixels[y * PC_FRAME_WIDTH + x];
+            unsigned char rgb[3] = {
+                (unsigned char)(pixel >> 16),
+                (unsigned char)(pixel >> 8),
+                (unsigned char)pixel,
+            };
+
+            fwrite(rgb, sizeof(rgb), 1, file);
+        }
+    }
+    return fclose(file);
+}
+
+#ifdef _WIN32
+static int InitSymbolizer(struct PcSymbolizer *symbolizer, const char *corePath)
+{
+    memset(symbolizer, 0, sizeof(*symbolizer));
+    symbolizer->process = GetCurrentProcess();
+    SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+    if (!SymInitialize(symbolizer->process, NULL, FALSE))
+        return -1;
+    symbolizer->initialized = 1;
+    symbolizer->moduleBase = SymLoadModuleEx(symbolizer->process,
+                                             NULL,
+                                             corePath,
+                                             NULL,
+                                             UINT64_C(0x10000000),
+                                             0,
+                                             NULL,
+                                             0);
+    return symbolizer->moduleBase == 0 ? -1 : 0;
+}
+
+static void CloseSymbolizer(struct PcSymbolizer *symbolizer)
+{
+    if (symbolizer->initialized)
+        SymCleanup(symbolizer->process);
+}
+
+static void FormatSymbol(struct PcSymbolizer *symbolizer,
+                         uint32_t address,
+                         char *buffer,
+                         size_t bufferSize)
+{
+    unsigned char rawSymbol[sizeof(SYMBOL_INFO) + MAX_SYM_NAME];
+    SYMBOL_INFO *symbol = (SYMBOL_INFO *)rawSymbol;
+    IMAGEHLP_LINE64 line;
+    DWORD64 displacement = 0;
+    DWORD lineDisplacement = 0;
+
+    memset(rawSymbol, 0, sizeof(rawSymbol));
+    symbol->SizeOfStruct = sizeof(*symbol);
+    symbol->MaxNameLen = MAX_SYM_NAME;
+    memset(&line, 0, sizeof(line));
+    line.SizeOfStruct = sizeof(line);
+    if (symbolizer->moduleBase != 0
+     && SymFromAddr(symbolizer->process, address, &displacement, symbol))
+    {
+        if (SymGetLineFromAddr64(symbolizer->process, address, &lineDisplacement, &line))
+            snprintf(buffer, bufferSize, "%s+0x%llx (%s:%lu)",
+                     symbol->Name,
+                     (unsigned long long)displacement,
+                     line.FileName,
+                     (unsigned long)line.LineNumber);
+        else
+            snprintf(buffer, bufferSize, "%s+0x%llx",
+                     symbol->Name,
+                     (unsigned long long)displacement);
+    }
+    else
+    {
+        snprintf(buffer, bufferSize, "unknown");
+    }
+}
+#else
+static int ReadAt(FILE *file, long offset, void *data, size_t size)
+{
+    return fseek(file, offset, SEEK_SET) == 0 && fread(data, 1, size, file) == size ? 0 : -1;
+}
+
+static int InitSymbolizer(struct PcSymbolizer *symbolizer, const char *corePath)
+{
+    Elf32_Ehdr header;
+    Elf32_Shdr *sections = NULL;
+    FILE *file = NULL;
+    size_t i;
+    int result = -1;
+
+    memset(symbolizer, 0, sizeof(*symbolizer));
+    file = fopen(corePath, "rb");
+    if (file == NULL || fread(&header, 1, sizeof(header), file) != sizeof(header))
+        goto cleanup;
+    if (memcmp(header.e_ident, ELFMAG, SELFMAG) != 0
+     || header.e_ident[EI_CLASS] != ELFCLASS32
+     || header.e_shentsize != sizeof(Elf32_Shdr)
+     || header.e_shnum == 0)
+        goto cleanup;
+    sections = malloc((size_t)header.e_shnum * sizeof(*sections));
+    if (sections == NULL
+     || ReadAt(file, header.e_shoff, sections, (size_t)header.e_shnum * sizeof(*sections)) != 0)
+        goto cleanup;
+    for (i = 0; i < header.e_shnum; i++)
+    {
+        Elf32_Shdr *symbols = &sections[i];
+        Elf32_Shdr *strings;
+
+        if (symbols->sh_type != SHT_SYMTAB
+         || symbols->sh_entsize != sizeof(Elf32_Sym)
+         || symbols->sh_link >= header.e_shnum)
+            continue;
+        strings = &sections[symbols->sh_link];
+        symbolizer->symbolCount = symbols->sh_size / sizeof(Elf32_Sym);
+        symbolizer->symbols = malloc(symbols->sh_size);
+        symbolizer->strings = malloc(strings->sh_size);
+        symbolizer->stringsSize = strings->sh_size;
+        if (symbolizer->symbols == NULL || symbolizer->strings == NULL
+         || ReadAt(file, symbols->sh_offset, symbolizer->symbols, symbols->sh_size) != 0
+         || ReadAt(file, strings->sh_offset, symbolizer->strings, strings->sh_size) != 0)
+            goto cleanup;
+        result = 0;
+        break;
+    }
+
+cleanup:
+    free(sections);
+    if (file != NULL)
+        fclose(file);
+    if (result != 0)
+    {
+        free(symbolizer->symbols);
+        free(symbolizer->strings);
+        memset(symbolizer, 0, sizeof(*symbolizer));
+    }
+    return result;
+}
+
+static void CloseSymbolizer(struct PcSymbolizer *symbolizer)
+{
+    free(symbolizer->symbols);
+    free(symbolizer->strings);
+}
+
+static void FormatSymbol(struct PcSymbolizer *symbolizer,
+                         uint32_t address,
+                         char *buffer,
+                         size_t bufferSize)
+{
+    const Elf32_Sym *best = NULL;
+    size_t i;
+
+    for (i = 0; i < symbolizer->symbolCount; i++)
+    {
+        const Elf32_Sym *symbol = &symbolizer->symbols[i];
+        uint32_t end;
+
+        if (ELF32_ST_TYPE(symbol->st_info) != STT_FUNC
+         || symbol->st_name >= symbolizer->stringsSize
+         || symbol->st_value > address)
+            continue;
+        end = symbol->st_size == 0 ? symbol->st_value : symbol->st_value + symbol->st_size;
+        if (((symbol->st_size == 0 && address - symbol->st_value < 4096) || address < end)
+         && (best == NULL || symbol->st_value > best->st_value))
+            best = symbol;
+    }
+    if (best != NULL)
+        snprintf(buffer,
+                 bufferSize,
+                 "%s+0x%x",
+                 symbolizer->strings + best->st_name,
+                 address - best->st_value);
+    else
+        snprintf(buffer, bufferSize, "unknown");
+}
+#endif
+
+static void PrintAddress(FILE *file,
+                         struct PcSymbolizer *symbolizer,
+                         const char *label,
+                         uint32_t address)
+{
+    char symbol[1024];
+
+    if (address == 0)
+    {
+        fprintf(file, "%s: 0x00000000\n", label);
+        return;
+    }
+    FormatSymbol(symbolizer, address, symbol, sizeof(symbol));
+    fprintf(file, "%s: 0x%08" PRIx32 " %s\n", label, address, symbol);
+}
+
+static void PrintData(FILE *file, const int16_t *data, size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; i++)
+        fprintf(file, "%s%d", i == 0 ? "" : ", ", data[i]);
+    fputc('\n', file);
+}
+
+int PcWriteCrashReport(const struct PcSharedState *shared,
+                       const char *corePath,
+                       const char *savePath,
+                       const uint32_t *pixels,
+                       int exitStatus,
+                       char *reportPath,
+                       size_t reportPathSize)
+{
+    const struct PcCrashRecord *crash = &shared->crash;
+    const struct PcDiagnosticState *state = &shared->diagnostics;
+    struct PcSymbolizer symbolizer;
+    char imagePath[PC_PATH_MAX];
+    char topSymbol[1024] = "unknown";
+    uint64_t coreHash;
+    FILE *file;
+    uint32_t i;
+    uint32_t breadcrumbCount;
+    uint32_t breadcrumbStart;
+
+    if (BuildReportPaths(savePath,
+                         reportPath,
+                         reportPathSize,
+                         imagePath,
+                         sizeof(imagePath)) != 0)
+        return -1;
+    file = fopen(reportPath, "wb");
+    if (file == NULL)
+        return -1;
+    InitSymbolizer(&symbolizer, corePath);
+    coreHash = HashFile(corePath);
+
+    fprintf(file, "pokeemerald-pc crash report\n");
+    fprintf(file, "format: %u\n", PC_CRASH_VERSION);
+    fprintf(file, "core: %s\n", corePath);
+    fprintf(file, "core_fnv1a64: %016" PRIx64 "\n", coreHash);
+    fprintf(file, "exit_status: %d\n", exitStatus);
+    fprintf(file, "frame: %" PRIu32 "\n", state->frame);
+    if (crash->magic == PC_CRASH_MAGIC
+     && crash->version == PC_CRASH_VERSION
+     && __atomic_load_n(&crash->complete, __ATOMIC_ACQUIRE) != 0)
+    {
+        fprintf(file, "crash_code: 0x%08" PRIx32 "\n", crash->code);
+        fprintf(file, "access: %s\n", GetAccessName(crash->access));
+        fprintf(file, "fault_address: 0x%08" PRIx32 "\n", crash->faultAddress);
+        PrintAddress(file, &symbolizer, "instruction", crash->instruction);
+    }
+    else
+    {
+        fprintf(file, "crash_record: unavailable\n");
+    }
+    fprintf(file, "last_frame: %s\n\n", pixels == NULL ? "unavailable" : imagePath);
+
+    fprintf(file, "Stack\n");
+    for (i = 0; i < crash->stackFrameCount && i < PC_DIAGNOSTIC_STACK_FRAMES; i++)
+    {
+        char label[32];
+        char symbol[1024];
+        uint32_t lookupAddress = i == 0 || crash->stackFrames[i] == 0
+                               ? crash->stackFrames[i]
+                               : crash->stackFrames[i] - 1;
+
+        snprintf(label, sizeof(label), "#%02" PRIu32, i);
+        FormatSymbol(&symbolizer, lookupAddress, symbol, sizeof(symbol));
+        fprintf(file,
+                "%s: 0x%08" PRIx32 " %s\n",
+                label,
+                crash->stackFrames[i],
+                symbol);
+    }
+
+    fprintf(file, "\nRegisters\n");
+    fprintf(file, "eax=%08" PRIx32 " ebx=%08" PRIx32 " ecx=%08" PRIx32 " edx=%08" PRIx32 "\n",
+            crash->eax, crash->ebx, crash->ecx, crash->edx);
+    fprintf(file, "esi=%08" PRIx32 " edi=%08" PRIx32 " ebp=%08" PRIx32 " esp=%08" PRIx32 "\n",
+            crash->esi, crash->edi, crash->ebp, crash->esp);
+    fprintf(file, "eflags=%08" PRIx32 "\n", crash->eflags);
+
+    fprintf(file, "\nGame State\n");
+    fprintf(file, "map=%d.%d position=%d,%d in_battle=%" PRIu32 "\n",
+            state->mapGroup, state->mapNum, state->mapX, state->mapY, state->inBattle);
+    fprintf(file, "battle_type=0x%08" PRIx32 " controller_flags=0x%08" PRIx32
+                  " active_battler=%" PRIu32 " battlers=%" PRIu32 " outcome=%" PRIu32 "\n",
+            state->battleTypeFlags,
+            state->battleControllerFlags,
+            state->activeBattler,
+            state->battlersCount,
+            state->battleOutcome);
+    PrintAddress(file, &symbolizer, "battle_main", state->battleMainFunc);
+    fprintf(file, "link_type=0x%04" PRIx32 " players_received=%" PRIu32 " wireless=%" PRIu32 "\n",
+            state->linkType, state->linkPlayersReceived, state->wirelessCommType);
+
+    fprintf(file, "\nDispatch State\n");
+    PrintAddress(file, &symbolizer, "main_callback_1", state->mainCallback1);
+    PrintAddress(file, &symbolizer, "main_callback_2", state->mainCallback2);
+    fprintf(file, "current_main_kind: %s\n", GetDispatchName(state->currentMainKind));
+    PrintAddress(file, &symbolizer, "current_main", state->currentMainCallback);
+    if (state->currentTaskId == UINT32_MAX)
+        fprintf(file, "current_task_id: none\n");
+    else
+        fprintf(file, "current_task_id: %" PRIu32 "\n", state->currentTaskId);
+    PrintAddress(file, &symbolizer, "current_task", state->currentTaskFunc);
+    fprintf(file, "current_task_data: ");
+    PrintData(file, state->currentTaskData, PC_DIAGNOSTIC_TASK_DATA);
+    if (state->currentSpriteId == UINT32_MAX)
+        fprintf(file, "current_sprite_id: none\n");
+    else
+        fprintf(file, "current_sprite_id: %" PRIu32 "\n", state->currentSpriteId);
+    PrintAddress(file, &symbolizer, "current_sprite", state->currentSpriteCallback);
+    fprintf(file, "current_sprite_data: ");
+    PrintData(file, state->currentSpriteData, PC_DIAGNOSTIC_SPRITE_DATA);
+    fprintf(file, "current_script_ptr: 0x%08" PRIx32 " command=%" PRIu32 "\n",
+            state->currentScriptPtr, state->currentScriptCommand);
+    PrintAddress(file, &symbolizer, "current_script_func", state->currentScriptFunc);
+    if (state->invalidAddress != 0 || state->invalidKind != PC_DIAGNOSTIC_DISPATCH_NONE)
+    {
+        fprintf(file, "invalid_callback_kind: %s\n", GetDispatchName(state->invalidKind));
+        fprintf(file, "invalid_callback_id: %" PRIu32 "\n", state->invalidId);
+        PrintAddress(file, &symbolizer, "invalid_callback", state->invalidAddress);
+    }
+
+    fprintf(file, "\nRecent Dispatches\n");
+    breadcrumbCount = state->breadcrumbWrite < PC_DIAGNOSTIC_BREADCRUMBS
+                    ? state->breadcrumbWrite
+                    : PC_DIAGNOSTIC_BREADCRUMBS;
+    breadcrumbStart = state->breadcrumbWrite - breadcrumbCount;
+    for (i = 0; i < breadcrumbCount; i++)
+    {
+        const struct PcDiagnosticBreadcrumb *breadcrumb =
+            &state->breadcrumbs[(breadcrumbStart + i) % PC_DIAGNOSTIC_BREADCRUMBS];
+        char symbol[1024];
+
+        FormatSymbol(&symbolizer, breadcrumb->address, symbol, sizeof(symbol));
+        fprintf(file,
+                "frame=%" PRIu32 " kind=%s id=%" PRIu32 " address=0x%08" PRIx32 " %s\n",
+                breadcrumb->frame,
+                GetDispatchName(breadcrumb->kind),
+                breadcrumb->id,
+                breadcrumb->address,
+                symbol);
+    }
+
+    if (crash->magic == PC_CRASH_MAGIC
+     && crash->version == PC_CRASH_VERSION
+     && crash->complete != 0)
+        FormatSymbol(&symbolizer, crash->instruction, topSymbol, sizeof(topSymbol));
+    CloseSymbolizer(&symbolizer);
+    if (fclose(file) != 0)
+        return -1;
+    if (pixels != NULL && WriteFrame(imagePath, pixels) != 0)
+        fprintf(stderr, "could not write crash frame %s: %s\n", imagePath, strerror(errno));
+    if (crash->magic == PC_CRASH_MAGIC
+     && crash->version == PC_CRASH_VERSION
+     && crash->complete != 0)
+        fprintf(stderr,
+                "crash location: 0x%08" PRIx32 " %s\n",
+                crash->instruction,
+                topSymbol);
+    return 0;
+}

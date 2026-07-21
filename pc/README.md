@@ -32,6 +32,7 @@ The distributable directory is `build/pc/windows`. Keep these files together:
 
 - `pokeemerald-pc.exe` (launch this)
 - `pokeemerald-core.exe`
+- `pokeemerald-core.pdb` (crash-report symbols)
 - `SDL2.dll`
 - `SDL2-LICENSE.txt`
 
@@ -56,6 +57,20 @@ original addresses.
 
 The save file is `pokeemerald.sav` beside the launcher unless `--save PATH` is
 provided.
+
+## Crash Reports
+
+An abnormal core exit creates a timestamped text report and a capture of the
+last completed frame in `crash-reports/` beside the active save file. Reports
+include the fault type and address, CPU registers, a native stack trace, map and
+battle state, and the main, task, sprite, and script callbacks active near the
+failure. They do not include save contents, player names, connect codes, or
+peer addresses.
+
+Linux reports resolve functions from the core's ELF symbols. Windows reports
+use `pokeemerald-core.pdb`, so keep that file beside `pokeemerald-core.exe` when
+sharing a build. Every report also records a hash of the exact core executable
+so raw addresses can be matched to the correct binary later.
 
 ## Filesystem Storage
 

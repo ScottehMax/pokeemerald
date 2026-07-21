@@ -31,6 +31,7 @@ ELF2COFF := $(PC_DIR)/tools/elf2coff.py
 PC_CPPFLAGS := -DPLATFORM_PC=1 -DMODERN=1 \
 	-I$(PC_DIR)/include -iquote include -iquote .
 PC_CFLAGS := -std=gnu11 -O1 -g -fcommon -fno-pic -fno-pie \
+	-fno-omit-frame-pointer -fno-optimize-sibling-calls \
 	-Wall -Wextra -Wno-address-of-packed-member -Wno-constant-logical-operand \
 	-Wno-gnu-alignof-expression -Wno-ignored-attributes -Wno-implicit-function-declaration \
 	-Wno-incompatible-pointer-types-discards-qualifiers -Wno-pointer-to-int-cast \
@@ -80,6 +81,7 @@ PLATFORM_C_SRCS := \
 	$(PC_DIR)/audio.c \
 	$(PC_DIR)/bios.c \
 	$(PC_DIR)/core_main.c \
+	$(PC_DIR)/diagnostics.c \
 	$(PC_DIR)/link.c \
 	$(PC_DIR)/platform.c \
 	$(PC_DIR)/ppu.c \
@@ -107,9 +109,10 @@ windows: $(WIN_FRONTEND) $(WIN_CORE) $(WIN_LINK_SERVER) $(WIN_SDL_DLL) $(WIN_SDL
 
 windows-core-objects: check-assets $(WIN_PLATFORM_C_OBJS) $(WIN_GAME_C_OBJS) $(WIN_ASM_OBJ)
 
-$(FRONTEND): $(PC_DIR)/frontend.c $(PC_HEADERS)
+$(FRONTEND): $(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(PC_HEADERS)
 	@mkdir -p $(@D)
-	$(FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include $< $(SDL_LIBS) -o $@
+	$(FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include \
+		$(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(SDL_LIBS) -o $@
 
 $(LINK_SERVER): $(PC_DIR)/link_server.c $(PC_DIR)/include/pc_link_protocol.h
 	@mkdir -p $(@D)
@@ -189,10 +192,11 @@ $(SDL2_STAMP): $(SDL2_ARCHIVE)
 	tar -xf $< -C $(SDL2_EXTRACT_DIR)
 	@touch $@
 
-$(WIN_FRONTEND): $(PC_DIR)/frontend.c $(PC_HEADERS) $(SDL2_STAMP)
+$(WIN_FRONTEND): $(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(PC_HEADERS) $(SDL2_STAMP)
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
 	$(WIN_FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include \
-		$< $(SDL2_WIN64_DIR)/lib/libSDL2.dll.a -o $@
+		$(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c \
+		$(SDL2_WIN64_DIR)/lib/libSDL2.dll.a -ldbghelp -o $@
 
 $(WIN_LINK_SERVER): $(PC_DIR)/link_server.c $(PC_DIR)/include/pc_link_protocol.h
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
