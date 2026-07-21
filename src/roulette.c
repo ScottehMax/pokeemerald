@@ -1041,6 +1041,11 @@ static const struct YesNoFuncTable sYesNoTable_KeepPlaying =
 static void CB2_Roulette(void)
 {
     RunTasks();
+#if PLATFORM_PC
+    // The exit task frees sRoulette before this callback's frame is over.
+    if (sRoulette == NULL)
+        return;
+#endif
     AnimateSprites();
     BuildOamBuffer();
     if (sRoulette->flashUtil.enabled)

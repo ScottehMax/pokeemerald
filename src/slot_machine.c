@@ -1098,6 +1098,12 @@ static void CB2_SlotMachineSetup(void)
 static void CB2_SlotMachine(void)
 {
     RunTasks();
+#if PLATFORM_PC
+    // The exit task frees sSlotMachine. Do not run the old screen's sprite
+    // callbacks during the remainder of that frame.
+    if (sSlotMachine == NULL)
+        return;
+#endif
     AnimateSprites();
     BuildOamBuffer();
     UpdatePaletteFade();
@@ -1746,6 +1752,10 @@ static bool8 SlotTask_FreeDataStructures(struct Task *task)
 {
     if (!gPaletteFade.active)
     {
+#if PLATFORM_PC
+        // WaitForVBlank still runs once after this task changes callback2.
+        SetVBlankCallback(NULL);
+#endif
         SetMainCallback2(sSlotMachine->prevMainCb);
         FREE_AND_SET_NULL(sImageTable_DigitalDisplay_Reel);
         FREE_AND_SET_NULL(sImageTable_DigitalDisplay_Time);

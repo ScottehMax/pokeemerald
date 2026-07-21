@@ -10,6 +10,8 @@
 #include <string.h>
 #include <time.h>
 
+#define PC_DIAGNOSTIC_REPORTED_BREADCRUMBS 24
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -27,6 +29,9 @@ struct PcSymbolizer
 #ifdef _WIN32
     HANDLE process;
     DWORD64 moduleBase;
+    DWORD error;
+    const char *errorStage;
+    SYM_TYPE symbolType;
     int initialized;
 #else
     Elf32_Sym *symbols;
@@ -201,13 +206,47 @@ static int WriteFrame(const char *path, const uint32_t *pixels)
 }
 
 #ifdef _WIN32
+static int GetCoreDirectory(const char *corePath, char *directory, size_t directorySize)
+{
+    char *separator;
+    char *forwardSlash;
+    int length = snprintf(directory, directorySize, "%s", corePath);
+
+    if (length < 0 || (size_t)length >= directorySize)
+        return -1;
+    separator = strrchr(directory, '\\');
+    forwardSlash = strrchr(directory, '/');
+    if (forwardSlash != NULL && (separator == NULL || forwardSlash > separator))
+        separator = forwardSlash;
+    if (separator == NULL)
+        return snprintf(directory, directorySize, ".") < (int)directorySize ? 0 : -1;
+    if (separator == directory)
+        separator[1] = '\0';
+    else
+        *separator = '\0';
+    return 0;
+}
+
 static int InitSymbolizer(struct PcSymbolizer *symbolizer, const char *corePath)
 {
+    IMAGEHLP_MODULE64 module = {0};
+    char searchPath[PC_PATH_MAX];
+
     memset(symbolizer, 0, sizeof(*symbolizer));
     symbolizer->process = GetCurrentProcess();
-    SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
-    if (!SymInitialize(symbolizer->process, NULL, FALSE))
+    if (GetCoreDirectory(corePath, searchPath, sizeof(searchPath)) != 0)
+    {
+        symbolizer->errorStage = "core directory";
+        symbolizer->error = ERROR_INSUFFICIENT_BUFFER;
         return -1;
+    }
+    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_FAIL_CRITICAL_ERRORS);
+    if (!SymInitialize(symbolizer->process, searchPath, FALSE))
+    {
+        symbolizer->errorStage = "SymInitialize";
+        symbolizer->error = GetLastError();
+        return -1;
+    }
     symbolizer->initialized = 1;
     symbolizer->moduleBase = SymLoadModuleEx(symbolizer->process,
                                              NULL,
@@ -217,7 +256,21 @@ static int InitSymbolizer(struct PcSymbolizer *symbolizer, const char *corePath)
                                              0,
                                              NULL,
                                              0);
-    return symbolizer->moduleBase == 0 ? -1 : 0;
+    if (symbolizer->moduleBase == 0)
+    {
+        symbolizer->errorStage = "SymLoadModuleEx";
+        symbolizer->error = GetLastError();
+        return -1;
+    }
+    module.SizeOfStruct = sizeof(module);
+    if (!SymGetModuleInfo64(symbolizer->process, symbolizer->moduleBase, &module))
+    {
+        symbolizer->errorStage = "SymGetModuleInfo64";
+        symbolizer->error = GetLastError();
+        return -1;
+    }
+    symbolizer->symbolType = module.SymType;
+    return 0;
 }
 
 static void CloseSymbolizer(struct PcSymbolizer *symbolizer)
@@ -260,6 +313,16 @@ static void FormatSymbol(struct PcSymbolizer *symbolizer,
     {
         snprintf(buffer, bufferSize, "unknown");
     }
+}
+
+static void PrintSymbolizerStatus(FILE *file, const struct PcSymbolizer *symbolizer)
+{
+    if (symbolizer->errorStage != NULL)
+        fprintf(file, "symbols: unavailable (%s, Windows error %lu)\n",
+                symbolizer->errorStage,
+                (unsigned long)symbolizer->error);
+    else
+        fprintf(file, "symbols: loaded (DbgHelp type %u)\n", (unsigned)symbolizer->symbolType);
 }
 #else
 static int ReadAt(FILE *file, long offset, void *data, size_t size)
@@ -403,6 +466,7 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
     uint64_t coreHash;
     FILE *file;
     uint32_t i;
+    uint32_t breadcrumbAvailable;
     uint32_t breadcrumbCount;
     uint32_t breadcrumbStart;
 
@@ -422,6 +486,9 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
     fprintf(file, "format: %u\n", PC_CRASH_VERSION);
     fprintf(file, "core: %s\n", corePath);
     fprintf(file, "core_fnv1a64: %016" PRIx64 "\n", coreHash);
+#ifdef _WIN32
+    PrintSymbolizerStatus(file, &symbolizer);
+#endif
     fprintf(file, "exit_status: %d\n", exitStatus);
     fprintf(file, "frame: %" PRIu32 "\n", state->frame);
     if (crash->magic == PC_CRASH_MAGIC
@@ -507,25 +574,92 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
         PrintAddress(file, &symbolizer, "invalid_callback", state->invalidAddress);
     }
 
-    fprintf(file, "\nRecent Dispatches\n");
-    breadcrumbCount = state->breadcrumbWrite < PC_DIAGNOSTIC_BREADCRUMBS
-                    ? state->breadcrumbWrite
-                    : PC_DIAGNOSTIC_BREADCRUMBS;
+    breadcrumbAvailable = state->breadcrumbWrite < PC_DIAGNOSTIC_BREADCRUMBS
+                        ? state->breadcrumbWrite
+                        : PC_DIAGNOSTIC_BREADCRUMBS;
+    breadcrumbCount = breadcrumbAvailable < PC_DIAGNOSTIC_REPORTED_BREADCRUMBS
+                    ? breadcrumbAvailable
+                    : PC_DIAGNOSTIC_REPORTED_BREADCRUMBS;
+    fprintf(file, "\nRecent Dispatches (%" PRIu32 " of %" PRIu32 ")\n",
+            breadcrumbCount,
+            breadcrumbAvailable);
     breadcrumbStart = state->breadcrumbWrite - breadcrumbCount;
-    for (i = 0; i < breadcrumbCount; i++)
+    for (i = 0; i < breadcrumbCount;)
     {
         const struct PcDiagnosticBreadcrumb *breadcrumb =
             &state->breadcrumbs[(breadcrumbStart + i) % PC_DIAGNOSTIC_BREADCRUMBS];
         char symbol[1024];
+        uint32_t runLength = 1;
+
+        if (breadcrumb->kind == PC_DIAGNOSTIC_DISPATCH_SPRITE)
+        {
+            while (i + runLength < breadcrumbCount)
+            {
+                const struct PcDiagnosticBreadcrumb *next =
+                    &state->breadcrumbs[(breadcrumbStart + i + runLength) % PC_DIAGNOSTIC_BREADCRUMBS];
+
+                if (next->frame != breadcrumb->frame
+                 || next->kind != breadcrumb->kind
+                 || next->address != breadcrumb->address
+                 || next->id != breadcrumb->id + runLength)
+                    break;
+                runLength++;
+            }
+        }
+        else
+        {
+            while (i + runLength < breadcrumbCount)
+            {
+                const struct PcDiagnosticBreadcrumb *next =
+                    &state->breadcrumbs[(breadcrumbStart + i + runLength) % PC_DIAGNOSTIC_BREADCRUMBS];
+
+                if (next->frame != breadcrumb->frame + runLength
+                 || next->kind != breadcrumb->kind
+                 || next->id != breadcrumb->id
+                 || next->address != breadcrumb->address)
+                    break;
+                runLength++;
+            }
+        }
 
         FormatSymbol(&symbolizer, breadcrumb->address, symbol, sizeof(symbol));
-        fprintf(file,
-                "frame=%" PRIu32 " kind=%s id=%" PRIu32 " address=0x%08" PRIx32 " %s\n",
-                breadcrumb->frame,
-                GetDispatchName(breadcrumb->kind),
-                breadcrumb->id,
-                breadcrumb->address,
-                symbol);
+        if (runLength == 1)
+        {
+            fprintf(file,
+                    "frame=%" PRIu32 " kind=%s id=%" PRIu32 " address=0x%08" PRIx32 " %s\n",
+                    breadcrumb->frame,
+                    GetDispatchName(breadcrumb->kind),
+                    breadcrumb->id,
+                    breadcrumb->address,
+                    symbol);
+        }
+        else if (breadcrumb->kind == PC_DIAGNOSTIC_DISPATCH_SPRITE)
+        {
+            fprintf(file,
+                    "frame=%" PRIu32 " kind=%s ids=%" PRIu32 "-%" PRIu32
+                    " count=%" PRIu32 " address=0x%08" PRIx32 " %s\n",
+                    breadcrumb->frame,
+                    GetDispatchName(breadcrumb->kind),
+                    breadcrumb->id,
+                    breadcrumb->id + runLength - 1,
+                    runLength,
+                    breadcrumb->address,
+                    symbol);
+        }
+        else
+        {
+            fprintf(file,
+                    "frames=%" PRIu32 "-%" PRIu32 " kind=%s id=%" PRIu32
+                    " count=%" PRIu32 " address=0x%08" PRIx32 " %s\n",
+                    breadcrumb->frame,
+                    breadcrumb->frame + runLength - 1,
+                    GetDispatchName(breadcrumb->kind),
+                    breadcrumb->id,
+                    runLength,
+                    breadcrumb->address,
+                    symbol);
+        }
+        i += runLength;
     }
 
     if (crash->magic == PC_CRASH_MAGIC
