@@ -2,6 +2,9 @@
 #include "trainer_pokemon_sprites.h"
 #include "bg.h"
 #include "constants/rgb.h"
+#if PLATFORM_PC
+#include "pc_profile_menu.h"
+#endif
 #include "constants/songs.h"
 #include "constants/trainers.h"
 #include "data.h"
@@ -264,6 +267,7 @@ static const u16 sBirchSpeechBgGradientPal[] = INCGFX_U16("graphics/birch_speech
 #define MENU_TOP_WIN4 13
 #define MENU_TOP_WIN5 17
 #define MENU_TOP_WIN6 21
+#define MENU_TOP_WIN8 25
 #define MENU_WIDTH 26
 #define MENU_HEIGHT_WIN0 2
 #define MENU_HEIGHT_WIN1 2
@@ -272,6 +276,7 @@ static const u16 sBirchSpeechBgGradientPal[] = INCGFX_U16("graphics/birch_speech
 #define MENU_HEIGHT_WIN4 2
 #define MENU_HEIGHT_WIN5 2
 #define MENU_HEIGHT_WIN6 2
+#define MENU_HEIGHT_WIN8 2
 
 #define MENU_LEFT_ERROR 2
 #define MENU_TOP_ERROR 15
@@ -368,6 +373,20 @@ static const struct WindowTemplate sWindowTemplates_MainMenu[] =
         .paletteNum = 15,
         .baseBlock = 0x16D
     },
+#if PLATFORM_PC
+    // Additional row for the PC profile menu.
+    {
+        .bg = 0,
+        .tilemapLeft = MENU_LEFT,
+        .tilemapTop = MENU_TOP_WIN8,
+        .width = MENU_WIDTH,
+        .height = MENU_HEIGHT_WIN8,
+        .paletteNum = 15,
+        // The normal menu and error message are mutually exclusive, so this
+        // row can reuse the error window's character data allocation.
+        .baseBlock = 0x16D
+    },
+#endif
     DUMMY_WIN_TEMPLATE
 };
 
@@ -523,8 +542,15 @@ enum
     ACTION_MYSTERY_GIFT,
     ACTION_MYSTERY_EVENTS,
     ACTION_EREADER,
+#if PLATFORM_PC
+    ACTION_PROFILES,
+#endif
     ACTION_INVALID
 };
+
+#if PLATFORM_PC
+static const u8 sText_MainMenuProfiles[] = _("PROFILES");
+#endif
 
 #define MAIN_MENU_BORDER_TILE   0x1D5
 #define BIRCH_DLG_BASE_TILE_NUM 0xFC
@@ -671,6 +697,9 @@ static void Task_MainMenuCheckSaveFile(u8 taskId)
         }
         if (sCurrItemAndOptionMenuCheck & OPTION_MENU_FLAG)   // are we returning from the options menu?
         {
+#if PLATFORM_PC
+            sCurrItemAndOptionMenuCheck = tMenuType + 2;
+#else
             switch (tMenuType)  // if so, highlight the OPTIONS item
             {
                 case HAS_NO_SAVED_GAME:
@@ -684,10 +713,14 @@ static void Task_MainMenuCheckSaveFile(u8 taskId)
                     sCurrItemAndOptionMenuCheck = 4;
                     break;
             }
+#endif
         }
         sCurrItemAndOptionMenuCheck &= ~OPTION_MENU_FLAG;  // turn off the "returning from options menu" flag
         tCurrItem = sCurrItemAndOptionMenuCheck;
         tItemCount = tMenuType + 2;
+#if PLATFORM_PC
+        tItemCount++;
+#endif
     }
 }
 
@@ -783,55 +816,115 @@ static void Task_DisplayMainMenu(u8 taskId)
             default:
                 FillWindowPixelBuffer(0, PIXEL_FILL(0xA));
                 FillWindowPixelBuffer(1, PIXEL_FILL(0xA));
+#if PLATFORM_PC
+                FillWindowPixelBuffer(3, PIXEL_FILL(0xA));
+#endif
                 AddTextPrinterParameterized3(0, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuNewGame);
+#if PLATFORM_PC
+                AddTextPrinterParameterized3(1, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, sText_MainMenuProfiles);
+                AddTextPrinterParameterized3(3, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuOption);
+#else
                 AddTextPrinterParameterized3(1, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuOption);
+#endif
                 PutWindowTilemap(0);
                 PutWindowTilemap(1);
+#if PLATFORM_PC
+                PutWindowTilemap(3);
+#endif
                 CopyWindowToVram(0, COPYWIN_GFX);
                 CopyWindowToVram(1, COPYWIN_GFX);
+#if PLATFORM_PC
+                CopyWindowToVram(3, COPYWIN_GFX);
+#endif
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[0], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[1], MAIN_MENU_BORDER_TILE);
+#if PLATFORM_PC
+                DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[3], MAIN_MENU_BORDER_TILE);
+#endif
                 break;
             case HAS_SAVED_GAME:
                 FillWindowPixelBuffer(2, PIXEL_FILL(0xA));
                 FillWindowPixelBuffer(3, PIXEL_FILL(0xA));
                 FillWindowPixelBuffer(4, PIXEL_FILL(0xA));
+#if PLATFORM_PC
+                FillWindowPixelBuffer(5, PIXEL_FILL(0xA));
+#endif
                 AddTextPrinterParameterized3(2, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuContinue);
                 AddTextPrinterParameterized3(3, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuNewGame);
+#if PLATFORM_PC
+                AddTextPrinterParameterized3(4, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, sText_MainMenuProfiles);
+                AddTextPrinterParameterized3(5, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuOption);
+#else
                 AddTextPrinterParameterized3(4, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuOption);
+#endif
                 MainMenu_FormatSavegameText();
                 PutWindowTilemap(2);
                 PutWindowTilemap(3);
                 PutWindowTilemap(4);
+#if PLATFORM_PC
+                PutWindowTilemap(5);
+#endif
                 CopyWindowToVram(2, COPYWIN_GFX);
                 CopyWindowToVram(3, COPYWIN_GFX);
                 CopyWindowToVram(4, COPYWIN_GFX);
+#if PLATFORM_PC
+                CopyWindowToVram(5, COPYWIN_GFX);
+#endif
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[2], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[3], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[4], MAIN_MENU_BORDER_TILE);
+#if PLATFORM_PC
+                DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[5], MAIN_MENU_BORDER_TILE);
+#endif
                 break;
             case HAS_MYSTERY_GIFT:
                 FillWindowPixelBuffer(2, PIXEL_FILL(0xA));
                 FillWindowPixelBuffer(3, PIXEL_FILL(0xA));
                 FillWindowPixelBuffer(4, PIXEL_FILL(0xA));
                 FillWindowPixelBuffer(5, PIXEL_FILL(0xA));
+#if PLATFORM_PC
+                FillWindowPixelBuffer(6, PIXEL_FILL(0xA));
+#endif
                 AddTextPrinterParameterized3(2, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuContinue);
                 AddTextPrinterParameterized3(3, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuNewGame);
                 AddTextPrinterParameterized3(4, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuMysteryGift);
+#if PLATFORM_PC
+                AddTextPrinterParameterized3(5, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, sText_MainMenuProfiles);
+                AddTextPrinterParameterized3(6, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuOption);
+#else
                 AddTextPrinterParameterized3(5, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuOption);
+#endif
                 MainMenu_FormatSavegameText();
                 PutWindowTilemap(2);
                 PutWindowTilemap(3);
                 PutWindowTilemap(4);
                 PutWindowTilemap(5);
+#if PLATFORM_PC
+                PutWindowTilemap(6);
+#endif
                 CopyWindowToVram(2, COPYWIN_GFX);
                 CopyWindowToVram(3, COPYWIN_GFX);
                 CopyWindowToVram(4, COPYWIN_GFX);
                 CopyWindowToVram(5, COPYWIN_GFX);
+#if PLATFORM_PC
+                CopyWindowToVram(6, COPYWIN_GFX);
+#endif
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[2], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[3], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[4], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[5], MAIN_MENU_BORDER_TILE);
+#if PLATFORM_PC
+                DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[6], MAIN_MENU_BORDER_TILE);
+                tScrollArrowTaskId = AddScrollIndicatorArrowPair(&sScrollArrowsTemplate_MainMenu, &sCurrItemAndOptionMenuCheck);
+                gTasks[tScrollArrowTaskId].func = Task_ScrollIndicatorArrowPairOnMainMenu;
+                if (sCurrItemAndOptionMenuCheck >= 3)
+                {
+                    ChangeBgY(0, 0x2000, BG_COORD_ADD);
+                    ChangeBgY(1, 0x2000, BG_COORD_ADD);
+                    tIsScrolled = TRUE;
+                    gTasks[tScrollArrowTaskId].tArrowTaskIsScrolled = TRUE;
+                }
+#endif
                 break;
             case HAS_MYSTERY_EVENTS:
                 FillWindowPixelBuffer(2, PIXEL_FILL(0xA));
@@ -839,33 +932,61 @@ static void Task_DisplayMainMenu(u8 taskId)
                 FillWindowPixelBuffer(4, PIXEL_FILL(0xA));
                 FillWindowPixelBuffer(5, PIXEL_FILL(0xA));
                 FillWindowPixelBuffer(6, PIXEL_FILL(0xA));
+#if PLATFORM_PC
+                FillWindowPixelBuffer(8, PIXEL_FILL(0xA));
+#endif
                 AddTextPrinterParameterized3(2, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuContinue);
                 AddTextPrinterParameterized3(3, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuNewGame);
                 AddTextPrinterParameterized3(4, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuMysteryGift2);
                 AddTextPrinterParameterized3(5, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuMysteryEvents);
+#if PLATFORM_PC
+                AddTextPrinterParameterized3(6, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, sText_MainMenuProfiles);
+                AddTextPrinterParameterized3(8, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuOption);
+#else
                 AddTextPrinterParameterized3(6, FONT_NORMAL, 0, 1, sTextColor_Headers, TEXT_SKIP_DRAW, gText_MainMenuOption);
+#endif
                 MainMenu_FormatSavegameText();
                 PutWindowTilemap(2);
                 PutWindowTilemap(3);
                 PutWindowTilemap(4);
                 PutWindowTilemap(5);
                 PutWindowTilemap(6);
+#if PLATFORM_PC
+                PutWindowTilemap(8);
+#endif
                 CopyWindowToVram(2, COPYWIN_GFX);
                 CopyWindowToVram(3, COPYWIN_GFX);
                 CopyWindowToVram(4, COPYWIN_GFX);
                 CopyWindowToVram(5, COPYWIN_GFX);
                 CopyWindowToVram(6, COPYWIN_GFX);
+#if PLATFORM_PC
+                CopyWindowToVram(8, COPYWIN_GFX);
+#endif
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[2], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[3], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[4], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[5], MAIN_MENU_BORDER_TILE);
                 DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[6], MAIN_MENU_BORDER_TILE);
+#if PLATFORM_PC
+                DrawMainMenuWindowBorder(&sWindowTemplates_MainMenu[8], MAIN_MENU_BORDER_TILE);
+#endif
                 tScrollArrowTaskId = AddScrollIndicatorArrowPair(&sScrollArrowsTemplate_MainMenu, &sCurrItemAndOptionMenuCheck);
                 gTasks[tScrollArrowTaskId].func = Task_ScrollIndicatorArrowPairOnMainMenu;
-                if (sCurrItemAndOptionMenuCheck == 4)
+                if (sCurrItemAndOptionMenuCheck ==
+#if PLATFORM_PC
+                    5
+#else
+                    4
+#endif
+                )
                 {
+#if PLATFORM_PC
+                    ChangeBgY(0, 0x4000, BG_COORD_ADD);
+                    ChangeBgY(1, 0x4000, BG_COORD_ADD);
+#else
                     ChangeBgY(0, 0x2000, BG_COORD_ADD);
                     ChangeBgY(1, 0x2000, BG_COORD_ADD);
+#endif
                     tIsScrolled = TRUE;
                     gTasks[tScrollArrowTaskId].tArrowTaskIsScrolled = TRUE;
                 }
@@ -902,24 +1023,48 @@ static bool8 HandleMainMenuInput(u8 taskId)
     }
     else if ((JOY_NEW(DPAD_UP)) && tCurrItem > 0)
     {
+#if PLATFORM_PC
+        if (tIsScrolled == TRUE && tCurrItem == 3
+         && (tMenuType == HAS_MYSTERY_GIFT || tMenuType == HAS_MYSTERY_EVENTS))
+        {
+            u32 shift = tMenuType == HAS_MYSTERY_EVENTS ? 0x4000 : 0x2000;
+
+            ChangeBgY(0, shift, BG_COORD_SUB);
+            ChangeBgY(1, shift, BG_COORD_SUB);
+            gTasks[tScrollArrowTaskId].tArrowTaskIsScrolled = tIsScrolled = FALSE;
+        }
+#else
         if (tMenuType == HAS_MYSTERY_EVENTS && tIsScrolled == TRUE && tCurrItem == 1)
         {
             ChangeBgY(0, 0x2000, BG_COORD_SUB);
             ChangeBgY(1, 0x2000, BG_COORD_SUB);
             gTasks[tScrollArrowTaskId].tArrowTaskIsScrolled = tIsScrolled = FALSE;
         }
+#endif
         tCurrItem--;
         sCurrItemAndOptionMenuCheck = tCurrItem;
         return TRUE;
     }
     else if ((JOY_NEW(DPAD_DOWN)) && tCurrItem < tItemCount - 1)
     {
+#if PLATFORM_PC
+        if (tIsScrolled == FALSE && tCurrItem == 2
+         && (tMenuType == HAS_MYSTERY_GIFT || tMenuType == HAS_MYSTERY_EVENTS))
+        {
+            u32 shift = tMenuType == HAS_MYSTERY_EVENTS ? 0x4000 : 0x2000;
+
+            ChangeBgY(0, shift, BG_COORD_ADD);
+            ChangeBgY(1, shift, BG_COORD_ADD);
+            gTasks[tScrollArrowTaskId].tArrowTaskIsScrolled = tIsScrolled = TRUE;
+        }
+#else
         if (tMenuType == HAS_MYSTERY_EVENTS && tCurrItem == 3 && tIsScrolled == FALSE)
         {
             ChangeBgY(0, 0x2000, BG_COORD_ADD);
             ChangeBgY(1, 0x2000, BG_COORD_ADD);
             gTasks[tScrollArrowTaskId].tArrowTaskIsScrolled = tIsScrolled = TRUE;
         }
+#endif
         tCurrItem++;
         sCurrItemAndOptionMenuCheck = tCurrItem;
         return TRUE;
@@ -940,7 +1085,11 @@ static void Task_HandleMainMenuAPressed(u8 taskId)
 
     if (!gPaletteFade.active)
     {
-        if (gTasks[taskId].tMenuType == HAS_MYSTERY_EVENTS)
+        if (gTasks[taskId].tMenuType == HAS_MYSTERY_EVENTS
+#if PLATFORM_PC
+         || gTasks[taskId].tMenuType == HAS_MYSTERY_GIFT
+#endif
+        )
             RemoveScrollIndicatorArrowPair(gTasks[taskId].tScrollArrowTaskId);
         ClearStdWindowAndFrame(0, TRUE);
         ClearStdWindowAndFrame(1, TRUE);
@@ -950,6 +1099,9 @@ static void Task_HandleMainMenuAPressed(u8 taskId)
         ClearStdWindowAndFrame(5, TRUE);
         ClearStdWindowAndFrame(6, TRUE);
         ClearStdWindowAndFrame(7, TRUE);
+#if PLATFORM_PC
+        ClearStdWindowAndFrame(8, TRUE);
+#endif
         wirelessAdapterConnected = IsWirelessAdapterConnected();
         switch (gTasks[taskId].tMenuType)
         {
@@ -962,6 +1114,11 @@ static void Task_HandleMainMenuAPressed(u8 taskId)
                         action = ACTION_NEW_GAME;
                         break;
                     case 1:
+#if PLATFORM_PC
+                        action = ACTION_PROFILES;
+                        break;
+                    case 2:
+#endif
                         action = ACTION_OPTION;
                         break;
                 }
@@ -977,6 +1134,11 @@ static void Task_HandleMainMenuAPressed(u8 taskId)
                         action = ACTION_NEW_GAME;
                         break;
                     case 2:
+#if PLATFORM_PC
+                        action = ACTION_PROFILES;
+                        break;
+                    case 3:
+#endif
                         action = ACTION_OPTION;
                         break;
                 }
@@ -1000,6 +1162,11 @@ static void Task_HandleMainMenuAPressed(u8 taskId)
                         }
                         break;
                     case 3:
+#if PLATFORM_PC
+                        action = ACTION_PROFILES;
+                        break;
+                    case 4:
+#endif
                         action = ACTION_OPTION;
                         break;
                 }
@@ -1046,6 +1213,11 @@ static void Task_HandleMainMenuAPressed(u8 taskId)
                         }
                         break;
                     case 4:
+#if PLATFORM_PC
+                        action = ACTION_PROFILES;
+                        break;
+                    case 5:
+#endif
                         action = ACTION_OPTION;
                         break;
                 }
@@ -1084,6 +1256,12 @@ static void Task_HandleMainMenuAPressed(u8 taskId)
                 SetMainCallback2(CB2_InitEReader);
                 DestroyTask(taskId);
                 break;
+#if PLATFORM_PC
+            case ACTION_PROFILES:
+                ShowPcProfileMenu();
+                DestroyTask(taskId);
+                break;
+#endif
             case ACTION_INVALID:
                 gTasks[taskId].tCurrItem = 0;
                 gTasks[taskId].func = Task_DisplayMainMenuInvalidActionError;
@@ -1110,7 +1288,11 @@ static void Task_HandleMainMenuBPressed(u8 taskId)
 {
     if (!gPaletteFade.active)
     {
-        if (gTasks[taskId].tMenuType == HAS_MYSTERY_EVENTS)
+        if (gTasks[taskId].tMenuType == HAS_MYSTERY_EVENTS
+#if PLATFORM_PC
+         || gTasks[taskId].tMenuType == HAS_MYSTERY_GIFT
+#endif
+        )
             RemoveScrollIndicatorArrowPair(gTasks[taskId].tScrollArrowTaskId);
         sCurrItemAndOptionMenuCheck = 0;
         FreeAllWindowBuffers();
@@ -1171,6 +1353,48 @@ static void HighlightSelectedMainMenuItem(u8 menuType, u8 selectedMenuItem, s16 
 {
     SetGpuReg(REG_OFFSET_WIN0H, MENU_WIN_HCOORDS);
 
+#if PLATFORM_PC
+    {
+        u16 vertical;
+        u16 shift = 0;
+
+        switch (menuType)
+        {
+        case HAS_NO_SAVED_GAME:
+        default:
+            vertical = selectedMenuItem == 0 ? MENU_WIN_VCOORDS(0)
+                     : selectedMenuItem == 1 ? MENU_WIN_VCOORDS(1)
+                     : MENU_WIN_VCOORDS(3);
+            break;
+        case HAS_SAVED_GAME:
+            vertical = selectedMenuItem == 0 ? MENU_WIN_VCOORDS(2)
+                     : selectedMenuItem == 1 ? MENU_WIN_VCOORDS(3)
+                     : selectedMenuItem == 2 ? MENU_WIN_VCOORDS(4)
+                     : MENU_WIN_VCOORDS(5);
+            break;
+        case HAS_MYSTERY_GIFT:
+            vertical = selectedMenuItem == 0 ? MENU_WIN_VCOORDS(2)
+                     : selectedMenuItem == 1 ? MENU_WIN_VCOORDS(3)
+                     : selectedMenuItem == 2 ? MENU_WIN_VCOORDS(4)
+                     : selectedMenuItem == 3 ? MENU_WIN_VCOORDS(5)
+                     : MENU_WIN_VCOORDS(6);
+            if (isScrolled)
+                shift = WIN_RANGE(32, 32);
+            break;
+        case HAS_MYSTERY_EVENTS:
+            vertical = selectedMenuItem == 0 ? MENU_WIN_VCOORDS(2)
+                     : selectedMenuItem == 1 ? MENU_WIN_VCOORDS(3)
+                     : selectedMenuItem == 2 ? MENU_WIN_VCOORDS(4)
+                     : selectedMenuItem == 3 ? MENU_WIN_VCOORDS(5)
+                     : selectedMenuItem == 4 ? MENU_WIN_VCOORDS(6)
+                     : MENU_WIN_VCOORDS(8);
+            if (isScrolled)
+                shift = WIN_RANGE(64, 64);
+            break;
+        }
+        SetGpuReg(REG_OFFSET_WIN0V, vertical - shift);
+    }
+#else
     switch (menuType)
     {
         case HAS_NO_SAVED_GAME:
@@ -1250,6 +1474,7 @@ static void HighlightSelectedMainMenuItem(u8 menuType, u8 selectedMenuItem, s16 
             }
             break;
     }
+#endif
 }
 
 #define tPlayerSpriteId data[2]

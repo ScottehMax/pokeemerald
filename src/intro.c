@@ -1,5 +1,6 @@
 #include "global.h"
 #include "main.h"
+#include "main_menu.h"
 #include "palette.h"
 #include "scanline_effect.h"
 #include "task.h"
@@ -25,6 +26,9 @@
 #include "title_screen.h"
 #include "constants/rgb.h"
 #include "constants/battle_anim.h"
+#if PLATFORM_PC
+#include "pc_platform.h"
+#endif
 
 /*
     The intro is grouped into the following scenes
@@ -1144,20 +1148,31 @@ static u8 SetUpCopyrightScreen(void)
     return 1;
 }
 
+static void LoadSaveAfterBoot(void)
+{
+    SetSaveBlocksPointers(GetSaveBlocksPointersBaseOffset());
+    ResetMenuAndMonGlobals();
+    Save_ResetSaveCounters();
+    LoadGameSave(SAVE_NORMAL);
+    if (gSaveFileStatus == SAVE_STATUS_EMPTY || gSaveFileStatus == SAVE_STATUS_CORRUPT)
+        Sav2_ClearSetDefault();
+    SetPokemonCryStereo(gSaveBlock2Ptr->optionsSound);
+    InitHeap(gHeap, HEAP_SIZE);
+}
+
 void CB2_InitCopyrightScreenAfterBootup(void)
 {
     if (!SetUpCopyrightScreen())
-    {
-        SetSaveBlocksPointers(GetSaveBlocksPointersBaseOffset());
-        ResetMenuAndMonGlobals();
-        Save_ResetSaveCounters();
-        LoadGameSave(SAVE_NORMAL);
-        if (gSaveFileStatus == SAVE_STATUS_EMPTY || gSaveFileStatus == SAVE_STATUS_CORRUPT)
-            Sav2_ClearSetDefault();
-        SetPokemonCryStereo(gSaveBlock2Ptr->optionsSound);
-        InitHeap(gHeap, HEAP_SIZE);
-    }
+        LoadSaveAfterBoot();
 }
+
+#if PLATFORM_PC
+void CB2_LoadProfileAndInitMainMenu(void)
+{
+    LoadSaveAfterBoot();
+    SetMainCallback2(CB2_InitMainMenu);
+}
+#endif
 
 void CB2_InitCopyrightScreenAfterTitleScreen(void)
 {

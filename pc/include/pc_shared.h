@@ -11,6 +11,7 @@
 #define PC_AUDIO_RATE 48000
 #define PC_AUDIO_BUFFER_FRAMES 32768
 #define PC_CORE_EXIT_SOFT_RESET 100
+#define PC_CORE_EXIT_PROFILE_SWITCH 101
 #define PC_DIAGNOSTIC_STACK_FRAMES 32
 #define PC_DIAGNOSTIC_BREADCRUMBS 64
 #define PC_DIAGNOSTIC_TASK_DATA 16
@@ -114,7 +115,12 @@ struct PcSharedState
     uint32_t frameBufferIndex;
     uint32_t coreReady;
     uint32_t coreError;
+    uint32_t resumeMainMenu;
+    char defaultSavePath[PC_PATH_MAX];
     char savePath[PC_PATH_MAX];
+    char storagePath[PC_PATH_MAX];
+    char requestedSavePath[PC_PATH_MAX];
+    char requestedStoragePath[PC_PATH_MAX];
     uint32_t audioRead;
     uint32_t audioWrite;
     uint32_t audioFramesGenerated;

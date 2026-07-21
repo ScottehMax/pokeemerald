@@ -29,6 +29,7 @@
 #include "main.h"
 #if PLATFORM_PC
 #include "pc_link.h"
+#include "pc_profiles.h"
 #endif
 #include "constants/event_objects.h"
 #include "constants/rgb.h"
@@ -170,7 +171,11 @@ struct NamingScreenData
     u8 tilemapBuffer1[0x800];
     u8 tilemapBuffer2[0x800];
     u8 tilemapBuffer3[0x800];
+#if PLATFORM_PC
+    u8 textBuffer[PC_PROFILE_NAME_MAX + 1];
+#else
     u8 textBuffer[16];
+#endif
     u8 tileBuffer[0x600];
     u8 state;
     u8 windows[WIN_COUNT];
@@ -1763,6 +1768,7 @@ static void (*const sDrawTextEntryBoxFuncs[])(void) =
     [NAMING_SCREEN_WALDA]      = DrawNormalTextEntryBox,
 #if PLATFORM_PC
     [NAMING_SCREEN_LINK_CODE]  = DrawNormalTextEntryBox,
+    [NAMING_SCREEN_PROFILE]    = DrawNormalTextEntryBox,
 #endif
 };
 
@@ -1939,7 +1945,10 @@ static void DrawTextEntry(void)
     u8 temp[2];
     u16 extraWidth;
     u8 maxChars = sNamingScreen->template->maxChars;
-    u16 x = sNamingScreen->inputCharBaseXPos - 0x40;
+    s16 x = sNamingScreen->inputCharBaseXPos - sWindowTemplates[WIN_TEXT_ENTRY].tilemapLeft * 8;
+
+    if (x < 0)
+        x = 0;
 
     FillWindowPixelBuffer(sNamingScreen->windows[WIN_TEXT_ENTRY], PIXEL_FILL(1));
 
@@ -2168,6 +2177,7 @@ static const struct NamingScreenTemplate sWaldaWordsScreenTemplate =
 
 #if PLATFORM_PC
 static const u8 sText_ConnectCode[] = _("CONNECT CODE");
+static const u8 sText_ProfileName[] = _("PROFILE NAME");
 
 static const struct NamingScreenTemplate sLinkCodeNamingScreenTemplate =
 {
@@ -2178,6 +2188,17 @@ static const struct NamingScreenTemplate sLinkCodeNamingScreenTemplate =
     .initialPage = KBPAGE_LETTERS_UPPER,
     .unused = 0,
     .title = sText_ConnectCode,
+};
+
+static const struct NamingScreenTemplate sProfileNamingScreenTemplate =
+{
+    .copyExistingString = FALSE,
+    .maxChars = PC_PROFILE_NAME_MAX,
+    .iconFunction = ICON_PC,
+    .addGenderIcon = FALSE,
+    .initialPage = KBPAGE_LETTERS_UPPER,
+    .unused = 0,
+    .title = sText_ProfileName,
 };
 #endif
 
@@ -2190,6 +2211,7 @@ static const struct NamingScreenTemplate *const sNamingScreenTemplates[] =
     [NAMING_SCREEN_WALDA]      = &sWaldaWordsScreenTemplate,
 #if PLATFORM_PC
     [NAMING_SCREEN_LINK_CODE]  = &sLinkCodeNamingScreenTemplate,
+    [NAMING_SCREEN_PROFILE]    = &sProfileNamingScreenTemplate,
 #endif
 };
 

@@ -587,10 +587,17 @@ bool32 PcPlatformInit(const char *sharedPath)
     }
     PcDiagnosticsInit(sShared);
 
-    if (!PcServicesInit(sShared->savePath))
+    if (!PcServicesInit(sShared->savePath, sShared->storagePath))
     {
         sShared->coreError = 2;
         return FALSE;
+    }
+    if (getenv("POKEEMERALD_PC_TEST_STORAGE_SCAN") != NULL)
+    {
+        if (PcStorageScan())
+            fprintf(stderr, "PC storage test: scanned %u files\n", PcStorageCount());
+        else
+            fprintf(stderr, "PC storage test: scan failed\n");
     }
 
     REG_KEYINPUT = KEYS_MASK;
@@ -640,6 +647,37 @@ void PcPlatformShutdown(void)
         sSharedMapping = NULL;
     }
 #endif
+}
+
+const char *PcPlatformGetDefaultSavePath(void)
+{
+    return sShared->defaultSavePath;
+}
+
+const char *PcPlatformGetSavePath(void)
+{
+    return sShared->savePath;
+}
+
+bool32 PcPlatformShouldResumeMainMenu(void)
+{
+    return sShared->resumeMainMenu != 0;
+}
+
+void PcPlatformSwitchProfile(const char *savePath, const char *storagePath)
+{
+    if (savePath == NULL || storagePath == NULL
+     || snprintf(sShared->requestedSavePath, sizeof(sShared->requestedSavePath), "%s", savePath)
+        >= (int)sizeof(sShared->requestedSavePath)
+     || snprintf(sShared->requestedStoragePath, sizeof(sShared->requestedStoragePath), "%s", storagePath)
+        >= (int)sizeof(sShared->requestedStoragePath))
+    {
+        fprintf(stderr, "could not switch save profile: path is too long\n");
+        PcPlatformShutdown();
+        exit(1);
+    }
+    PcPlatformShutdown();
+    exit(PC_CORE_EXIT_PROFILE_SWITCH);
 }
 
 void PcPlatformWaitForFrame(void)

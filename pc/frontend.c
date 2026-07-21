@@ -3,6 +3,7 @@
 
 #include "pc_sdl.h"
 #include "pc_crash_report.h"
+#include "pc_profiles.h"
 #include "pc_shared.h"
 
 #include <errno.h>
@@ -162,15 +163,55 @@ static PcProcess LaunchCore(const char *corePath, const char *sharedPath)
 #endif
 }
 
+static int GetProfileStoragePath(const char *savePath,
+                                 const char *defaultSavePath,
+                                 int explicitSave,
+                                 char *storagePath,
+                                 size_t storagePathSize)
+{
+    const char *separator;
+    size_t prefixLength;
+
+    if (explicitSave || strcmp(savePath, defaultSavePath) == 0)
+    {
+        int length = snprintf(storagePath, storagePathSize, "storage");
+
+        return length >= 0 && (size_t)length < storagePathSize ? 0 : -1;
+    }
+    separator = strrchr(savePath, '/');
+#ifdef _WIN32
+    {
+        const char *backslash = strrchr(savePath, '\\');
+
+        if (backslash != NULL && (separator == NULL || backslash > separator))
+            separator = backslash;
+    }
+#endif
+    if (separator == NULL)
+        return -1;
+    prefixLength = (size_t)(separator - savePath + 1);
+    if (prefixLength + sizeof("storage") > storagePathSize)
+        return -1;
+    memcpy(storagePath, savePath, prefixLength);
+    memcpy(storagePath + prefixLength, "storage", sizeof("storage"));
+    return 0;
+}
+
 static void ResetSharedState(struct PcSharedState *shared,
+                             const char *defaultSavePath,
                              const char *savePath,
+                             const char *storagePath,
+                             int resumeMainMenu,
                              SDL_AudioDeviceID audioDevice)
 {
     if (audioDevice != 0)
         SDL_PauseAudioDevice(audioDevice, 1);
     memset(shared, 0, sizeof(*shared));
     shared->magic = PC_SHARED_MAGIC;
+    shared->resumeMainMenu = (uint32_t)resumeMainMenu;
+    memcpy(shared->defaultSavePath, defaultSavePath, strlen(defaultSavePath) + 1);
     memcpy(shared->savePath, savePath, strlen(savePath) + 1);
+    memcpy(shared->storagePath, storagePath, strlen(storagePath) + 1);
     if (audioDevice != 0)
         SDL_PauseAudioDevice(audioDevice, 0);
 }
@@ -263,7 +304,9 @@ int main(int argc, char **argv)
     int sharedFd = -1;
 #endif
     char corePath[PC_PATH_MAX];
+    char defaultSavePath[PC_PATH_MAX];
     char savePath[PC_PATH_MAX];
+    char storagePath[PC_PATH_MAX];
     struct PcSharedState *shared = NULL;
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
@@ -277,6 +320,8 @@ int main(int argc, char **argv)
     const char *dumpPath = NULL;
     uint32_t framePixels[PC_FRAME_WIDTH * PC_FRAME_HEIGHT];
     int printStats = 0;
+    int explicitSave = 0;
+    const char *profileName = NULL;
     int suppressKeysUntilRelease = 0;
     uint32_t coreRestarts = 0;
     int argIndex;
@@ -286,6 +331,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "could not resolve the game paths\n");
         return 1;
     }
+    memcpy(defaultSavePath, savePath, strlen(savePath) + 1);
     for (argIndex = 1; argIndex < argc; argIndex++)
     {
         if (strcmp(argv[argIndex], "--save") == 0 && argIndex + 1 < argc)
@@ -295,6 +341,11 @@ int main(int argc, char **argv)
                 fprintf(stderr, "save path is too long\n");
                 return 2;
             }
+            explicitSave = 1;
+        }
+        else if (strcmp(argv[argIndex], "--profile") == 0 && argIndex + 1 < argc)
+        {
+            profileName = argv[++argIndex];
         }
         else if (strcmp(argv[argIndex], "--frames") == 0 && argIndex + 1 < argc)
         {
@@ -318,13 +369,36 @@ int main(int argc, char **argv)
         }
         else
         {
-            fprintf(stderr, "usage: %s [--save PATH] [--frames COUNT] [--dump PATH] [--stats]\n", argv[0]);
+            fprintf(stderr,
+                    "usage: %s [--save PATH | --profile NAME] "
+                    "[--frames COUNT] [--dump PATH] [--stats]\n",
+                    argv[0]);
             return 2;
         }
+    }
+    if (explicitSave && profileName != NULL)
+    {
+        fprintf(stderr, "--save and --profile cannot be used together\n");
+        return 2;
     }
     if (dumpPath != NULL && frameLimit == 0)
     {
         fprintf(stderr, "--dump requires --frames\n");
+        return 2;
+    }
+    if (profileName != NULL
+     && PcProfileResolve(defaultSavePath, profileName, savePath, sizeof(savePath)) != 0)
+    {
+        fprintf(stderr, "save profile not found: %s\n", profileName);
+        return 2;
+    }
+    if (GetProfileStoragePath(savePath,
+                              defaultSavePath,
+                              explicitSave,
+                              storagePath,
+                              sizeof(storagePath)) != 0)
+    {
+        fprintf(stderr, "could not resolve expanded storage path\n");
         return 2;
     }
 
@@ -370,7 +444,7 @@ int main(int argc, char **argv)
         goto cleanup;
     }
 #endif
-    ResetSharedState(shared, savePath, 0);
+    ResetSharedState(shared, defaultSavePath, savePath, storagePath, 0, 0);
     memset(framePixels, 0, sizeof(framePixels));
 
     if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
@@ -416,6 +490,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
         goto sdl_cleanup;
     }
+
     SDL_RenderSetLogicalSize(renderer, PC_FRAME_WIDTH, PC_FRAME_HEIGHT);
 
     texture = SDL_CreateTexture(renderer,
@@ -497,9 +572,32 @@ int main(int argc, char **argv)
 
             if (PollCore(&core, &exitStatus))
             {
-                if (exitStatus == PC_CORE_EXIT_SOFT_RESET)
+                if (exitStatus == PC_CORE_EXIT_SOFT_RESET
+                 || exitStatus == PC_CORE_EXIT_PROFILE_SWITCH)
                 {
-                    ResetSharedState(shared, savePath, audioDevice);
+                    int resumeMainMenu = exitStatus == PC_CORE_EXIT_PROFILE_SWITCH;
+
+                    if (resumeMainMenu)
+                    {
+                        if (shared->requestedSavePath[0] == '\0'
+                         || shared->requestedStoragePath[0] == '\0'
+                         || snprintf(savePath, sizeof(savePath), "%s", shared->requestedSavePath)
+                            >= (int)sizeof(savePath)
+                         || snprintf(storagePath, sizeof(storagePath), "%s", shared->requestedStoragePath)
+                            >= (int)sizeof(storagePath))
+                        {
+                            fprintf(stderr, "game core requested an invalid save profile\n");
+                            result = 1;
+                            running = 0;
+                            continue;
+                        }
+                    }
+                    ResetSharedState(shared,
+                                     defaultSavePath,
+                                     savePath,
+                                     storagePath,
+                                     resumeMainMenu,
+                                     audioDevice);
                     core = LaunchCore(corePath, sharedPath);
                     if (core == PC_PROCESS_INVALID)
                     {

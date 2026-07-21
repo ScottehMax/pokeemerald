@@ -33,9 +33,7 @@
 #define PC_FLASH_SIZE FLASH_ROM_SIZE_1M
 #define PC_FLASH_SECTOR_SIZE 4096
 #define PC_FLASH_SECTOR_COUNT (PC_FLASH_SIZE / PC_FLASH_SECTOR_SIZE)
-#define PC_STORAGE_DIRECTORY "storage"
 #define PC_STORAGE_EXTENSION ".ek3"
-#define PC_STORAGE_MAX_FILES 2048
 
 _Static_assert(sizeof(struct BoxPokemon) == 80, "an .ek3 file must contain one 80-byte boxed Pokemon");
 
@@ -48,6 +46,8 @@ static s64 sRtcOffset;
 static u8 sRtcStatus = SIIRTCINFO_24HOUR;
 static char **sStorageFileNames;
 static u32 sStorageFileCount;
+static u32 sStorageFileCapacity;
+static char sStorageDirectory[PC_PATH_MAX];
 static char sStorageLastWritePath[PC_PATH_MAX];
 
 static u16 PcProgramFlashByte(u16 sectorNum, u32 offset, u8 data);
@@ -65,6 +65,7 @@ static int CompareStorageFileNames(const void *a, const void *b);
 static bool32 BuildStoragePath(char *path, size_t pathSize, const char *name);
 static bool32 ReadStorageFile(const char *path, struct BoxPokemon *mon);
 static bool32 WriteStorageFile(const char *path, const struct BoxPokemon *mon);
+static bool32 SetStorageDirectory(const char *storagePath);
 
 static const u16 sFlashMaxTime[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -105,7 +106,7 @@ static void SyncFlash(const void *address, size_t size, bool32 wait)
 #endif
 }
 
-bool32 PcServicesInit(const char *savePath)
+bool32 PcServicesInit(const char *savePath, const char *storagePath)
 {
 #ifdef _WIN32
     LARGE_INTEGER info;
@@ -122,7 +123,11 @@ bool32 PcServicesInit(const char *savePath)
         fprintf(stderr, "no save path was provided\n");
         return FALSE;
     }
-
+    if (!SetStorageDirectory(storagePath))
+    {
+        fprintf(stderr, "save path is too long to locate expanded storage\n");
+        return FALSE;
+    }
 #ifdef _WIN32
     sFlashFile = CreateFileA(savePath,
                              GENERIC_READ | GENERIC_WRITE,
@@ -239,16 +244,27 @@ static void FreeStorageFileNames(void)
     free(sStorageFileNames);
     sStorageFileNames = NULL;
     sStorageFileCount = 0;
+    sStorageFileCapacity = 0;
+}
+
+static bool32 SetStorageDirectory(const char *storagePath)
+{
+    int length;
+
+    if (storagePath == NULL || storagePath[0] == '\0')
+        return FALSE;
+    length = snprintf(sStorageDirectory, sizeof(sStorageDirectory), "%s", storagePath);
+    return length >= 0 && (size_t)length < sizeof(sStorageDirectory);
 }
 
 static bool32 EnsureStorageDirectory(void)
 {
 #ifdef _WIN32
-    if (CreateDirectoryA(PC_STORAGE_DIRECTORY, NULL))
+    if (CreateDirectoryA(sStorageDirectory, NULL))
         return TRUE;
     return GetLastError() == ERROR_ALREADY_EXISTS;
 #else
-    if (mkdir(PC_STORAGE_DIRECTORY, 0700) == 0)
+    if (mkdir(sStorageDirectory, 0700) == 0)
         return TRUE;
     return errno == EEXIST;
 #endif
@@ -275,23 +291,31 @@ static bool32 AddStorageFileName(const char *name)
     char *copy;
     size_t length;
 
-    if (sStorageFileCount >= PC_STORAGE_MAX_FILES)
-        return TRUE;
-
     length = strlen(name) + 1;
     copy = malloc(length);
     if (copy == NULL)
         return FALSE;
     memcpy(copy, name, length);
 
-    newNames = realloc(sStorageFileNames,
-                       (sStorageFileCount + 1) * sizeof(*sStorageFileNames));
-    if (newNames == NULL)
+    if (sStorageFileCount == sStorageFileCapacity)
     {
-        free(copy);
-        return FALSE;
+        u32 newCapacity = sStorageFileCapacity == 0 ? 64 : sStorageFileCapacity * 2;
+
+        if (newCapacity < sStorageFileCapacity
+         || (size_t)newCapacity > SIZE_MAX / sizeof(*sStorageFileNames))
+        {
+            free(copy);
+            return FALSE;
+        }
+        newNames = realloc(sStorageFileNames, (size_t)newCapacity * sizeof(*sStorageFileNames));
+        if (newNames == NULL)
+        {
+            free(copy);
+            return FALSE;
+        }
+        sStorageFileNames = newNames;
+        sStorageFileCapacity = newCapacity;
     }
-    sStorageFileNames = newNames;
     sStorageFileNames[sStorageFileCount++] = copy;
     return TRUE;
 }
@@ -306,7 +330,7 @@ static int CompareStorageFileNames(const void *a, const void *b)
 
 static bool32 BuildStoragePath(char *path, size_t pathSize, const char *name)
 {
-    int length = snprintf(path, pathSize, "%s/%s", PC_STORAGE_DIRECTORY, name);
+    int length = snprintf(path, pathSize, "%s/%s", sStorageDirectory, name);
 
     return length >= 0 && (size_t)length < pathSize;
 }
@@ -322,7 +346,12 @@ bool32 PcStorageScan(void)
 #ifdef _WIN32
     {
         WIN32_FIND_DATAA entry;
-        HANDLE search = FindFirstFileA(PC_STORAGE_DIRECTORY "/*", &entry);
+        char pattern[PC_PATH_MAX];
+        HANDLE search;
+
+        if (snprintf(pattern, sizeof(pattern), "%s/*", sStorageDirectory) >= (int)sizeof(pattern))
+            return FALSE;
+        search = FindFirstFileA(pattern, &entry);
 
         if (search == INVALID_HANDLE_VALUE)
             return GetLastError() == ERROR_FILE_NOT_FOUND;
@@ -348,7 +377,7 @@ bool32 PcStorageScan(void)
     }
 #else
     {
-        DIR *directory = opendir(PC_STORAGE_DIRECTORY);
+        DIR *directory = opendir(sStorageDirectory);
         struct dirent *entry;
 
         if (directory == NULL)

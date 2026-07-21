@@ -84,6 +84,7 @@ PLATFORM_C_SRCS := \
 	$(PC_DIR)/diagnostics.c \
 	$(PC_DIR)/link.c \
 	$(PC_DIR)/platform.c \
+	$(PC_DIR)/profiles.c \
 	$(PC_DIR)/ppu.c \
 	$(PC_DIR)/services.c
 PLATFORM_C_OBJS := $(patsubst $(PC_DIR)/%.c,$(PLATFORM_OBJ_DIR)/%.o,$(PLATFORM_C_SRCS))
@@ -109,10 +110,10 @@ windows: $(WIN_FRONTEND) $(WIN_CORE) $(WIN_LINK_SERVER) $(WIN_SDL_DLL) $(WIN_SDL
 
 windows-core-objects: check-assets $(WIN_PLATFORM_C_OBJS) $(WIN_GAME_C_OBJS) $(WIN_ASM_OBJ)
 
-$(FRONTEND): $(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(PC_HEADERS)
+$(FRONTEND): $(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(PC_DIR)/profiles.c $(PC_HEADERS)
 	@mkdir -p $(@D)
 	$(FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include \
-		$(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(SDL_LIBS) -o $@
+		$(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(PC_DIR)/profiles.c $(SDL_LIBS) -o $@
 
 $(LINK_SERVER): $(PC_DIR)/link_server.c $(PC_DIR)/include/pc_link_protocol.h
 	@mkdir -p $(@D)
@@ -192,10 +193,10 @@ $(SDL2_STAMP): $(SDL2_ARCHIVE)
 	tar -xf $< -C $(SDL2_EXTRACT_DIR)
 	@touch $@
 
-$(WIN_FRONTEND): $(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(PC_HEADERS) $(SDL2_STAMP)
+$(WIN_FRONTEND): $(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(PC_DIR)/profiles.c $(PC_HEADERS) $(SDL2_STAMP)
 	@mkdir -p $(@D) $(ZIG_CACHE)/global $(ZIG_CACHE)/local
 	$(WIN_FRONTEND_CC) -std=c11 -O2 -g -Wall -Wextra -Werror -I$(PC_DIR)/include \
-		$(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c \
+		$(PC_DIR)/frontend.c $(PC_DIR)/crash_report.c $(PC_DIR)/profiles.c \
 		$(SDL2_WIN64_DIR)/lib/libSDL2.dll.a -ldbghelp -o $@
 
 $(WIN_LINK_SERVER): $(PC_DIR)/link_server.c $(PC_DIR)/include/pc_link_protocol.h

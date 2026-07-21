@@ -7,6 +7,10 @@ typedef void (*PcInterruptCallback)(void);
 
 bool32 PcPlatformInit(const char *sharedPath);
 void PcPlatformShutdown(void);
+const char *PcPlatformGetDefaultSavePath(void);
+const char *PcPlatformGetSavePath(void);
+bool32 PcPlatformShouldResumeMainMenu(void);
+void PcPlatformSwitchProfile(const char *savePath, const char *storagePath) __attribute__((noreturn));
 void PcPlatformWaitForFrame(void);
 void PcPlatformPresentFrame(PcInterruptCallback hblankCallback);
 void PcPlatformSoftReset(void) __attribute__((noreturn));

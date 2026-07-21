@@ -55,8 +55,21 @@ original addresses.
 | S | R |
 | Escape | Quit |
 
-The save file is `pokeemerald.sav` beside the launcher unless `--save PATH` is
-provided.
+## Save Profiles
+
+A normal launch still starts with the normal intro and title screen. Choose
+`PROFILES` from the game's main menu to select or create a profile. `Default`
+uses the existing `pokeemerald.sav` beside the launcher, so upgrading does not
+move or rewrite an existing save. New profiles are stored as
+`profiles/PROFILE/pokeemerald.sav` beside the launcher.
+
+Press Start on the profile screen to create one with Emerald's naming screen.
+Press Select to archive the selected inactive profile after confirmation.
+Archiving is recoverable: it renames the profile directory with an
+`.archived-` prefix instead of deleting its save or Pokémon files.
+
+Use `--profile NAME` to launch an existing profile directly. `--save PATH`
+continues to bypass profiles and use a specific GBA-compatible save file.
 
 ## Crash Reports
 
@@ -75,9 +88,14 @@ so raw addresses can be matched to the correct binary later.
 ## Filesystem Storage
 
 The Pokémon Storage System has a PC-only `STORAGE` entry. It reads individual
-boxed Pokémon from `./storage/` relative to the directory where the game is
-started. Files use the standard 80-byte encrypted Gen III boxed Pokémon data
-and the `.ek3` extension.
+boxed Pokémon from its active storage directory. Each named save profile uses
+`profiles/PROFILE/storage/`. `Default` and `--save` continue to use the original
+`./storage/` relative to the directory where the game is started, preserving
+existing `.ek3` collections. There is no fixed Pokémon count limit; entries are
+allocated as the directory is scanned.
+
+Files use the standard 80-byte encrypted Gen III boxed Pokémon data and the
+`.ek3` extension.
 
 Press `R` from the STORAGE screen to open the normal box interface in
 storage-transfer mode. Each transfer updates the save file before removing the
