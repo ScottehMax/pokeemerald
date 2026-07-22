@@ -67,9 +67,12 @@ Press Start on the profile screen to create one with Emerald's naming screen.
 Press Select to archive the selected inactive profile after confirmation.
 Archiving is recoverable: it renames the profile directory with an
 `.archived-` prefix instead of deleting its save or Pokémon files.
+The launcher remembers the last profile opened from this screen. If that
+profile is no longer available, the next launch falls back to `Default`.
 
 Use `--profile NAME` to launch an existing profile directly. `--save PATH`
 continues to bypass profiles and use a specific GBA-compatible save file.
+Both options override the remembered profile for that launch without changing it.
 
 ## Crash Reports
 

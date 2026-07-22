@@ -28,5 +28,9 @@ int PcProfileResolve(const char *defaultSavePath,
                      const char *profileName,
                      char *savePath,
                      size_t savePathSize);
+int PcProfileResolveRemembered(const char *defaultSavePath,
+                               char *savePath,
+                               size_t savePathSize);
+int PcProfileRememberBySavePath(const char *defaultSavePath, const char *savePath);
 
 #endif

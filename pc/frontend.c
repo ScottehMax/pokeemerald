@@ -392,6 +392,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "save profile not found: %s\n", profileName);
         return 2;
     }
+    if (!explicitSave && profileName == NULL)
+        PcProfileResolveRemembered(defaultSavePath, savePath, sizeof(savePath));
     if (GetProfileStoragePath(savePath,
                               defaultSavePath,
                               explicitSave,
@@ -591,6 +593,8 @@ int main(int argc, char **argv)
                             running = 0;
                             continue;
                         }
+                        if (PcProfileRememberBySavePath(defaultSavePath, savePath) != 0)
+                            fprintf(stderr, "could not remember the selected save profile\n");
                     }
                     ResetSharedState(shared,
                                      defaultSavePath,

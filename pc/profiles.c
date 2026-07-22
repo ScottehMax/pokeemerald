@@ -9,6 +9,8 @@
 #include <string.h>
 #include <time.h>
 
+#define LAST_PROFILE_FILE ".last-profile"
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -392,4 +394,72 @@ int PcProfileResolve(const char *defaultSavePath,
     }
     PcProfilesFree();
     return result;
+}
+
+int PcProfileResolveRemembered(const char *defaultSavePath,
+                               char *savePath,
+                               size_t savePathSize)
+{
+    char profilesDirectory[PC_PATH_MAX];
+    char preferencePath[PC_PATH_MAX];
+    char profileName[PC_PROFILE_NAME_MAX + 3];
+    FILE *file;
+    size_t length;
+
+    if (GetProfilesDirectory(defaultSavePath, profilesDirectory, sizeof(profilesDirectory)) != 0
+     || BuildPath(preferencePath, sizeof(preferencePath), profilesDirectory, LAST_PROFILE_FILE) != 0)
+        return -1;
+    file = fopen(preferencePath, "rb");
+    if (file == NULL)
+        return -1;
+    length = fread(profileName, 1, sizeof(profileName), file);
+    if (ferror(file) || length == sizeof(profileName))
+    {
+        fclose(file);
+        return -1;
+    }
+    fclose(file);
+    while (length != 0 && (profileName[length - 1] == '\n' || profileName[length - 1] == '\r'))
+        length--;
+    profileName[length] = '\0';
+    if (CaseCompare(profileName, "Default") != 0 && !IsProfileName(profileName))
+        return -1;
+    return PcProfileResolve(defaultSavePath, profileName, savePath, savePathSize);
+}
+
+int PcProfileRememberBySavePath(const char *defaultSavePath, const char *savePath)
+{
+    char profilesDirectory[PC_PATH_MAX];
+    char preferencePath[PC_PATH_MAX];
+    char profileName[PC_PROFILE_NAME_MAX + 1];
+    FILE *file;
+    size_t i;
+    int found = 0;
+
+    if (PcProfilesScan(defaultSavePath) != 0)
+        return -1;
+    for (i = 0; i < sProfiles.count; i++)
+    {
+        if (strcmp(sProfiles.items[i].savePath, savePath) == 0)
+        {
+            memcpy(profileName, sProfiles.items[i].name, strlen(sProfiles.items[i].name) + 1);
+            found = 1;
+            break;
+        }
+    }
+    PcProfilesFree();
+    if (!found
+     || GetProfilesDirectory(defaultSavePath, profilesDirectory, sizeof(profilesDirectory)) != 0
+     || EnsureDirectory(profilesDirectory) != 0
+     || BuildPath(preferencePath, sizeof(preferencePath), profilesDirectory, LAST_PROFILE_FILE) != 0)
+        return -1;
+    file = fopen(preferencePath, "wb");
+    if (file == NULL)
+        return -1;
+    if (fprintf(file, "%s\n", profileName) < 0)
+    {
+        fclose(file);
+        return -1;
+    }
+    return fclose(file) == 0 ? 0 : -1;
 }

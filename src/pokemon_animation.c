@@ -1643,6 +1643,15 @@ static void VerticalShakeTwice(struct Sprite *sprite)
     u8 var6 = sVerticalShakeData[sprite->data[5]][1];
     u8 amplitude = 0;
 
+#ifdef PLATFORM_PC
+    if (var5 == (u8)-1)
+    {
+        sprite->callback = WaitAnimEnd;
+        sprite->y2 = 0;
+        return;
+    }
+#endif
+
     if (var5 != (u8)-2)
         amplitude = (var6 - var7) * var5 / var6;
     else
@@ -4067,6 +4076,16 @@ static void VerticalShakeLowTwice(struct Sprite *sprite)
     u8 var8 = sprite->data[2];
     u8 var9 = sprite->data[6];
     u8 var5 = sVerticalShakeData[sprite->data[5]][0];
+
+#ifdef PLATFORM_PC
+    if (var5 == (u8)-1)
+    {
+        sprite->callback = WaitAnimEnd;
+        sprite->y2 = 0;
+        return;
+    }
+#endif
+
     if (var5 != (u8)-1)
         var5 = sprite->data[7];
 
