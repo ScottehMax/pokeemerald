@@ -303,10 +303,20 @@ struct ContestResources
 #define eContestAI (*gContestResources->aiData)
 #define eContestExcitement (*gContestResources->excitement)
 #define eContestGfxState (gContestResources->gfxState)
+#if PLATFORM_PC
+extern u8 gPcContestAudienceGfx[0x2000];
+extern u8 gPcContestDebugMode;
+extern struct ContestTempSave gPcContestTempSave;
+#define eUnzippedContestAudience_Gfx gPcContestAudienceGfx
+#define eContestAudienceFrame2_Gfx (gPcContestAudienceGfx + 0x1000)
+#define eContestDebugMode gPcContestDebugMode
+#define eContestTempSave gPcContestTempSave
+#else
 #define eUnzippedContestAudience_Gfx (gHeap + 0x18000)
 #define eContestAudienceFrame2_Gfx (gHeap + 0x19000)
 #define eContestDebugMode (gHeap[0x1a000])
 #define eContestTempSave (*(struct ContestTempSave *)(gHeap + 0x1a004))
+#endif
 
 extern struct ContestPokemon gContestMons[CONTESTANT_COUNT];
 extern s16 gContestMonRound1Points[CONTESTANT_COUNT];
@@ -338,6 +348,9 @@ void SetContestants(u8 contestType, u8 rank);
 void SetLinkAIContestants(u8 contestType, u8 rank, bool32 isPostgame);
 u8 GetContestEntryEligibility(struct Pokemon *pkmn);
 void CalculateRound1Points(u8 contestCategory);
+#if PLATFORM_PC
+void PcContestPrepareMoveAnim(u16 move, bool8 secondTurn);
+#endif
 bool8 IsSpeciesNotUnown(u16 species);
 bool8 Contest_IsMonsTurnDisabled(u8 contestant);
 void SaveLinkContestResults(void);

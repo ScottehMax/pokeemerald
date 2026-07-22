@@ -353,6 +353,12 @@ EWRAM_DATA u8 gNumLinkContestPlayers = 0;
 EWRAM_DATA u8 gHighestRibbonRank = 0;
 EWRAM_DATA struct ContestResources *gContestResources = NULL;
 static EWRAM_DATA u8 sContestBgCopyFlags = 0;
+#if PLATFORM_PC
+EWRAM_DATA u8 gPcContestAudienceGfx[0x2000] = {0};
+EWRAM_DATA u8 gPcContestDebugMode = 0;
+EWRAM_DATA struct ContestTempSave gPcContestTempSave = {0};
+static EWRAM_DATA struct DisableStruct sContestAnimDisableStruct = {0};
+#endif
 EWRAM_DATA struct ContestWinner gCurContestWinner = {0};
 EWRAM_DATA bool8 gCurContestWinnerIsForArtist = 0;
 EWRAM_DATA u8 gCurContestWinnerSaveIdx = 0;
@@ -5313,6 +5319,11 @@ static void SetMoveSpecificAnimData(u8 contestant)
 
     memset(&gContestResources->moveAnim->species, 0, 20);
     ClearBattleAnimationVars();
+#if PLATFORM_PC
+    memset(&sContestAnimDisableStruct, 0, sizeof(sContestAnimDisableStruct));
+    sContestAnimDisableStruct.rolloutTimerStartValue = 1;
+    gAnimDisableStructPtr = &sContestAnimDisableStruct;
+#endif
     for (i = 0; i < CONTESTANT_COUNT; i++)
         gBattleMonForms[i] = 0;
     switch (move)
@@ -5404,6 +5415,19 @@ static void SetMoveTargetPosition(u16 move)
         break;
     }
 }
+
+#if PLATFORM_PC
+void PcContestPrepareMoveAnim(u16 move, bool8 secondTurn)
+{
+    u8 contestant = eContest.currentContestant;
+
+    eContestantStatus[contestant].currMove = move;
+    eContest.moveAnimTurnCount = secondTurn;
+    SetMoveSpecificAnimData(contestant);
+    SetMoveAnimAttackerData(contestant);
+    SetMoveTargetPosition(move);
+}
+#endif
 
 static void Contest_PrintTextToBg0WindowStd(u32 windowId, const u8 *b)
 {
@@ -6122,4 +6146,3 @@ void StripPlayerAndMonNamesForLinkContest(struct ContestPokemon *mon, s32 langua
         name[PLAYER_NAME_LENGTH] = EOS;
     }
 }
-

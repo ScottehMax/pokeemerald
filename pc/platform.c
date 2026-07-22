@@ -18,11 +18,15 @@
 
 #include "global.h"
 #include "battle.h"
+#include "battle_anim.h"
 #include "battle_setup.h"
+#include "contest.h"
+#include "contest_util.h"
 #include "event_scripts.h"
 #include "field_screen_effect.h"
 #include "link.h"
 #include "main.h"
+#include "malloc.h"
 #include "overworld.h"
 #include "pokedex.h"
 #include "pokemon.h"
@@ -46,6 +50,10 @@
 #define GBA_CLOCK_HZ 16777216ull
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define MAX_TEST_INPUT_EVENTS 32
+#define TEST_MOVE_ANIM_READY_DELAY 600
+#define TEST_MOVE_ANIM_TIMEOUT 3600
+#define TEST_MOVE_ANIM_TURN_COUNT 4
+#define TEST_CONTEST_MOVE_ANIM_TURN_COUNT 2
 
 enum PcTestBattleState
 {
@@ -54,6 +62,21 @@ enum PcTestBattleState
     PC_TEST_BATTLE_REQUESTED,
     PC_TEST_BATTLE_ENTERED,
     PC_TEST_BATTLE_RETURNED,
+};
+
+enum PcTestMoveAnimState
+{
+    PC_TEST_MOVE_ANIM_DISABLED,
+    PC_TEST_MOVE_ANIM_WAITING,
+    PC_TEST_MOVE_ANIM_RUNNING,
+};
+
+enum PcTestContestResultsState
+{
+    PC_TEST_CONTEST_RESULTS_DISABLED,
+    PC_TEST_CONTEST_RESULTS_WAITING,
+    PC_TEST_CONTEST_RESULTS_REQUESTED,
+    PC_TEST_CONTEST_RESULTS_ENTERED,
 };
 
 extern struct MusicPlayerInfo *gMPlay_PokemonCry;
@@ -108,6 +131,16 @@ static bool8 sTestTrainerIdReportPending;
 static u32 sTestCrashFrame;
 static bool8 sTestCrashPending;
 static const char *sTestCrashKind;
+static enum PcTestMoveAnimState sTestMoveAnimState;
+static u32 sTestMoveAnimReadyFrame;
+static u32 sTestMoveAnimStartFrame;
+static u16 sTestMoveAnimId;
+static u16 sTestMoveAnimFirstId;
+static u8 sTestMoveAnimTurn;
+static bool8 sTestMoveAnimDouble;
+static bool8 sTestMoveAnimContest;
+static bool8 sTestMoveAnimSceneRequested;
+static enum PcTestContestResultsState sTestContestResultsState;
 
 static u64 GetMonotonicNs(void)
 {
@@ -521,6 +554,7 @@ static void ParseTestCrash(const char *frameSpec, const char *kind)
 bool32 PcPlatformInit(const char *sharedPath)
 {
     const char *testInput;
+    const char *testMoveAnims;
 #ifndef _WIN32
     struct stat info;
     int fd;
@@ -617,6 +651,33 @@ bool32 PcPlatformInit(const char *sharedPath)
     ParseTestPokedexFrame(getenv("POKEEMERALD_PC_TEST_POKEDEX_AT"));
     ParseTestCrash(getenv("POKEEMERALD_PC_TEST_CRASH_AT"),
                    getenv("POKEEMERALD_PC_TEST_CRASH_KIND"));
+    testMoveAnims = getenv("POKEEMERALD_PC_TEST_MOVE_ANIMS");
+    if (testMoveAnims != NULL)
+    {
+        const char *firstMove = getenv("POKEEMERALD_PC_TEST_MOVE_ANIM_START");
+
+        sTestMoveAnimDouble = strcmp(testMoveAnims, "double") == 0;
+        sTestMoveAnimContest = strcmp(testMoveAnims, "contest") == 0;
+        if (firstMove != NULL)
+        {
+            char *end;
+            unsigned long value = strtoul(firstMove, &end, 0);
+
+            if (end != firstMove && *end == '\0' && value < MOVES_COUNT)
+                sTestMoveAnimFirstId = value;
+            else
+                fprintf(stderr, "invalid POKEEMERALD_PC_TEST_MOVE_ANIM_START value: %s\n",
+                        firstMove);
+        }
+        sTestMoveAnimState = PC_TEST_MOVE_ANIM_WAITING;
+        if (!sTestMoveAnimContest && sTestBattleState == PC_TEST_BATTLE_DISABLED)
+        {
+            sTestBattleFrame = 60;
+            sTestBattleState = PC_TEST_BATTLE_WAITING;
+        }
+    }
+    if (getenv("POKEEMERALD_PC_TEST_CONTEST_RESULTS") != NULL)
+        sTestContestResultsState = PC_TEST_CONTEST_RESULTS_WAITING;
     sTestTrainerIdReportPending = getenv("POKEEMERALD_PC_TEST_REPORT_ID") != NULL;
     sFrameCounter = 0;
     sTimer1StartNs = 0;
@@ -717,6 +778,10 @@ void PcPlatformWaitForFrame(void)
               && elapsed % event->period < event->duration)
             keys |= event->keys;
     }
+    if (sTestMoveAnimState == PC_TEST_MOVE_ANIM_RUNNING
+     || (sTestMoveAnimState != PC_TEST_MOVE_ANIM_DISABLED
+      && sTestBattleState >= PC_TEST_BATTLE_REQUESTED))
+        keys = 0;
     sFrameCounter++;
     REG_KEYINPUT = (u16)(KEYS_MASK & ~keys);
     PcDmaRunVBlank();
@@ -786,6 +851,180 @@ void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)
         sShared->audio[index * 2 + 1] = samples[i * 2 + 1];
     }
     __atomic_store_n(&sShared->audioWrite, write + frameCount, __ATOMIC_RELEASE);
+}
+
+static void StartTestMoveAnimation(void)
+{
+    u8 target = gBattleMoves[sTestMoveAnimId].target;
+
+    if (!CheckHeap())
+    {
+        fprintf(stderr, "PC move animation test: heap corruption before move=%u turn=%u\n",
+                sTestMoveAnimId,
+                sTestMoveAnimTurn);
+        PcPlatformShutdown();
+        exit(3);
+    }
+
+    if (sTestMoveAnimContest)
+    {
+        PcContestPrepareMoveAnim(sTestMoveAnimId, sTestMoveAnimTurn != 0);
+    }
+    else
+    {
+        gBattlerAttacker = B_POSITION_PLAYER_LEFT;
+        if (target == MOVE_TARGET_USER || target == MOVE_TARGET_USER_OR_SELECTED)
+            gBattlerTarget = B_POSITION_PLAYER_LEFT;
+        else
+            gBattlerTarget = B_POSITION_OPPONENT_LEFT;
+        gAnimMoveTurn = sTestMoveAnimTurn;
+        gAnimMovePower = gBattleMoves[sTestMoveAnimId].power;
+        gAnimMoveDmg = 50;
+        gAnimFriendship = 128;
+        gWeatherMoveAnim = 0;
+        gAnimDisableStructPtr = &gDisableStructs[gBattlerAttacker];
+    }
+    gActiveBattler = gBattlerAttacker;
+    sTestMoveAnimStartFrame = sFrameCounter;
+    fprintf(stderr, "PC move animation test: move=%u turn=%u\n",
+            sTestMoveAnimId,
+            sTestMoveAnimTurn);
+    DoMoveAnim(sTestMoveAnimId);
+}
+
+static void SetupTestContest(void)
+{
+    ZeroPlayerPartyMons();
+    CreateMon(&gPlayerParty[0], SPECIES_TREECKO, 16, 31, FALSE, 0,
+              OT_ID_PLAYER_ID, 0);
+    SetMonMoveSlot(&gPlayerParty[0], MOVE_POUND, 0);
+    CalculatePlayerPartyCount();
+    gLinkContestFlags = 0;
+    gContestPlayerMonIndex = CONTESTANT_COUNT - 1;
+    gContestMonPartyIndex = 0;
+    gSpecialVar_ContestCategory = CONTEST_CATEGORY_COOL;
+    gSpecialVar_ContestRank = CONTEST_RANK_NORMAL;
+    SetContestants(gSpecialVar_ContestCategory, gSpecialVar_ContestRank);
+    CreateContestMonFromParty(gContestMonPartyIndex);
+}
+
+static void RunTestMoveAnimations(void)
+{
+    if (sTestMoveAnimState == PC_TEST_MOVE_ANIM_DISABLED)
+        return;
+
+    if (sTestMoveAnimState == PC_TEST_MOVE_ANIM_WAITING)
+    {
+        if (sTestMoveAnimContest)
+        {
+            if (!sTestMoveAnimSceneRequested)
+            {
+                if (sFrameCounter < 60
+                 || gMain.callback2 != CB2_Overworld
+                 || gMain.inBattle)
+                    return;
+
+                SetupTestContest();
+                CalculateRound1Points(gSpecialVar_ContestCategory);
+                CleanupOverworldWindowsAndTilemaps();
+                gMain.state = 0;
+                SetMainCallback2(CB2_StartContest);
+                sTestMoveAnimSceneRequested = TRUE;
+                fprintf(stderr, "PC move animation test: contest requested at frame %u\n",
+                        sFrameCounter);
+                return;
+            }
+
+            if (!CheckHeap())
+            {
+                fprintf(stderr, "PC move animation test: heap corruption before contest move at frame %u\n",
+                        sFrameCounter);
+                PcPlatformShutdown();
+                exit(3);
+            }
+
+            if (gContestResources == NULL || !gAnimScriptActive)
+                return;
+
+            // The first appeal establishes the contest sprites and buffers. Its
+            // move script has not run yet, so replace the contest task here.
+            ResetTasks();
+            gAnimScriptActive = FALSE;
+            gMain.callback1 = NULL;
+            sTestMoveAnimId = sTestMoveAnimFirstId;
+            sTestMoveAnimTurn = 0;
+            sTestMoveAnimState = PC_TEST_MOVE_ANIM_RUNNING;
+            StartTestMoveAnimation();
+            return;
+        }
+
+        u8 attackerSpriteId = gBattlerSpriteIds[B_POSITION_PLAYER_LEFT];
+        u8 targetSpriteId = gBattlerSpriteIds[B_POSITION_OPPONENT_LEFT];
+        u8 attackerPartnerSpriteId = gBattlerSpriteIds[B_POSITION_PLAYER_RIGHT];
+        u8 targetPartnerSpriteId = gBattlerSpriteIds[B_POSITION_OPPONENT_RIGHT];
+
+        if (sTestBattleState != PC_TEST_BATTLE_ENTERED
+         || sFrameCounter < sTestMoveAnimReadyFrame
+         || attackerSpriteId >= MAX_SPRITES
+         || targetSpriteId >= MAX_SPRITES
+         || !gSprites[attackerSpriteId].inUse
+         || !gSprites[targetSpriteId].inUse
+         || (sTestMoveAnimDouble
+          && (attackerPartnerSpriteId >= MAX_SPRITES
+           || targetPartnerSpriteId >= MAX_SPRITES
+           || !gSprites[attackerPartnerSpriteId].inUse
+           || !gSprites[targetPartnerSpriteId].inUse)))
+            return;
+
+        gMain.callback1 = NULL;
+        sTestMoveAnimId = sTestMoveAnimFirstId;
+        sTestMoveAnimTurn = 0;
+        sTestMoveAnimState = PC_TEST_MOVE_ANIM_RUNNING;
+        StartTestMoveAnimation();
+        return;
+    }
+
+    if (gAnimScriptActive)
+    {
+        gAnimScriptCallback();
+        if (gAnimScriptActive
+         && sFrameCounter - sTestMoveAnimStartFrame > TEST_MOVE_ANIM_TIMEOUT)
+        {
+            fprintf(stderr, "PC move animation test: timeout move=%u turn=%u after %u frames\n",
+                    sTestMoveAnimId,
+                    sTestMoveAnimTurn,
+                    TEST_MOVE_ANIM_TIMEOUT);
+            PcPlatformShutdown();
+            exit(2);
+        }
+        return;
+    }
+
+    if (++sTestMoveAnimId >= MOVES_COUNT)
+    {
+        sTestMoveAnimId = sTestMoveAnimFirstId;
+        u8 turnCount = sTestMoveAnimDouble
+                     ? 1
+                     : sTestMoveAnimContest
+                     ? TEST_CONTEST_MOVE_ANIM_TURN_COUNT
+                     : TEST_MOVE_ANIM_TURN_COUNT;
+
+        if (++sTestMoveAnimTurn >= turnCount)
+        {
+            if (!CheckHeap())
+            {
+                fprintf(stderr, "PC move animation test: heap corruption after final move\n");
+                PcPlatformShutdown();
+                exit(3);
+            }
+            fprintf(stderr, "PC move animation test: %u moves passed for %u turn values\n",
+                    MOVES_COUNT - sTestMoveAnimFirstId,
+                    turnCount);
+            PcPlatformShutdown();
+            exit(0);
+        }
+    }
+    StartTestMoveAnimation();
 }
 
 void PcPlatformRunTestHooks(void)
@@ -926,9 +1165,16 @@ void PcPlatformRunTestHooks(void)
         ZeroEnemyPartyMons();
         CreateMon(&gPlayerParty[0], SPECIES_TREECKO, 16, 31, FALSE, 0, OT_ID_PLAYER_ID, 0);
         CreateMon(&gEnemyParty[0], SPECIES_WINGULL, 2, 0, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
+        if (sTestMoveAnimDouble)
+        {
+            CreateMon(&gPlayerParty[1], SPECIES_TORCHIC, 16, 31, FALSE, 0, OT_ID_PLAYER_ID, 0);
+            CreateMon(&gEnemyParty[1], SPECIES_LOTAD, 2, 0, FALSE, 0, OT_ID_RANDOM_NO_SHINY, 0);
+        }
         SetMonMoveSlot(&gPlayerParty[0], MOVE_POUND, 0);
         CalculatePlayerPartyCount();
         BattleSetup_StartWildBattle();
+        if (sTestMoveAnimDouble)
+            gBattleTypeFlags |= BATTLE_TYPE_DOUBLE;
         sTestBattleState = PC_TEST_BATTLE_REQUESTED;
         __atomic_store_n(&sShared->testBattleState, sTestBattleState, __ATOMIC_RELEASE);
         fprintf(stderr, "PC battle test: wild battle requested at frame %u\n", sFrameCounter);
@@ -936,6 +1182,8 @@ void PcPlatformRunTestHooks(void)
     else if (sTestBattleState == PC_TEST_BATTLE_REQUESTED && gMain.inBattle)
     {
         sTestBattleState = PC_TEST_BATTLE_ENTERED;
+        if (sTestMoveAnimState == PC_TEST_MOVE_ANIM_WAITING)
+            sTestMoveAnimReadyFrame = sFrameCounter + TEST_MOVE_ANIM_READY_DELAY;
         __atomic_store_n(&sShared->testBattleState, sTestBattleState, __ATOMIC_RELEASE);
         fprintf(stderr, "PC battle test: entered battle at frame %u\n", sFrameCounter);
     }
@@ -947,6 +1195,48 @@ void PcPlatformRunTestHooks(void)
         fprintf(stderr, "PC battle test: returned from battle at frame %u with outcome %u\n",
                 sFrameCounter,
                 gBattleOutcome);
+    }
+
+    RunTestMoveAnimations();
+
+    if (sTestContestResultsState == PC_TEST_CONTEST_RESULTS_WAITING)
+    {
+        if (sFrameCounter >= 60 && gMain.callback2 == CB2_Overworld && !gMain.inBattle)
+        {
+            u8 i;
+
+            SetupTestContest();
+            for (i = 0; i < CONTESTANT_COUNT; i++)
+            {
+                gContestMonRound1Points[i] = (CONTESTANT_COUNT - i) * 100;
+                gContestMonRound2Points[i] = 0;
+                gContestMonTotalPoints[i] = gContestMonRound1Points[i];
+                gContestFinalStandings[i] = i;
+            }
+            ShowContestResults();
+            sTestContestResultsState = PC_TEST_CONTEST_RESULTS_REQUESTED;
+            fprintf(stderr, "PC contest results test: requested at frame %u\n", sFrameCounter);
+        }
+    }
+    else if (sTestContestResultsState == PC_TEST_CONTEST_RESULTS_REQUESTED)
+    {
+        if (gMain.callback2 != CB2_Overworld)
+            sTestContestResultsState = PC_TEST_CONTEST_RESULTS_ENTERED;
+    }
+    else if (sTestContestResultsState == PC_TEST_CONTEST_RESULTS_ENTERED
+          && gMain.callback2 == CB2_Overworld
+          && !gPaletteFade.active)
+    {
+        if (!CheckHeap())
+        {
+            fprintf(stderr, "PC contest results test: heap corruption after return\n");
+            PcPlatformShutdown();
+            exit(3);
+        }
+        fprintf(stderr, "PC contest results test: returned successfully at frame %u\n",
+                sFrameCounter);
+        PcPlatformShutdown();
+        exit(0);
     }
 }
 

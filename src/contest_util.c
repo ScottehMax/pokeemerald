@@ -1039,7 +1039,11 @@ static void Task_EndShowContestResults(u8 taskId)
     {
         if (gTasks[taskId].tTimer == 0)
         {
+            u8 flashTaskId = FindTaskIdByFunc(Task_FlashStarsAndHearts);
+
             DestroyTask(sContestResults->data->highlightWinnerTaskId);
+            if (flashTaskId != TASK_NONE)
+                DestroyTask(flashTaskId);
             BlendPalettes(PALETTES_BG, 16, RGB_BLACK);
             gTasks[taskId].tTimer++;
         }

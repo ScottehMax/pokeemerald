@@ -698,9 +698,10 @@ u32 PcLinkMain(u16 *sendCmd, u16 (*recvCmds)[CMD_LENGTH])
     u16 frameCommands[CMD_LENGTH];
     bool32 receivedFrame = FALSE;
 
-    memset(recvCmds, 0, sizeof(u16) * MAX_RFU_PLAYERS * CMD_LENGTH);
+    // Local minigames use gRecvCmds to stage simulated player input.
     if (sLink.state == PC_LINK_STATE_IDLE)
         return 0;
+    memset(recvCmds, 0, sizeof(u16) * MAX_RFU_PLAYERS * CMD_LENGTH);
     if (sLink.state != PC_LINK_STATE_IDLE && sLink.state != PC_LINK_STATE_ERROR)
         ReceivePackets(now);
 

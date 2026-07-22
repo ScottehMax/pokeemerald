@@ -2904,6 +2904,9 @@ static void CB2_CheckPlayAgainLink(void)
                 FreeAllWindowBuffers();
                 UnsetBgTilemapBuffer(2);
                 UnsetBgTilemapBuffer(1);
+#if PLATFORM_PC
+                SetVBlankCallback(NULL);
+#endif
                 FREE_AND_SET_NULL(sBerryBlender);
                 SetMainCallback2(DoBerryBlending);
             }
@@ -2924,12 +2927,19 @@ static void CB2_CheckPlayAgainLink(void)
     case 12:
         if (!gReceivedRemoteLinkPlayers)
         {
+#if PLATFORM_PC
+            SetVBlankCallback(NULL);
+#endif
             FREE_AND_SET_NULL(sBerryBlender);
             SetMainCallback2(CB2_ReturnToFieldContinueScriptPlayMapMusic);
         }
         break;
     }
 
+#if PLATFORM_PC
+    if (sBerryBlender == NULL)
+        return;
+#endif
     ProcessLinkPlayerCmds();
     Blender_DummiedOutFunc(sBerryBlender->bg_X, sBerryBlender->bg_Y);
     RunTasks();
@@ -2980,11 +2990,18 @@ static void CB2_CheckPlayAgainLocal(void)
             FreeAllWindowBuffers();
             UnsetBgTilemapBuffer(2);
             UnsetBgTilemapBuffer(1);
+#if PLATFORM_PC
+            SetVBlankCallback(NULL);
+#endif
             FREE_AND_SET_NULL(sBerryBlender);
         }
         break;
     }
 
+#if PLATFORM_PC
+    if (sBerryBlender == NULL)
+        return;
+#endif
     ProcessLinkPlayerCmds();
     Blender_DummiedOutFunc(sBerryBlender->bg_X, sBerryBlender->bg_Y);
     RunTasks();

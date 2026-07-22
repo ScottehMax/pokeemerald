@@ -624,7 +624,8 @@ static void AnimTask_SpiteTargetShadow_Step1(u8 taskId)
                 gSprites[task->data[0]].oam.paletteNum = task->data[14];
                 gSprites[task->data[0]].oam.objMode = ST_OAM_OBJ_NORMAL;
                 gSprites[task->data[0]].oam.priority = 3;
-                gSprites[task->data[0]].invisible = (gBattleSpritesDataPtr->battlerData[gBattleAnimTarget].invisible);
+                if (!IsContest())
+                    gSprites[task->data[0]].invisible = gBattleSpritesDataPtr->battlerData[gBattleAnimTarget].invisible;
                 task->data[1] = 0;
                 task->data[2] = 0;
                 task->data[3] = 16;

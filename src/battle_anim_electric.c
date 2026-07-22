@@ -658,7 +658,13 @@ static void AnimSparkElectricityFlashing_Step(struct Sprite *sprite)
     sprite->y2 = Cos(sprite->data[7], sprite->data[5]);
 
     sprite->data[7] = (sprite->data[7] + sprite->data[6]) & 0xFF;
+#if PLATFORM_PC
+    // agbcc's __modsi3 returns 0 when the divisor is 0. Spark relies on this
+    // to toggle every frame, while native x86 division raises an exception.
+    if (sprite->data[4] == 0 || sprite->data[7] % sprite->data[4] == 0)
+#else
     if (sprite->data[7] % sprite->data[4] == 0)
+#endif
         sprite->invisible ^= TRUE;
 
     if (sprite->data[0]-- <= 0)
