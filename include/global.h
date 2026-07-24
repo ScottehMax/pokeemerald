@@ -12,6 +12,7 @@
 #endif
 #include "config.h" // we need to define config before gba headers as print stuff needs the functions nulled before defines.
 #include "gba/gba.h"
+#include "asset.h"
 #include "gametypes.h"
 #include "constants/global.h"
 #include "constants/flags.h"
@@ -125,13 +126,21 @@
 #define T1_READ_8(ptr)  ((ptr)[0])
 #define T1_READ_16(ptr) ((ptr)[0] | ((ptr)[1] << 8))
 #define T1_READ_32(ptr) ((ptr)[0] | ((ptr)[1] << 8) | ((ptr)[2] << 16) | ((ptr)[3] << 24))
+#if PLATFORM_RELATIVE_POINTERS
+#define T1_READ_PTR(ptr) (T1_READ_32(ptr) == 0 ? NULL : (u8 *)(ptr) + (s32)T1_READ_32(ptr))
+#else
 #define T1_READ_PTR(ptr) (u8 *) T1_READ_32(ptr)
+#endif
 
 // T2_READ_8 is a duplicate to remain consistent with each group.
 #define T2_READ_8(ptr)  ((ptr)[0])
 #define T2_READ_16(ptr) ((ptr)[0] + ((ptr)[1] << 8))
 #define T2_READ_32(ptr) ((ptr)[0] + ((ptr)[1] << 8) + ((ptr)[2] << 16) + ((ptr)[3] << 24))
+#if PLATFORM_RELATIVE_POINTERS
+#define T2_READ_PTR(ptr) (T2_READ_32(ptr) == 0 ? NULL : (u8 *)(ptr) + (s32)T2_READ_32(ptr))
+#else
 #define T2_READ_PTR(ptr) (void *) T2_READ_32(ptr)
+#endif
 
 #define PACK(data, shift, mask)   ( ((data) << (shift)) & (mask) )
 #define UNPACK(data, shift, mask) ( ((data) & (mask)) >> (shift) )

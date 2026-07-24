@@ -2,6 +2,7 @@
 #define GUARD_CONSTANTS_TMS_HMS_INC
 
 #include "constants/tms_hms.h"
+#include "constants/items.h"
 
 /* Expands to:
 * enum_start ITEM_TM01

@@ -52,7 +52,7 @@
 #include "constants/songs.h"
 #include "constants/trainers.h"
 
-extern const u8 *const gBattleScriptsForMoveEffects[];
+extern const AssetPtr gBattleScriptsForMoveEffects[];
 
 #define DEFENDER_IS_PROTECTED ((gProtectStructs[gBattlerTarget].protected) && (gBattleMoves[gCurrentMove].flags & FLAG_PROTECT_AFFECTED))
 
@@ -4489,7 +4489,7 @@ static void Cmd_moveend(void)
                     gHitMarker |= HITMARKER_NO_ATTACKSTRING;
                     gBattleScripting.moveendState = 0;
                     MoveValuesCleanUp();
-                    BattleScriptPush(gBattleScriptsForMoveEffects[gBattleMoves[gCurrentMove].effect]);
+                    BattleScriptPush(ASSET_TABLE_ENTRY(const u8 *, gBattleScriptsForMoveEffects, gBattleMoves[gCurrentMove].effect));
                     gBattlescriptCurrInstr = BattleScript_FlushMessageBox;
                     return;
                 }
@@ -5765,7 +5765,7 @@ static void Cmd_jumptocalledmove(void)
     else
         gChosenMove = gCurrentMove = gCalledMove;
 
-    gBattlescriptCurrInstr = gBattleScriptsForMoveEffects[gBattleMoves[gCurrentMove].effect];
+    gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattleScriptsForMoveEffects, gBattleMoves[gCurrentMove].effect);
 }
 
 static void Cmd_statusanimation(void)
@@ -6679,7 +6679,7 @@ static void Cmd_trymirrormove(void)
         gHitMarker &= ~HITMARKER_ATTACKSTRING_PRINTED;
         gCurrentMove = move;
         gBattlerTarget = GetMoveTarget(gCurrentMove, NO_TARGET_OVERRIDE);
-        gBattlescriptCurrInstr = gBattleScriptsForMoveEffects[gBattleMoves[gCurrentMove].effect];
+        gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattleScriptsForMoveEffects, gBattleMoves[gCurrentMove].effect);
     }
     else if (validMovesCount != 0)
     {
@@ -6687,7 +6687,7 @@ static void Cmd_trymirrormove(void)
         i = Random() % validMovesCount;
         gCurrentMove = validMoves[i];
         gBattlerTarget = GetMoveTarget(gCurrentMove, NO_TARGET_OVERRIDE);
-        gBattlescriptCurrInstr = gBattleScriptsForMoveEffects[gBattleMoves[gCurrentMove].effect];
+        gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattleScriptsForMoveEffects, gBattleMoves[gCurrentMove].effect);
     }
     else // no valid moves found
     {
@@ -7934,7 +7934,7 @@ static void Cmd_metronome(void)
         if (sMovesForbiddenToCopy[i] == METRONOME_FORBIDDEN_END)
         {
             gHitMarker &= ~HITMARKER_ATTACKSTRING_PRINTED;
-            gBattlescriptCurrInstr = gBattleScriptsForMoveEffects[gBattleMoves[gCurrentMove].effect];
+            gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattleScriptsForMoveEffects, gBattleMoves[gCurrentMove].effect);
             gBattlerTarget = GetMoveTarget(gCurrentMove, NO_TARGET_OVERRIDE);
             return;
         }
@@ -9129,7 +9129,7 @@ static void Cmd_callenvironmentattack(void)
     gHitMarker &= ~HITMARKER_ATTACKSTRING_PRINTED;
     gCurrentMove = sNaturePowerMoves[gBattleEnvironment];
     gBattlerTarget = GetMoveTarget(gCurrentMove, NO_TARGET_OVERRIDE);
-    BattleScriptPush(gBattleScriptsForMoveEffects[gBattleMoves[gCurrentMove].effect]);
+    BattleScriptPush(ASSET_TABLE_ENTRY(const u8 *, gBattleScriptsForMoveEffects, gBattleMoves[gCurrentMove].effect));
     gBattlescriptCurrInstr++;
 }
 

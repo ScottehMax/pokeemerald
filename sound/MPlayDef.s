@@ -1,3 +1,36 @@
+	.macro asset_ptr_align
+	.align 2
+	.endm
+
+	.macro asset_ptr value:req
+	.ifdef PLATFORM_RELATIVE_POINTERS
+	.ifdef PLATFORM_AARCH64
+	.reloc ., R_AARCH64_PREL32, \value
+	.else
+	.ifdef PLATFORM_X86_64
+	.reloc ., R_X86_64_PC32, \value
+	.else
+	.ifdef PLATFORM_X86
+	.reloc ., R_386_PC32, \value
+	.else
+	.ifdef PLATFORM_ARM
+	.reloc ., R_ARM_REL32, \value
+	.else
+	.error "relative asset pointers are unsupported on this architecture"
+	.endif
+	.endif
+	.endif
+	.endif
+	.4byte 0
+	.else
+	.4byte \value
+	.endif
+	.endm
+
+	.macro script_ptr value:req
+	asset_ptr \value
+	.endm
+
 	.equ	W00,	0x80		@ WAIT
 	.equ	W01,	W00+1		@
 	.equ	W02,	W00+2		@

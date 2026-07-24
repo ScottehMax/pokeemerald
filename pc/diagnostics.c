@@ -12,7 +12,9 @@
 #define NOMINMAX
 #include <windows.h>
 #else
+#include <dlfcn.h>
 #include <signal.h>
+#include <sys/syscall.h>
 #include <ucontext.h>
 #include <unistd.h>
 #endif
@@ -30,6 +32,15 @@ static uintptr_t sStackLow;
 static uintptr_t sStackHigh;
 static uintptr_t sTextLow;
 static uintptr_t sTextHigh;
+
+static u32 GetDiagnosticThreadId(void)
+{
+#ifdef _WIN32
+    return GetCurrentThreadId();
+#else
+    return (u32)syscall(SYS_gettid);
+#endif
+}
 
 static void AddBreadcrumb(u32 kind, u32 id, const void *address)
 {
@@ -96,18 +107,40 @@ static void FindMemoryBounds(void)
 #else
     FILE *maps = fopen("/proc/self/maps", "r");
     char line[256];
+#if PLATFORM_ANDROID
+    uintptr_t code = (uintptr_t)&FindMemoryBounds;
+#else
     extern char _start;
     extern char etext;
 
     sTextLow = (uintptr_t)&_start;
     sTextHigh = (uintptr_t)&etext;
+#endif
     if (maps != NULL)
     {
         while (fgets(line, sizeof(line), maps) != NULL)
         {
             unsigned long low;
             unsigned long high;
+#if PLATFORM_ANDROID
+            char permissions[5];
 
+            if (sscanf(line, "%lx-%lx %4s", &low, &high, permissions) == 3)
+            {
+                if (marker >= low && marker < high)
+                {
+                    sStackLow = low;
+                    sStackHigh = high;
+                }
+                if (code >= low && code < high && strchr(permissions, 'x') != NULL)
+                {
+                    sTextLow = low;
+                    sTextHigh = high;
+                }
+                if (sStackLow != 0 && sTextLow != 0)
+                    break;
+            }
+#else
             if (sscanf(line, "%lx-%lx", &low, &high) == 2
              && marker >= low && marker < high)
             {
@@ -115,6 +148,7 @@ static void FindMemoryBounds(void)
                 sStackHigh = high;
                 break;
             }
+#endif
         }
         fclose(maps);
     }
@@ -134,6 +168,7 @@ void PcDiagnosticsInit(struct PcSharedState *shared)
     memset(&sShared->crash, 0, sizeof(sShared->crash));
     sShared->diagnostics.currentTaskId = UINT32_MAX;
     sShared->diagnostics.currentSpriteId = UINT32_MAX;
+    sShared->diagnostics.gameThreadId = GetDiagnosticThreadId();
     FindMemoryBounds();
 }
 
@@ -164,6 +199,21 @@ void PcDiagnosticsFrame(void)
         state->mapNum = gSaveBlock1Ptr->location.mapNum;
         state->mapX = gSaveBlock1Ptr->pos.x;
         state->mapY = gSaveBlock1Ptr->pos.y;
+    }
+}
+
+void PcDiagnosticsSetPhase(u32 phase)
+{
+    if (sShared != NULL)
+        sShared->diagnostics.phase = phase;
+}
+
+void PcDiagnosticsSetRenderProgress(u32 scanline, u32 stage)
+{
+    if (sShared != NULL)
+    {
+        sShared->diagnostics.renderScanline = scanline;
+        sShared->diagnostics.renderStage = stage;
     }
 }
 
@@ -272,9 +322,36 @@ void PcDiagnosticsInvalidCallback(u32 kind, u32 id, const void *callback)
 #endif
 }
 
-static void CaptureStack(struct PcCrashRecord *crash, uintptr_t instruction, uintptr_t frame)
+static void CaptureStack(struct PcCrashRecord *crash,
+                         uintptr_t instruction,
+                         uintptr_t link,
+                         uintptr_t frame,
+                         uintptr_t stack)
 {
     crash->stackFrames[crash->stackFrameCount++] = instruction;
+#if PLATFORM_ANDROID && defined(__aarch64__)
+    if (link != 0 && link != instruction)
+        crash->stackFrames[crash->stackFrameCount++] = link;
+    while (crash->stackFrameCount < PC_DIAGNOSTIC_STACK_FRAMES
+        && frame >= stack
+        && frame - stack <= 1024 * 1024 - 2 * sizeof(uintptr_t)
+        && (frame & (sizeof(uintptr_t) - 1)) == 0)
+    {
+        const uintptr_t *words = (const uintptr_t *)frame;
+        uintptr_t next = words[0];
+        uintptr_t address = words[1];
+
+        if (address == 0)
+            break;
+        if (crash->stackFrames[crash->stackFrameCount - 1] != address)
+            crash->stackFrames[crash->stackFrameCount++] = address;
+        if (next <= frame || next - frame > 1024 * 1024)
+            break;
+        frame = next;
+    }
+#else
+    (void)link;
+    (void)stack;
     while (crash->stackFrameCount < PC_DIAGNOSTIC_STACK_FRAMES
         && frame >= sStackLow
         && frame <= sStackHigh - 2 * sizeof(uintptr_t)
@@ -286,18 +363,22 @@ static void CaptureStack(struct PcCrashRecord *crash, uintptr_t instruction, uin
 
         if (address < sTextLow || address >= sTextHigh)
             break;
-        crash->stackFrames[crash->stackFrameCount++] = address;
+        if (crash->stackFrames[crash->stackFrameCount - 1] != address)
+            crash->stackFrames[crash->stackFrameCount++] = address;
         if (next <= frame || next - frame > 1024 * 1024)
             break;
         frame = next;
     }
+#endif
 }
 
 bool32 PcDiagnosticsCaptureCrash(u32 code, const void *nativeInfo, const void *nativeContext)
 {
     struct PcCrashRecord *crash;
     uintptr_t instruction;
+    uintptr_t link;
     uintptr_t frame;
+    uintptr_t stack;
 
     if (sShared == NULL)
         return FALSE;
@@ -306,6 +387,7 @@ bool32 PcDiagnosticsCaptureCrash(u32 code, const void *nativeInfo, const void *n
     crash->magic = PC_CRASH_MAGIC;
     crash->version = PC_CRASH_VERSION;
     crash->code = code;
+    crash->threadId = GetDiagnosticThreadId();
 
 #ifdef _WIN32
     {
@@ -315,7 +397,9 @@ bool32 PcDiagnosticsCaptureCrash(u32 code, const void *nativeInfo, const void *n
         (void)nativeContext;
 
         instruction = context->Eip;
+        link = 0;
         frame = context->Ebp;
+        stack = context->Esp;
         crash->faultAddress = 0;
         if (exception->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION
          && exception->ExceptionRecord->NumberParameters >= 2)
@@ -344,13 +428,16 @@ bool32 PcDiagnosticsCaptureCrash(u32 code, const void *nativeInfo, const void *n
         const ucontext_t *context = nativeContext;
 
         instruction = 0;
+        link = 0;
         frame = 0;
+        stack = 0;
         crash->faultAddress = 0;
         if (code == SIGSEGV || code == SIGBUS)
             crash->faultAddress = (uintptr_t)info->si_addr;
 #if defined(__i386__) && defined(REG_EIP)
         instruction = context->uc_mcontext.gregs[REG_EIP];
         frame = context->uc_mcontext.gregs[REG_EBP];
+        stack = context->uc_mcontext.gregs[REG_ESP];
         crash->eax = context->uc_mcontext.gregs[REG_EAX];
         crash->ebx = context->uc_mcontext.gregs[REG_EBX];
         crash->ecx = context->uc_mcontext.gregs[REG_ECX];
@@ -368,12 +455,61 @@ bool32 PcDiagnosticsCaptureCrash(u32 code, const void *nativeInfo, const void *n
                           : (error & (1 << 1)) ? PC_CRASH_ACCESS_WRITE
                                                : PC_CRASH_ACCESS_READ;
         }
+#elif defined(__x86_64__) && defined(REG_RIP)
+        instruction = context->uc_mcontext.gregs[REG_RIP];
+        frame = context->uc_mcontext.gregs[REG_RBP];
+        stack = context->uc_mcontext.gregs[REG_RSP];
+        crash->eax = context->uc_mcontext.gregs[REG_RAX];
+        crash->ebx = context->uc_mcontext.gregs[REG_RBX];
+        crash->ecx = context->uc_mcontext.gregs[REG_RCX];
+        crash->edx = context->uc_mcontext.gregs[REG_RDX];
+        crash->esi = context->uc_mcontext.gregs[REG_RSI];
+        crash->edi = context->uc_mcontext.gregs[REG_RDI];
+        crash->ebp = context->uc_mcontext.gregs[REG_RBP];
+        crash->esp = context->uc_mcontext.gregs[REG_RSP];
+        crash->eflags = context->uc_mcontext.gregs[REG_EFL];
+        if (code == SIGSEGV || code == SIGBUS)
+        {
+            u32 error = context->uc_mcontext.gregs[REG_ERR];
+
+            crash->access = (error & (1 << 4)) ? PC_CRASH_ACCESS_EXECUTE
+                          : (error & (1 << 1)) ? PC_CRASH_ACCESS_WRITE
+                                               : PC_CRASH_ACCESS_READ;
+        }
+#elif defined(__aarch64__)
+        instruction = context->uc_mcontext.pc;
+        link = context->uc_mcontext.regs[30];
+        frame = context->uc_mcontext.regs[29];
+        stack = context->uc_mcontext.sp;
+        crash->eax = context->uc_mcontext.regs[0];
+        crash->ebx = context->uc_mcontext.regs[1];
+        crash->ecx = context->uc_mcontext.regs[2];
+        crash->edx = context->uc_mcontext.regs[3];
+        crash->esi = context->uc_mcontext.regs[4];
+        crash->edi = context->uc_mcontext.regs[5];
+        crash->ebp = context->uc_mcontext.regs[29];
+        crash->esp = context->uc_mcontext.sp;
+        crash->link = context->uc_mcontext.regs[30];
+        crash->eflags = context->uc_mcontext.pstate;
 #endif
     }
 #endif
 
+#if PLATFORM_ANDROID
+    {
+        Dl_info module;
+
+        if (dladdr((const void *)instruction, &module) != 0 && module.dli_fbase != NULL)
+        {
+            crash->nativeModuleBase = (uintptr_t)module.dli_fbase;
+            if (module.dli_fname != NULL)
+                snprintf(crash->nativeModule, sizeof(crash->nativeModule), "%s", module.dli_fname);
+        }
+    }
+#endif
+
     crash->instruction = instruction;
-    CaptureStack(crash, instruction, frame);
+    CaptureStack(crash, instruction, link, frame, stack);
     __atomic_store_n(&crash->complete, 1, __ATOMIC_RELEASE);
     return TRUE;
 }

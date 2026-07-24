@@ -50,19 +50,25 @@ static u8 ReadTrackByte(struct MusicPlayerTrack *track)
 
 static u8 *ReadTrackPointer(struct MusicPlayerTrack *track)
 {
+    u8 *operand = track->cmdPtr;
     u32 address;
 
     memcpy(&address, track->cmdPtr, sizeof(address));
     track->cmdPtr += sizeof(address);
+#if PLATFORM_RELATIVE_POINTERS
+    if (address == 0)
+        return NULL;
+    return operand + (s32)address;
+#else
     return (u8 *)(uintptr_t)address;
+#endif
 }
 
-static u8 *ReadToneSplitTable(const struct ToneData *tone)
+static u8 *ReadToneSplitTable(const struct ToneDataAsset *tone)
 {
-    u8 *table;
+    const AssetPtr *pointer = (const AssetPtr *)&tone->attack;
 
-    memcpy(&table, &tone->attack, sizeof(table));
-    return table;
+    return ASSET_POINTER(u8 *, pointer);
 }
 
 static bool32 ChannelIsOn(const struct SoundChannel *channel)
@@ -225,7 +231,20 @@ void ply_voice(struct MusicPlayerInfo *mplayInfo, struct MusicPlayerTrack *track
 {
     u8 voice = ReadTrackByte(track);
 
+#if PLATFORM_RELATIVE_POINTERS
+    if (mplayInfo->toneAssets != NULL)
+    {
+        track->toneAsset = &mplayInfo->toneAssets[voice];
+        DecodeToneDataAsset(&track->tone, track->toneAsset);
+    }
+    else
+    {
+        track->toneAsset = NULL;
+        track->tone = mplayInfo->tone[voice];
+    }
+#else
     track->tone = mplayInfo->tone[voice];
+#endif
 }
 
 void ply_vol(struct MusicPlayerInfo *mplayInfo, struct MusicPlayerTrack *track)
@@ -394,6 +413,9 @@ void ply_note(u32 noteCommand,
 {
     struct SoundChannel *channel;
     struct ToneData *tone = &track->tone;
+#if PLATFORM_RELATIVE_POINTERS
+    struct ToneData nestedTone;
+#endif
     u8 finalKey;
     u8 cgbType;
     u8 priority;
@@ -419,12 +441,25 @@ void ply_note(u32 noteCommand,
 
         if (tone->type & TONEDATA_TYPE_SPL)
         {
-            u8 *splitTable = ReadToneSplitTable(tone);
+#if PLATFORM_RELATIVE_POINTERS
+            u8 *splitTable;
+
+            if (track->toneAsset == NULL)
+                return;
+            splitTable = ReadToneSplitTable(track->toneAsset);
+#else
+            u8 *splitTable = ReadToneSplitTable((const struct ToneDataAsset *)tone);
+#endif
             if (splitTable == NULL)
                 return;
             index = splitTable[index];
         }
+#if PLATFORM_RELATIVE_POINTERS
+        DecodeToneDataAsset(&nestedTone, &((const struct ToneDataAsset *)tone->wav)[index]);
+        tone = &nestedTone;
+#else
         tone = &((struct ToneData *)tone->wav)[index];
+#endif
         if (tone->type & (TONEDATA_TYPE_SPL | TONEDATA_TYPE_RHY))
             return;
         if (track->tone.type & TONEDATA_TYPE_RHY)

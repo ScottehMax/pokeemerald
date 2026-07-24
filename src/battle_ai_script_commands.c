@@ -41,7 +41,7 @@ in order to read the next command correctly. refer to battle_ai_scripts.s for th
 AI scripts.
 */
 
-extern const u8 *const gBattleAI_ScriptsTable[];
+extern const AssetPtr gBattleAI_ScriptsTable[];
 
 static u8 ChooseMoveOrAction_Singles(void);
 static u8 ChooseMoveOrAction_Doubles(void);
@@ -578,7 +578,7 @@ static void BattleAI_DoAIProcessing(void)
             case AIState_DoNotProcess: // Needed to match.
                 break;
             case AIState_SettingUp:
-                gAIScriptPtr = gBattleAI_ScriptsTable[AI_THINKING_STRUCT->aiLogicId]; // set AI ptr to logic ID.
+                gAIScriptPtr = ASSET_TABLE_ENTRY(const u8 *, gBattleAI_ScriptsTable, AI_THINKING_STRUCT->aiLogicId);
                 if (gBattleMons[sBattler_AI].pp[AI_THINKING_STRUCT->movesetIndex] == 0)
                 {
                     AI_THINKING_STRUCT->moveConsidered = 0;

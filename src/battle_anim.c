@@ -26,7 +26,7 @@
 #define ANIM_SPRITE_INDEX_COUNT 8
 
 extern const u16 gMovesWithQuietBGM[];
-extern const u8 *const gBattleAnims_Moves[];
+extern const AssetPtr gBattleAnims_Moves[];
 
 static void Cmd_loadspritegfx(void);
 static void Cmd_unloadspritegfx(void);
@@ -205,7 +205,7 @@ void DoMoveAnim(u16 move)
     LaunchBattleAnimation(gBattleAnims_Moves, move, TRUE);
 }
 
-void LaunchBattleAnimation(const u8 *const animsTable[], u16 tableId, bool8 isMoveAnim)
+void LaunchBattleAnimation(const AssetPtr animsTable[], u16 tableId, bool8 isMoveAnim)
 {
     s32 i;
 
@@ -237,7 +237,7 @@ void LaunchBattleAnimation(const u8 *const animsTable[], u16 tableId, bool8 isMo
 
     sMonAnimTaskIdArray[0] = TASK_NONE;
     sMonAnimTaskIdArray[1] = TASK_NONE;
-    sBattleAnimScriptPtr = animsTable[tableId];
+    sBattleAnimScriptPtr = ASSET_TABLE_ENTRY(const u8 *, animsTable, tableId);
     gAnimScriptActive = TRUE;
     sAnimFramesToWait = 0;
     gAnimScriptCallback = RunAnimScriptCommand;
@@ -366,7 +366,7 @@ static void Cmd_createsprite(void)
     s16 subpriority;
 
     sBattleAnimScriptPtr++;
-    template = (const struct SpriteTemplate *)(T2_READ_32(sBattleAnimScriptPtr));
+    template = (const struct SpriteTemplate *)T2_READ_PTR(sBattleAnimScriptPtr);
     sBattleAnimScriptPtr += 4;
 
     argVar = sBattleAnimScriptPtr[0];
@@ -421,7 +421,7 @@ static void Cmd_createvisualtask(void)
 
     sBattleAnimScriptPtr++;
 
-    taskFunc = (TaskFunc)T2_READ_32(sBattleAnimScriptPtr);
+    taskFunc = (TaskFunc)T2_READ_PTR(sBattleAnimScriptPtr);
     sBattleAnimScriptPtr += 4;
 
     taskPriority = sBattleAnimScriptPtr[0];
@@ -1618,7 +1618,7 @@ static void Cmd_createsoundtask(void)
     s32 i;
 
     sBattleAnimScriptPtr++;
-    func = (TaskFunc)T2_READ_32(sBattleAnimScriptPtr);
+    func = (TaskFunc)T2_READ_PTR(sBattleAnimScriptPtr);
     sBattleAnimScriptPtr += 4;
     numArgs = sBattleAnimScriptPtr[0];
     sBattleAnimScriptPtr++;

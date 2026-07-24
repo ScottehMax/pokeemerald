@@ -10,6 +10,10 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
+#if PLATFORM_ANDROID
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#endif
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -54,6 +58,10 @@
 #define TEST_MOVE_ANIM_TIMEOUT 3600
 #define TEST_MOVE_ANIM_TURN_COUNT 4
 #define TEST_CONTEST_MOVE_ANIM_TURN_COUNT 2
+
+#if !defined(_WIN32) && !defined(MAP_FIXED_NOREPLACE)
+#define MAP_FIXED_NOREPLACE 0x100000
+#endif
 
 enum PcTestBattleState
 {
@@ -141,6 +149,22 @@ static bool8 sTestMoveAnimDouble;
 static bool8 sTestMoveAnimContest;
 static bool8 sTestMoveAnimSceneRequested;
 static enum PcTestContestResultsState sTestContestResultsState;
+#if PLATFORM_ANDROID
+static u64 sAndroidFrameStartNs;
+static u64 sAndroidLastPresentNs;
+#endif
+
+#if PLATFORM_ANDROID
+// Android commonly occupies the GBA's fixed virtual addresses. Keeping the
+// emulated hardware in the low-loaded core preserves 32-bit pointer storage
+// without replacing mappings owned by ART or system libraries.
+ALIGNED(4096) unsigned char gPcEwram[0x40000];
+ALIGNED(4096) unsigned char gPcIwram[0x8000];
+ALIGNED(4096) unsigned char gPcIoRegisters[0x1000];
+ALIGNED(4096) unsigned char gPcPaletteRam[0x1000];
+ALIGNED(4096) unsigned char gPcVram[VRAM_SIZE];
+ALIGNED(4096) unsigned char gPcOam[0x1000];
+#endif
 
 static u64 GetMonotonicNs(void)
 {
@@ -160,6 +184,33 @@ static u64 GetMonotonicNs(void)
     return (u64)now.tv_sec * 1000000000ull + now.tv_nsec;
 #endif
 }
+
+#if PLATFORM_ANDROID
+static u64 GetThreadCpuNs(void)
+{
+    struct timespec now;
+
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now);
+    return (u64)now.tv_sec * 1000000000ull + now.tv_nsec;
+}
+
+static void RecordAndroidPerformanceStall(u32 kind, u32 durationUs, u32 detail)
+{
+    struct PcPerformanceState *performance = &sShared->performance;
+    u32 sequence = __atomic_fetch_add(&performance->stallWrite, 1, __ATOMIC_RELAXED) + 1;
+    struct PcPerformanceStall *stall =
+        &performance->stalls[(sequence - 1) % PC_PERFORMANCE_STALLS];
+
+    __atomic_store_n(&stall->sequence, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&stall->frame,
+                     __atomic_load_n(&sShared->frameSequence, __ATOMIC_ACQUIRE),
+                     __ATOMIC_RELAXED);
+    __atomic_store_n(&stall->kind, kind, __ATOMIC_RELAXED);
+    __atomic_store_n(&stall->durationUs, durationUs, __ATOMIC_RELAXED);
+    __atomic_store_n(&stall->detail, detail, __ATOMIC_RELAXED);
+    __atomic_store_n(&stall->sequence, sequence, __ATOMIC_RELEASE);
+}
+#endif
 
 static void SleepUntil(u64 target)
 {
@@ -189,6 +240,7 @@ static void SleepUntil(u64 target)
 #endif
 }
 
+#if !PLATFORM_ANDROID
 static bool32 MapGbaRegion(uintptr_t address, size_t size)
 {
 #ifdef _WIN32
@@ -200,9 +252,25 @@ static bool32 MapGbaRegion(uintptr_t address, size_t size)
     void *mapping = mmap((void *)address,
                          size,
                          PROT_READ | PROT_WRITE,
-                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
                          -1,
                          0);
+
+    if (mapping == MAP_FAILED && errno == EINVAL)
+    {
+        mapping = mmap((void *)address,
+                       size,
+                       PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS,
+                       -1,
+                       0);
+        if (mapping != MAP_FAILED && (uintptr_t)mapping != address)
+        {
+            munmap(mapping, size);
+            errno = EEXIST;
+            mapping = MAP_FAILED;
+        }
+    }
 #endif
 
 #ifdef _WIN32
@@ -211,9 +279,21 @@ static bool32 MapGbaRegion(uintptr_t address, size_t size)
     return mapping != MAP_FAILED && (uintptr_t)mapping == address;
 #endif
 }
+#endif
 
-static bool32 MapGbaMemory(void)
+static bool32 InitGbaMemory(void)
 {
+#if PLATFORM_ANDROID
+    // These arrays are part of the core's low-address reservation, so any
+    // pointers written into emulated 32-bit fields remain representable.
+    memset(gPcEwram, 0, sizeof(gPcEwram));
+    memset(gPcIwram, 0, sizeof(gPcIwram));
+    memset(gPcIoRegisters, 0, sizeof(gPcIoRegisters));
+    memset(gPcPaletteRam, 0, sizeof(gPcPaletteRam));
+    memset(gPcVram, 0, sizeof(gPcVram));
+    memset(gPcOam, 0, sizeof(gPcOam));
+    return TRUE;
+#else
     static const struct
     {
         uintptr_t address;
@@ -292,6 +372,7 @@ static bool32 MapGbaMemory(void)
     }
 
     return TRUE;
+#endif
 }
 
 static void ParseTestInputEvents(const char *spec)
@@ -560,16 +641,23 @@ bool32 PcPlatformInit(const char *sharedPath)
     int fd;
 #endif
 
+#if PLATFORM_ANDROID
+    if ((uintptr_t)&PcPlatformInit > UINT32_MAX || (uintptr_t)&sharedPath > UINT32_MAX)
+    {
+        fprintf(stderr, "Android game core or stack was not loaded below 4 GiB\n");
+        return FALSE;
+    }
+#else
     if (sizeof(void *) != 4)
     {
         fprintf(stderr, "pokeemerald-core must use a 32-bit ABI\n");
         return FALSE;
     }
+#endif
 
-    // Windows chooses addresses for MapViewOfFile automatically. Claim the
-    // hardware ranges before opening the frontend mapping so it cannot land on
-    // EWRAM, IWRAM, registers, palette RAM, VRAM, or OAM.
-    if (!MapGbaMemory())
+    // Initialize the emulated hardware before opening frontend shared memory.
+    // Desktop builds claim the GBA ranges first; Android uses core-owned RAM.
+    if (!InitGbaMemory())
     {
 #ifdef _WIN32
         fprintf(stderr, "could not reserve the GBA memory map\n");
@@ -613,9 +701,14 @@ bool32 PcPlatformInit(const char *sharedPath)
         return FALSE;
     }
 #endif
-    if (sShared->magic != PC_SHARED_MAGIC)
+    if (sShared->magic != PC_SHARED_MAGIC || sShared->version != PC_SHARED_VERSION)
     {
-        fprintf(stderr, "invalid SDL frontend shared memory\n");
+        fprintf(stderr,
+                "invalid SDL frontend shared memory (magic 0x%08x, version %u; expected 0x%08x, version %u)\n",
+                sShared->magic,
+                sShared->version,
+                PC_SHARED_MAGIC,
+                PC_SHARED_VERSION);
         PcPlatformShutdown();
         return FALSE;
     }
@@ -682,6 +775,10 @@ bool32 PcPlatformInit(const char *sharedPath)
     sFrameCounter = 0;
     sTimer1StartNs = 0;
     sNextFrameTime = GetMonotonicNs();
+#if PLATFORM_ANDROID
+    sAndroidFrameStartNs = 0;
+    sAndroidLastPresentNs = 0;
+#endif
     __atomic_store_n(&sShared->testBattleState, sTestBattleState, __ATOMIC_RELEASE);
     __atomic_store_n(&sShared->testBattleOutcome, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&sShared->coreReady, 1, __ATOMIC_RELEASE);
@@ -710,6 +807,24 @@ void PcPlatformShutdown(void)
 #endif
 }
 
+void PcPlatformRecordExit(int status)
+{
+    if (sShared != NULL)
+    {
+        __atomic_store_n(&sShared->coreExitStatus, status, __ATOMIC_RELAXED);
+        __atomic_store_n(&sShared->coreExited, 1, __ATOMIC_RELEASE);
+    }
+}
+
+static void ExitCore(int status) __attribute__((noreturn));
+
+static void ExitCore(int status)
+{
+    PcPlatformRecordExit(status);
+    PcPlatformShutdown();
+    exit(status);
+}
+
 const char *PcPlatformGetDefaultSavePath(void)
 {
     return sShared->defaultSavePath;
@@ -734,11 +849,9 @@ void PcPlatformSwitchProfile(const char *savePath, const char *storagePath)
         >= (int)sizeof(sShared->requestedStoragePath))
     {
         fprintf(stderr, "could not switch save profile: path is too long\n");
-        PcPlatformShutdown();
-        exit(1);
+        ExitCore(1);
     }
-    PcPlatformShutdown();
-    exit(PC_CORE_EXIT_PROFILE_SWITCH);
+    ExitCore(PC_CORE_EXIT_PROFILE_SWITCH);
 }
 
 void PcPlatformWaitForFrame(void)
@@ -746,18 +859,79 @@ void PcPlatformWaitForFrame(void)
     u64 now;
     u32 keys;
     u32 i;
+#if PLATFORM_ANDROID
+    bool8 resumed = FALSE;
+    u64 beforeSleepNs;
+#endif
+
+#if PLATFORM_ANDROID
+    now = GetMonotonicNs();
+    if (sAndroidLastPresentNs != 0)
+    {
+        u32 callbackUs = (u32)((now - sAndroidLastPresentNs) / 1000);
+
+        __atomic_store_n(&sShared->performance.coreCallbackUs, callbackUs, __ATOMIC_RELAXED);
+        if (callbackUs > __atomic_load_n(&sShared->performance.coreMaxCallbackUs, __ATOMIC_RELAXED))
+            __atomic_store_n(&sShared->performance.coreMaxCallbackUs, callbackUs, __ATOMIC_RELAXED);
+    }
+#endif
+
+    while (__atomic_load_n(&sShared->paused, __ATOMIC_ACQUIRE)
+        && !__atomic_load_n(&sShared->quit, __ATOMIC_ACQUIRE))
+    {
+#if PLATFORM_ANDROID
+        resumed = TRUE;
+#endif
+        SleepUntil(GetMonotonicNs() + 10000000ull);
+    }
+#if PLATFORM_ANDROID
+    if (resumed)
+        sAndroidLastPresentNs = 0;
+#endif
 
     sNextFrameTime += NS_PER_FRAME;
+#if PLATFORM_ANDROID
+    beforeSleepNs = GetMonotonicNs();
+#endif
     if (!sFastForward)
         SleepUntil(sNextFrameTime);
     now = GetMonotonicNs();
+#if PLATFORM_ANDROID
+    if (!sFastForward && beforeSleepNs < sNextFrameTime && now > sNextFrameTime)
+    {
+        u32 overshootUs = (u32)((now - sNextFrameTime) / 1000);
+
+        __atomic_store_n(&sShared->performance.coreSleepOvershootUs,
+                         overshootUs,
+                         __ATOMIC_RELAXED);
+        if (overshootUs > __atomic_load_n(&sShared->performance.coreMaxSleepOvershootUs,
+                                          __ATOMIC_RELAXED))
+            __atomic_store_n(&sShared->performance.coreMaxSleepOvershootUs,
+                             overshootUs,
+                             __ATOMIC_RELAXED);
+        if (overshootUs > 1000)
+            __atomic_add_fetch(&sShared->performance.coreSleepOvershoots,
+                               1,
+                               __ATOMIC_RELAXED);
+    }
+#endif
+#if PLATFORM_ANDROID
+    if (!sFastForward && now > sNextFrameTime + 2000000ull)
+    {
+        __atomic_add_fetch(&sShared->performance.coreLateFrames, 1, __ATOMIC_RELAXED);
+        sNextFrameTime = now;
+    }
+#else
     if (now > sNextFrameTime + NS_PER_FRAME * 4)
         sNextFrameTime = now;
+#endif
+#if PLATFORM_ANDROID
+    sAndroidFrameStartNs = now;
+#endif
 
     if (__atomic_load_n(&sShared->quit, __ATOMIC_ACQUIRE))
     {
-        PcPlatformShutdown();
-        exit(0);
+        ExitCore(0);
     }
 
     keys = __atomic_load_n(&sShared->keys, __ATOMIC_ACQUIRE) & KEYS_MASK;
@@ -809,10 +983,84 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback)
 {
     u32 buffer = (__atomic_load_n(&sShared->frameBufferIndex, __ATOMIC_RELAXED) + 1)
                % PC_FRAME_BUFFER_COUNT;
+#if PLATFORM_ANDROID
+    u64 ppuStartNs = GetMonotonicNs();
+    u64 ppuCpuStartNs = GetThreadCpuNs();
+    u64 now;
+    u32 vblankUs = sAndroidFrameStartNs == 0
+                 ? 0
+                 : (u32)((ppuStartNs - sAndroidFrameStartNs) / 1000);
+#endif
 
     PcPpuRender(sShared->pixels[buffer], hblankCallback);
+#if PLATFORM_ANDROID
+    now = GetMonotonicNs();
+    {
+        u32 ppuUs = (u32)((now - ppuStartNs) / 1000);
+        u32 ppuCpuUs = (u32)((GetThreadCpuNs() - ppuCpuStartNs) / 1000);
+        u32 previousMax = __atomic_load_n(&sShared->performance.coreMaxPpuUs,
+                                          __ATOMIC_RELAXED);
+
+        __atomic_store_n(&sShared->performance.coreVblankUs, vblankUs, __ATOMIC_RELAXED);
+        __atomic_store_n(&sShared->performance.corePpuUs, ppuUs, __ATOMIC_RELAXED);
+        __atomic_store_n(&sShared->performance.corePpuCpuUs, ppuCpuUs, __ATOMIC_RELAXED);
+        if (vblankUs > __atomic_load_n(&sShared->performance.coreMaxVblankUs, __ATOMIC_RELAXED))
+            __atomic_store_n(&sShared->performance.coreMaxVblankUs, vblankUs, __ATOMIC_RELAXED);
+        if (ppuUs > previousMax)
+        {
+            __atomic_store_n(&sShared->performance.coreMaxPpuUs, ppuUs, __ATOMIC_RELAXED);
+            __atomic_store_n(&sShared->performance.coreMaxPpuFrame,
+                             sFrameCounter,
+                             __ATOMIC_RELAXED);
+            __atomic_store_n(&sShared->performance.coreMaxPpuMapGroup,
+                             sShared->diagnostics.mapGroup,
+                             __ATOMIC_RELAXED);
+            __atomic_store_n(&sShared->performance.coreMaxPpuMapNum,
+                             sShared->diagnostics.mapNum,
+                             __ATOMIC_RELAXED);
+            __atomic_store_n(&sShared->performance.coreMaxPpuMainCallback,
+                             sShared->diagnostics.mainCallback2,
+                             __ATOMIC_RELAXED);
+        }
+        if (ppuCpuUs > __atomic_load_n(&sShared->performance.coreMaxPpuCpuUs,
+                                       __ATOMIC_RELAXED))
+            __atomic_store_n(&sShared->performance.coreMaxPpuCpuUs,
+                             ppuCpuUs,
+                             __ATOMIC_RELAXED);
+        if (ppuUs > 8000)
+            __atomic_add_fetch(&sShared->performance.coreSlowPpuFrames,
+                               1,
+                               __ATOMIC_RELAXED);
+        if (ppuUs >= 12000)
+            RecordAndroidPerformanceStall(PC_PERFORMANCE_STALL_CORE_PPU,
+                                          ppuUs,
+                                          ppuCpuUs);
+    }
+    if (sAndroidLastPresentNs != 0)
+    {
+        u32 gapUs = (u32)((now - sAndroidLastPresentNs) / 1000);
+
+        __atomic_store_n(&sShared->performance.coreFrameGapUs, gapUs, __ATOMIC_RELAXED);
+        if (gapUs > __atomic_load_n(&sShared->performance.coreMaxFrameGapUs, __ATOMIC_RELAXED))
+            __atomic_store_n(&sShared->performance.coreMaxFrameGapUs, gapUs, __ATOMIC_RELAXED);
+        if (gapUs >= 25000)
+            RecordAndroidPerformanceStall(PC_PERFORMANCE_STALL_CORE_FRAME_GAP,
+                                          gapUs,
+                                          0);
+    }
+    sAndroidLastPresentNs = now;
+#endif
     __atomic_store_n(&sShared->frameBufferIndex, buffer, __ATOMIC_RELEASE);
     __atomic_add_fetch(&sShared->frameSequence, 1, __ATOMIC_RELEASE);
+#if PLATFORM_ANDROID
+    syscall(SYS_futex,
+            &sShared->frameSequence,
+            FUTEX_WAKE,
+            1,
+            NULL,
+            NULL,
+            0);
+#endif
 }
 
 void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)
@@ -823,6 +1071,7 @@ void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)
     u32 available = PC_AUDIO_BUFFER_FRAMES - (write - read);
     u32 nonzero = 0;
     u32 clipped = 0;
+    u32 peak = 0;
     u32 i;
 
     for (i = 0; i < generated * 2; i++)
@@ -834,9 +1083,11 @@ void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)
             nonzero++;
         if (amplitude >= 32767)
             clipped++;
-        if (amplitude > __atomic_load_n(&sShared->audioPeak, __ATOMIC_RELAXED))
-            __atomic_store_n(&sShared->audioPeak, amplitude, __ATOMIC_RELAXED);
+        if (amplitude > peak)
+            peak = amplitude;
     }
+    if (peak > __atomic_load_n(&sShared->audioPeak, __ATOMIC_RELAXED))
+        __atomic_store_n(&sShared->audioPeak, peak, __ATOMIC_RELAXED);
     __atomic_add_fetch(&sShared->audioFramesGenerated, generated, __ATOMIC_RELEASE);
     __atomic_add_fetch(&sShared->audioSamplesNonzero, nonzero, __ATOMIC_RELAXED);
     __atomic_add_fetch(&sShared->audioSamplesClipped, clipped, __ATOMIC_RELAXED);
@@ -844,11 +1095,18 @@ void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)
     if (frameCount > available)
         frameCount = available;
 
-    for (i = 0; i < frameCount; i++)
+    if (frameCount != 0)
     {
-        u32 index = (write + i) & (PC_AUDIO_BUFFER_FRAMES - 1);
-        sShared->audio[index * 2] = samples[i * 2];
-        sShared->audio[index * 2 + 1] = samples[i * 2 + 1];
+        u32 offset = write & (PC_AUDIO_BUFFER_FRAMES - 1);
+        u32 first = frameCount < PC_AUDIO_BUFFER_FRAMES - offset
+                  ? frameCount
+                  : PC_AUDIO_BUFFER_FRAMES - offset;
+
+        memcpy(&sShared->audio[offset * 2], samples, first * 2 * sizeof(*samples));
+        if (frameCount > first)
+            memcpy(sShared->audio,
+                   &samples[first * 2],
+                   (frameCount - first) * 2 * sizeof(*samples));
     }
     __atomic_store_n(&sShared->audioWrite, write + frameCount, __ATOMIC_RELEASE);
 }
@@ -862,8 +1120,7 @@ static void StartTestMoveAnimation(void)
         fprintf(stderr, "PC move animation test: heap corruption before move=%u turn=%u\n",
                 sTestMoveAnimId,
                 sTestMoveAnimTurn);
-        PcPlatformShutdown();
-        exit(3);
+        ExitCore(3);
     }
 
     if (sTestMoveAnimContest)
@@ -939,8 +1196,7 @@ static void RunTestMoveAnimations(void)
             {
                 fprintf(stderr, "PC move animation test: heap corruption before contest move at frame %u\n",
                         sFrameCounter);
-                PcPlatformShutdown();
-                exit(3);
+                ExitCore(3);
             }
 
             if (gContestResources == NULL || !gAnimScriptActive)
@@ -994,8 +1250,7 @@ static void RunTestMoveAnimations(void)
                     sTestMoveAnimId,
                     sTestMoveAnimTurn,
                     TEST_MOVE_ANIM_TIMEOUT);
-            PcPlatformShutdown();
-            exit(2);
+            ExitCore(2);
         }
         return;
     }
@@ -1014,14 +1269,12 @@ static void RunTestMoveAnimations(void)
             if (!CheckHeap())
             {
                 fprintf(stderr, "PC move animation test: heap corruption after final move\n");
-                PcPlatformShutdown();
-                exit(3);
+                ExitCore(3);
             }
             fprintf(stderr, "PC move animation test: %u moves passed for %u turn values\n",
                     MOVES_COUNT - sTestMoveAnimFirstId,
                     turnCount);
-            PcPlatformShutdown();
-            exit(0);
+            ExitCore(0);
         }
     }
     StartTestMoveAnimation();
@@ -1230,20 +1483,17 @@ void PcPlatformRunTestHooks(void)
         if (!CheckHeap())
         {
             fprintf(stderr, "PC contest results test: heap corruption after return\n");
-            PcPlatformShutdown();
-            exit(3);
+            ExitCore(3);
         }
         fprintf(stderr, "PC contest results test: returned successfully at frame %u\n",
                 sFrameCounter);
-        PcPlatformShutdown();
-        exit(0);
+        ExitCore(0);
     }
 }
 
 void PcPlatformSoftReset(void)
 {
-    PcPlatformShutdown();
-    exit(PC_CORE_EXIT_SOFT_RESET);
+    ExitCore(PC_CORE_EXIT_SOFT_RESET);
 }
 
 static void RunDmaTransfer(struct PcDmaChannel *dma)

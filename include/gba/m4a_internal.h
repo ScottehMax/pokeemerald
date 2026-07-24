@@ -2,6 +2,7 @@
 #define GUARD_GBA_M4A_INTERNAL_H
 
 #include "gba/gba.h"
+#include "asset.h"
 
 // ASCII encoding of 'Smsh' in reverse
 // This is presumably short for SMASH, the developer of MKS4AGB.
@@ -66,6 +67,38 @@ struct ToneData
     u8 sustain;
     u8 release;
 };
+
+struct ToneDataAsset
+{
+    u8 type;
+    u8 key;
+    u8 length;
+    u8 pan_sweep;
+    AssetPtr wav;
+    u8 attack;
+    u8 decay;
+    u8 sustain;
+    u8 release;
+};
+
+static inline void DecodeToneDataAsset(struct ToneData *destination,
+                                       const struct ToneDataAsset *source)
+{
+    u8 cgbType = source->type & TONEDATA_TYPE_CGB;
+
+    destination->type = source->type;
+    destination->key = source->key;
+    destination->length = source->length;
+    destination->pan_sweep = source->pan_sweep;
+    if (cgbType == 1 || cgbType == 2 || cgbType == 4)
+        destination->wav = (struct WaveData *)(uintptr_t)(u32)source->wav;
+    else
+        destination->wav = ASSET_POINTER(struct WaveData *, &source->wav);
+    destination->attack = source->attack;
+    destination->decay = source->decay;
+    destination->sustain = source->sustain;
+    destination->release = source->release;
+}
 
 #define SOUND_CHANNEL_SF_START       0x80
 #define SOUND_CHANNEL_SF_STOP        0x40
@@ -230,6 +263,16 @@ struct SongHeader
     u8 *part[1];
 };
 
+struct SongHeaderAsset
+{
+    u8 trackCount;
+    u8 blockCount;
+    u8 priority;
+    u8 reverb;
+    AssetPtr tone;
+    AssetPtr part[1];
+};
+
 struct PokemonCrySong
 {
     u8 trackCount;
@@ -310,6 +353,9 @@ struct MusicPlayerTrack
     u32 unk_3C;
     u8 *cmdPtr;
     u8 *patternStack[3];
+#if PLATFORM_RELATIVE_POINTERS
+    const struct ToneDataAsset *toneAsset;
+#endif
 };
 
 #define MUSICPLAYER_STATUS_TRACK 0x0000ffff
@@ -344,6 +390,9 @@ struct MusicPlayerInfo
     u16 fadeOV;
     struct MusicPlayerTrack *tracks;
     struct ToneData *tone;
+#if PLATFORM_RELATIVE_POINTERS
+    const struct ToneDataAsset *toneAssets;
+#endif
     u32 ident;
     MPlayMainFunc MPlayMainNext;
     struct MusicPlayerInfo *musicPlayerNext;
@@ -357,6 +406,15 @@ struct MusicPlayer
     u16 unk_A;
 };
 
+struct MusicPlayerAsset
+{
+    AssetPtr info;
+    AssetPtr track;
+    u8 numTracks;
+    u8 padding;
+    u16 unk_A;
+};
+
 struct Song
 {
     struct SongHeader *header;
@@ -364,8 +422,20 @@ struct Song
     u16 me;
 };
 
-extern const struct MusicPlayer gMPlayTable[];
-extern const struct Song gSongTable[];
+struct SongAsset
+{
+    AssetPtr header;
+    u16 ms;
+    u16 me;
+};
+
+extern const struct MusicPlayerAsset gMPlayTable[];
+extern const struct SongAsset gSongTable[];
+
+_Static_assert(sizeof(struct ToneDataAsset) == 12, "ToneData asset layout changed");
+_Static_assert(sizeof(struct SongHeaderAsset) == 12, "SongHeader asset layout changed");
+_Static_assert(sizeof(struct MusicPlayerAsset) == 12, "MusicPlayer asset layout changed");
+_Static_assert(sizeof(struct SongAsset) == 8, "Song asset layout changed");
 
 
 
@@ -401,7 +471,7 @@ extern const u8 gNoiseTable[];
 
 extern const struct PokemonCrySong gPokemonCrySongTemplate;
 
-extern const struct ToneData voicegroup_dummy;
+extern const struct ToneDataAsset voicegroup_dummy;
 
 #ifdef PLATFORM_PC
 #define NUM_MUSIC_PLAYERS 4
@@ -451,6 +521,9 @@ void m4aMPlayModDepthSet(struct MusicPlayerInfo *mplayInfo, u16 trackBits, u8 mo
 void m4aMPlayLFOSpeedSet(struct MusicPlayerInfo *mplayInfo, u16 trackBits, u8 lfoSpeed);
 
 struct MusicPlayerInfo *SetPokemonCryTone(struct ToneData *tone);
+#if PLATFORM_RELATIVE_POINTERS
+struct MusicPlayerInfo *SetPokemonCryToneAsset(const struct ToneDataAsset *tone);
+#endif
 void SetPokemonCryVolume(u8 val);
 void SetPokemonCryPanpot(s8 val);
 void SetPokemonCryPitch(s16 val);

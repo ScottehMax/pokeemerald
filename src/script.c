@@ -30,11 +30,11 @@ static struct ScriptContext sGlobalScriptContext;
 static struct ScriptContext sImmediateScriptContext;
 static bool8 sLockFieldControls;
 
-extern ScrCmdFunc gScriptCmdTable[];
-extern ScrCmdFunc gScriptCmdTableEnd[];
+extern const AssetPtr gScriptCmdTable[];
+extern const AssetPtr gScriptCmdTableEnd[];
 extern void *const gNullScriptPtr;
 
-void InitScriptContext(struct ScriptContext *ctx, void *cmdTable, void *cmdTableEnd)
+void InitScriptContext(struct ScriptContext *ctx, const AssetPtr *cmdTable, const AssetPtr *cmdTableEnd)
 {
     s32 i;
 
@@ -107,7 +107,7 @@ bool8 RunScriptCommand(struct ScriptContext *ctx)
         while (1)
         {
             u8 cmdCode;
-            ScrCmdFunc *func;
+            const AssetPtr *func;
 
             if (!ctx->scriptPtr)
             {
@@ -137,7 +137,7 @@ bool8 RunScriptCommand(struct ScriptContext *ctx)
 
 #if PLATFORM_PC
             {
-                ScrCmdFunc callback = *func;
+                ScrCmdFunc callback = ASSET_POINTER(ScrCmdFunc, func);
                 bool8 shouldWait;
 
                 PcDiagnosticsEnterScript(ctx->scriptPtr - 1, cmdCode, callback);
@@ -149,7 +149,7 @@ bool8 RunScriptCommand(struct ScriptContext *ctx)
                     return TRUE;
             }
 #else
-            if ((*func)(ctx) == TRUE)
+            if (ASSET_POINTER(ScrCmdFunc, func)(ctx) == TRUE)
                 return TRUE;
 #endif
         }
@@ -211,6 +211,20 @@ u32 ScriptReadWord(struct ScriptContext *ctx)
     u32 value2 = *(ctx->scriptPtr++);
     u32 value3 = *(ctx->scriptPtr++);
     return (((((value3 << 8) + value2) << 8) + value1) << 8) + value0;
+}
+
+void *ScriptReadPointer(struct ScriptContext *ctx)
+{
+    const u8 *operand = ctx->scriptPtr;
+    u32 value = ScriptReadWord(ctx);
+
+#if PLATFORM_RELATIVE_POINTERS
+    if (value == 0)
+        return NULL;
+    return (u8 *)operand + (s32)value;
+#else
+    return (void *)(uintptr_t)value;
+#endif
 }
 
 void LockPlayerFieldControls(void)

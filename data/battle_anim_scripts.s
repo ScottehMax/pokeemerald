@@ -14,412 +14,412 @@
 gMovesWithQuietBGM::
 	.2byte MOVE_SING, MOVE_PERISH_SONG, MOVE_GRASS_WHISTLE, 0xFFFF
 
-	.align 2
+	asset_ptr_align
 gBattleAnims_Moves::
-	.4byte Move_NONE
-	.4byte Move_POUND
-	.4byte Move_KARATE_CHOP
-	.4byte Move_DOUBLE_SLAP
-	.4byte Move_COMET_PUNCH
-	.4byte Move_MEGA_PUNCH
-	.4byte Move_PAY_DAY
-	.4byte Move_FIRE_PUNCH
-	.4byte Move_ICE_PUNCH
-	.4byte Move_THUNDER_PUNCH
-	.4byte Move_SCRATCH
-	.4byte Move_VICE_GRIP
-	.4byte Move_GUILLOTINE
-	.4byte Move_RAZOR_WIND
-	.4byte Move_SWORDS_DANCE
-	.4byte Move_CUT
-	.4byte Move_GUST
-	.4byte Move_WING_ATTACK
-	.4byte Move_WHIRLWIND
-	.4byte Move_FLY
-	.4byte Move_BIND
-	.4byte Move_SLAM
-	.4byte Move_VINE_WHIP
-	.4byte Move_STOMP
-	.4byte Move_DOUBLE_KICK
-	.4byte Move_MEGA_KICK
-	.4byte Move_JUMP_KICK
-	.4byte Move_ROLLING_KICK
-	.4byte Move_SAND_ATTACK
-	.4byte Move_HEADBUTT
-	.4byte Move_HORN_ATTACK
-	.4byte Move_FURY_ATTACK
-	.4byte Move_HORN_DRILL
-	.4byte Move_TACKLE
-	.4byte Move_BODY_SLAM
-	.4byte Move_WRAP
-	.4byte Move_TAKE_DOWN
-	.4byte Move_THRASH
-	.4byte Move_DOUBLE_EDGE
-	.4byte Move_TAIL_WHIP
-	.4byte Move_POISON_STING
-	.4byte Move_TWINEEDLE
-	.4byte Move_PIN_MISSILE
-	.4byte Move_LEER
-	.4byte Move_BITE
-	.4byte Move_GROWL
-	.4byte Move_ROAR
-	.4byte Move_SING
-	.4byte Move_SUPERSONIC
-	.4byte Move_SONIC_BOOM
-	.4byte Move_DISABLE
-	.4byte Move_ACID
-	.4byte Move_EMBER
-	.4byte Move_FLAMETHROWER
-	.4byte Move_MIST
-	.4byte Move_WATER_GUN
-	.4byte Move_HYDRO_PUMP
-	.4byte Move_SURF
-	.4byte Move_ICE_BEAM
-	.4byte Move_BLIZZARD
-	.4byte Move_PSYBEAM
-	.4byte Move_BUBBLE_BEAM
-	.4byte Move_AURORA_BEAM
-	.4byte Move_HYPER_BEAM
-	.4byte Move_PECK
-	.4byte Move_DRILL_PECK
-	.4byte Move_SUBMISSION
-	.4byte Move_LOW_KICK
-	.4byte Move_COUNTER
-	.4byte Move_SEISMIC_TOSS
-	.4byte Move_STRENGTH
-	.4byte Move_ABSORB
-	.4byte Move_MEGA_DRAIN
-	.4byte Move_LEECH_SEED
-	.4byte Move_GROWTH
-	.4byte Move_RAZOR_LEAF
-	.4byte Move_SOLAR_BEAM
-	.4byte Move_POISON_POWDER
-	.4byte Move_STUN_SPORE
-	.4byte Move_SLEEP_POWDER
-	.4byte Move_PETAL_DANCE
-	.4byte Move_STRING_SHOT
-	.4byte Move_DRAGON_RAGE
-	.4byte Move_FIRE_SPIN
-	.4byte Move_THUNDER_SHOCK
-	.4byte Move_THUNDERBOLT
-	.4byte Move_THUNDER_WAVE
-	.4byte Move_THUNDER
-	.4byte Move_ROCK_THROW
-	.4byte Move_EARTHQUAKE
-	.4byte Move_FISSURE
-	.4byte Move_DIG
-	.4byte Move_TOXIC
-	.4byte Move_CONFUSION
-	.4byte Move_PSYCHIC
-	.4byte Move_HYPNOSIS
-	.4byte Move_MEDITATE
-	.4byte Move_AGILITY
-	.4byte Move_QUICK_ATTACK
-	.4byte Move_RAGE
-	.4byte Move_TELEPORT
-	.4byte Move_NIGHT_SHADE
-	.4byte Move_MIMIC
-	.4byte Move_SCREECH
-	.4byte Move_DOUBLE_TEAM
-	.4byte Move_RECOVER
-	.4byte Move_HARDEN
-	.4byte Move_MINIMIZE
-	.4byte Move_SMOKESCREEN
-	.4byte Move_CONFUSE_RAY
-	.4byte Move_WITHDRAW
-	.4byte Move_DEFENSE_CURL
-	.4byte Move_BARRIER
-	.4byte Move_LIGHT_SCREEN
-	.4byte Move_HAZE
-	.4byte Move_REFLECT
-	.4byte Move_FOCUS_ENERGY
-	.4byte Move_BIDE
-	.4byte Move_METRONOME
-	.4byte Move_MIRROR_MOVE @ doesnt have an actual animation
-	.4byte Move_SELF_DESTRUCT
-	.4byte Move_EGG_BOMB
-	.4byte Move_LICK
-	.4byte Move_SMOG
-	.4byte Move_SLUDGE
-	.4byte Move_BONE_CLUB
-	.4byte Move_FIRE_BLAST
-	.4byte Move_WATERFALL
-	.4byte Move_CLAMP
-	.4byte Move_SWIFT
-	.4byte Move_SKULL_BASH
-	.4byte Move_SPIKE_CANNON
-	.4byte Move_CONSTRICT
-	.4byte Move_AMNESIA
-	.4byte Move_KINESIS
-	.4byte Move_SOFT_BOILED
-	.4byte Move_HI_JUMP_KICK
-	.4byte Move_GLARE
-	.4byte Move_DREAM_EATER
-	.4byte Move_POISON_GAS
-	.4byte Move_BARRAGE
-	.4byte Move_LEECH_LIFE
-	.4byte Move_LOVELY_KISS
-	.4byte Move_SKY_ATTACK
-	.4byte Move_TRANSFORM
-	.4byte Move_BUBBLE
-	.4byte Move_DIZZY_PUNCH
-	.4byte Move_SPORE
-	.4byte Move_FLASH
-	.4byte Move_PSYWAVE
-	.4byte Move_SPLASH
-	.4byte Move_ACID_ARMOR
-	.4byte Move_CRABHAMMER
-	.4byte Move_EXPLOSION
-	.4byte Move_FURY_SWIPES
-	.4byte Move_BONEMERANG
-	.4byte Move_REST
-	.4byte Move_ROCK_SLIDE
-	.4byte Move_HYPER_FANG
-	.4byte Move_SHARPEN
-	.4byte Move_CONVERSION
-	.4byte Move_TRI_ATTACK
-	.4byte Move_SUPER_FANG
-	.4byte Move_SLASH
-	.4byte Move_SUBSTITUTE
-	.4byte Move_STRUGGLE
-	.4byte Move_SKETCH
-	.4byte Move_TRIPLE_KICK
-	.4byte Move_THIEF
-	.4byte Move_SPIDER_WEB
-	.4byte Move_MIND_READER
-	.4byte Move_NIGHTMARE
-	.4byte Move_FLAME_WHEEL
-	.4byte Move_SNORE
-	.4byte Move_CURSE
-	.4byte Move_FLAIL
-	.4byte Move_CONVERSION_2
-	.4byte Move_AEROBLAST
-	.4byte Move_COTTON_SPORE
-	.4byte Move_REVERSAL
-	.4byte Move_SPITE
-	.4byte Move_POWDER_SNOW
-	.4byte Move_PROTECT
-	.4byte Move_MACH_PUNCH
-	.4byte Move_SCARY_FACE
-	.4byte Move_FAINT_ATTACK
-	.4byte Move_SWEET_KISS
-	.4byte Move_BELLY_DRUM
-	.4byte Move_SLUDGE_BOMB
-	.4byte Move_MUD_SLAP
-	.4byte Move_OCTAZOOKA
-	.4byte Move_SPIKES
-	.4byte Move_ZAP_CANNON
-	.4byte Move_FORESIGHT
-	.4byte Move_DESTINY_BOND
-	.4byte Move_PERISH_SONG
-	.4byte Move_ICY_WIND
-	.4byte Move_DETECT
-	.4byte Move_BONE_RUSH
-	.4byte Move_LOCK_ON
-	.4byte Move_OUTRAGE
-	.4byte Move_SANDSTORM
-	.4byte Move_GIGA_DRAIN
-	.4byte Move_ENDURE
-	.4byte Move_CHARM
-	.4byte Move_ROLLOUT
-	.4byte Move_FALSE_SWIPE
-	.4byte Move_SWAGGER
-	.4byte Move_MILK_DRINK
-	.4byte Move_SPARK
-	.4byte Move_FURY_CUTTER
-	.4byte Move_STEEL_WING
-	.4byte Move_MEAN_LOOK
-	.4byte Move_ATTRACT
-	.4byte Move_SLEEP_TALK
-	.4byte Move_HEAL_BELL
-	.4byte Move_RETURN
-	.4byte Move_PRESENT
-	.4byte Move_FRUSTRATION
-	.4byte Move_SAFEGUARD
-	.4byte Move_PAIN_SPLIT
-	.4byte Move_SACRED_FIRE
-	.4byte Move_MAGNITUDE
-	.4byte Move_DYNAMIC_PUNCH
-	.4byte Move_MEGAHORN
-	.4byte Move_DRAGON_BREATH
-	.4byte Move_BATON_PASS
-	.4byte Move_ENCORE
-	.4byte Move_PURSUIT
-	.4byte Move_RAPID_SPIN
-	.4byte Move_SWEET_SCENT
-	.4byte Move_IRON_TAIL
-	.4byte Move_METAL_CLAW
-	.4byte Move_VITAL_THROW
-	.4byte Move_MORNING_SUN
-	.4byte Move_SYNTHESIS
-	.4byte Move_MOONLIGHT
-	.4byte Move_HIDDEN_POWER
-	.4byte Move_CROSS_CHOP
-	.4byte Move_TWISTER
-	.4byte Move_RAIN_DANCE
-	.4byte Move_SUNNY_DAY
-	.4byte Move_CRUNCH
-	.4byte Move_MIRROR_COAT
-	.4byte Move_PSYCH_UP
-	.4byte Move_EXTREME_SPEED
-	.4byte Move_ANCIENT_POWER
-	.4byte Move_SHADOW_BALL
-	.4byte Move_FUTURE_SIGHT
-	.4byte Move_ROCK_SMASH
-	.4byte Move_WHIRLPOOL
-	.4byte Move_BEAT_UP
-	.4byte Move_FAKE_OUT
-	.4byte Move_UPROAR
-	.4byte Move_STOCKPILE
-	.4byte Move_SPIT_UP
-	.4byte Move_SWALLOW
-	.4byte Move_HEAT_WAVE
-	.4byte Move_HAIL
-	.4byte Move_TORMENT
-	.4byte Move_FLATTER
-	.4byte Move_WILL_O_WISP
-	.4byte Move_MEMENTO
-	.4byte Move_FACADE
-	.4byte Move_FOCUS_PUNCH
-	.4byte Move_SMELLING_SALT
-	.4byte Move_FOLLOW_ME
-	.4byte Move_NATURE_POWER
-	.4byte Move_CHARGE
-	.4byte Move_TAUNT
-	.4byte Move_HELPING_HAND
-	.4byte Move_TRICK
-	.4byte Move_ROLE_PLAY
-	.4byte Move_WISH
-	.4byte Move_ASSIST
-	.4byte Move_INGRAIN
-	.4byte Move_SUPERPOWER
-	.4byte Move_MAGIC_COAT
-	.4byte Move_RECYCLE
-	.4byte Move_REVENGE
-	.4byte Move_BRICK_BREAK
-	.4byte Move_YAWN
-	.4byte Move_KNOCK_OFF
-	.4byte Move_ENDEAVOR
-	.4byte Move_ERUPTION
-	.4byte Move_SKILL_SWAP
-	.4byte Move_IMPRISON
-	.4byte Move_REFRESH
-	.4byte Move_GRUDGE
-	.4byte Move_SNATCH
-	.4byte Move_SECRET_POWER
-	.4byte Move_DIVE
-	.4byte Move_ARM_THRUST
-	.4byte Move_CAMOUFLAGE
-	.4byte Move_TAIL_GLOW
-	.4byte Move_LUSTER_PURGE
-	.4byte Move_MIST_BALL
-	.4byte Move_FEATHER_DANCE
-	.4byte Move_TEETER_DANCE
-	.4byte Move_BLAZE_KICK
-	.4byte Move_MUD_SPORT
-	.4byte Move_ICE_BALL
-	.4byte Move_NEEDLE_ARM
-	.4byte Move_SLACK_OFF
-	.4byte Move_HYPER_VOICE
-	.4byte Move_POISON_FANG
-	.4byte Move_CRUSH_CLAW
-	.4byte Move_BLAST_BURN
-	.4byte Move_HYDRO_CANNON
-	.4byte Move_METEOR_MASH
-	.4byte Move_ASTONISH
-	.4byte Move_WEATHER_BALL
-	.4byte Move_AROMATHERAPY
-	.4byte Move_FAKE_TEARS
-	.4byte Move_AIR_CUTTER
-	.4byte Move_OVERHEAT
-	.4byte Move_ODOR_SLEUTH
-	.4byte Move_ROCK_TOMB
-	.4byte Move_SILVER_WIND
-	.4byte Move_METAL_SOUND
-	.4byte Move_GRASS_WHISTLE
-	.4byte Move_TICKLE
-	.4byte Move_COSMIC_POWER
-	.4byte Move_WATER_SPOUT
-	.4byte Move_SIGNAL_BEAM
-	.4byte Move_SHADOW_PUNCH
-	.4byte Move_EXTRASENSORY
-	.4byte Move_SKY_UPPERCUT
-	.4byte Move_SAND_TOMB
-	.4byte Move_SHEER_COLD
-	.4byte Move_MUDDY_WATER
-	.4byte Move_BULLET_SEED
-	.4byte Move_AERIAL_ACE
-	.4byte Move_ICICLE_SPEAR
-	.4byte Move_IRON_DEFENSE
-	.4byte Move_BLOCK
-	.4byte Move_HOWL
-	.4byte Move_DRAGON_CLAW
-	.4byte Move_FRENZY_PLANT
-	.4byte Move_BULK_UP
-	.4byte Move_BOUNCE
-	.4byte Move_MUD_SHOT
-	.4byte Move_POISON_TAIL
-	.4byte Move_COVET
-	.4byte Move_VOLT_TACKLE
-	.4byte Move_MAGICAL_LEAF
-	.4byte Move_WATER_SPORT
-	.4byte Move_CALM_MIND
-	.4byte Move_LEAF_BLADE
-	.4byte Move_DRAGON_DANCE
-	.4byte Move_ROCK_BLAST
-	.4byte Move_SHOCK_WAVE
-	.4byte Move_WATER_PULSE
-	.4byte Move_DOOM_DESIRE
-	.4byte Move_PSYCHO_BOOST
-	.4byte Move_COUNT @ cannot be reached, because last move is Psycho Boost
+	asset_ptr Move_NONE
+	asset_ptr Move_POUND
+	asset_ptr Move_KARATE_CHOP
+	asset_ptr Move_DOUBLE_SLAP
+	asset_ptr Move_COMET_PUNCH
+	asset_ptr Move_MEGA_PUNCH
+	asset_ptr Move_PAY_DAY
+	asset_ptr Move_FIRE_PUNCH
+	asset_ptr Move_ICE_PUNCH
+	asset_ptr Move_THUNDER_PUNCH
+	asset_ptr Move_SCRATCH
+	asset_ptr Move_VICE_GRIP
+	asset_ptr Move_GUILLOTINE
+	asset_ptr Move_RAZOR_WIND
+	asset_ptr Move_SWORDS_DANCE
+	asset_ptr Move_CUT
+	asset_ptr Move_GUST
+	asset_ptr Move_WING_ATTACK
+	asset_ptr Move_WHIRLWIND
+	asset_ptr Move_FLY
+	asset_ptr Move_BIND
+	asset_ptr Move_SLAM
+	asset_ptr Move_VINE_WHIP
+	asset_ptr Move_STOMP
+	asset_ptr Move_DOUBLE_KICK
+	asset_ptr Move_MEGA_KICK
+	asset_ptr Move_JUMP_KICK
+	asset_ptr Move_ROLLING_KICK
+	asset_ptr Move_SAND_ATTACK
+	asset_ptr Move_HEADBUTT
+	asset_ptr Move_HORN_ATTACK
+	asset_ptr Move_FURY_ATTACK
+	asset_ptr Move_HORN_DRILL
+	asset_ptr Move_TACKLE
+	asset_ptr Move_BODY_SLAM
+	asset_ptr Move_WRAP
+	asset_ptr Move_TAKE_DOWN
+	asset_ptr Move_THRASH
+	asset_ptr Move_DOUBLE_EDGE
+	asset_ptr Move_TAIL_WHIP
+	asset_ptr Move_POISON_STING
+	asset_ptr Move_TWINEEDLE
+	asset_ptr Move_PIN_MISSILE
+	asset_ptr Move_LEER
+	asset_ptr Move_BITE
+	asset_ptr Move_GROWL
+	asset_ptr Move_ROAR
+	asset_ptr Move_SING
+	asset_ptr Move_SUPERSONIC
+	asset_ptr Move_SONIC_BOOM
+	asset_ptr Move_DISABLE
+	asset_ptr Move_ACID
+	asset_ptr Move_EMBER
+	asset_ptr Move_FLAMETHROWER
+	asset_ptr Move_MIST
+	asset_ptr Move_WATER_GUN
+	asset_ptr Move_HYDRO_PUMP
+	asset_ptr Move_SURF
+	asset_ptr Move_ICE_BEAM
+	asset_ptr Move_BLIZZARD
+	asset_ptr Move_PSYBEAM
+	asset_ptr Move_BUBBLE_BEAM
+	asset_ptr Move_AURORA_BEAM
+	asset_ptr Move_HYPER_BEAM
+	asset_ptr Move_PECK
+	asset_ptr Move_DRILL_PECK
+	asset_ptr Move_SUBMISSION
+	asset_ptr Move_LOW_KICK
+	asset_ptr Move_COUNTER
+	asset_ptr Move_SEISMIC_TOSS
+	asset_ptr Move_STRENGTH
+	asset_ptr Move_ABSORB
+	asset_ptr Move_MEGA_DRAIN
+	asset_ptr Move_LEECH_SEED
+	asset_ptr Move_GROWTH
+	asset_ptr Move_RAZOR_LEAF
+	asset_ptr Move_SOLAR_BEAM
+	asset_ptr Move_POISON_POWDER
+	asset_ptr Move_STUN_SPORE
+	asset_ptr Move_SLEEP_POWDER
+	asset_ptr Move_PETAL_DANCE
+	asset_ptr Move_STRING_SHOT
+	asset_ptr Move_DRAGON_RAGE
+	asset_ptr Move_FIRE_SPIN
+	asset_ptr Move_THUNDER_SHOCK
+	asset_ptr Move_THUNDERBOLT
+	asset_ptr Move_THUNDER_WAVE
+	asset_ptr Move_THUNDER
+	asset_ptr Move_ROCK_THROW
+	asset_ptr Move_EARTHQUAKE
+	asset_ptr Move_FISSURE
+	asset_ptr Move_DIG
+	asset_ptr Move_TOXIC
+	asset_ptr Move_CONFUSION
+	asset_ptr Move_PSYCHIC
+	asset_ptr Move_HYPNOSIS
+	asset_ptr Move_MEDITATE
+	asset_ptr Move_AGILITY
+	asset_ptr Move_QUICK_ATTACK
+	asset_ptr Move_RAGE
+	asset_ptr Move_TELEPORT
+	asset_ptr Move_NIGHT_SHADE
+	asset_ptr Move_MIMIC
+	asset_ptr Move_SCREECH
+	asset_ptr Move_DOUBLE_TEAM
+	asset_ptr Move_RECOVER
+	asset_ptr Move_HARDEN
+	asset_ptr Move_MINIMIZE
+	asset_ptr Move_SMOKESCREEN
+	asset_ptr Move_CONFUSE_RAY
+	asset_ptr Move_WITHDRAW
+	asset_ptr Move_DEFENSE_CURL
+	asset_ptr Move_BARRIER
+	asset_ptr Move_LIGHT_SCREEN
+	asset_ptr Move_HAZE
+	asset_ptr Move_REFLECT
+	asset_ptr Move_FOCUS_ENERGY
+	asset_ptr Move_BIDE
+	asset_ptr Move_METRONOME
+	asset_ptr Move_MIRROR_MOVE @ doesnt have an actual animation
+	asset_ptr Move_SELF_DESTRUCT
+	asset_ptr Move_EGG_BOMB
+	asset_ptr Move_LICK
+	asset_ptr Move_SMOG
+	asset_ptr Move_SLUDGE
+	asset_ptr Move_BONE_CLUB
+	asset_ptr Move_FIRE_BLAST
+	asset_ptr Move_WATERFALL
+	asset_ptr Move_CLAMP
+	asset_ptr Move_SWIFT
+	asset_ptr Move_SKULL_BASH
+	asset_ptr Move_SPIKE_CANNON
+	asset_ptr Move_CONSTRICT
+	asset_ptr Move_AMNESIA
+	asset_ptr Move_KINESIS
+	asset_ptr Move_SOFT_BOILED
+	asset_ptr Move_HI_JUMP_KICK
+	asset_ptr Move_GLARE
+	asset_ptr Move_DREAM_EATER
+	asset_ptr Move_POISON_GAS
+	asset_ptr Move_BARRAGE
+	asset_ptr Move_LEECH_LIFE
+	asset_ptr Move_LOVELY_KISS
+	asset_ptr Move_SKY_ATTACK
+	asset_ptr Move_TRANSFORM
+	asset_ptr Move_BUBBLE
+	asset_ptr Move_DIZZY_PUNCH
+	asset_ptr Move_SPORE
+	asset_ptr Move_FLASH
+	asset_ptr Move_PSYWAVE
+	asset_ptr Move_SPLASH
+	asset_ptr Move_ACID_ARMOR
+	asset_ptr Move_CRABHAMMER
+	asset_ptr Move_EXPLOSION
+	asset_ptr Move_FURY_SWIPES
+	asset_ptr Move_BONEMERANG
+	asset_ptr Move_REST
+	asset_ptr Move_ROCK_SLIDE
+	asset_ptr Move_HYPER_FANG
+	asset_ptr Move_SHARPEN
+	asset_ptr Move_CONVERSION
+	asset_ptr Move_TRI_ATTACK
+	asset_ptr Move_SUPER_FANG
+	asset_ptr Move_SLASH
+	asset_ptr Move_SUBSTITUTE
+	asset_ptr Move_STRUGGLE
+	asset_ptr Move_SKETCH
+	asset_ptr Move_TRIPLE_KICK
+	asset_ptr Move_THIEF
+	asset_ptr Move_SPIDER_WEB
+	asset_ptr Move_MIND_READER
+	asset_ptr Move_NIGHTMARE
+	asset_ptr Move_FLAME_WHEEL
+	asset_ptr Move_SNORE
+	asset_ptr Move_CURSE
+	asset_ptr Move_FLAIL
+	asset_ptr Move_CONVERSION_2
+	asset_ptr Move_AEROBLAST
+	asset_ptr Move_COTTON_SPORE
+	asset_ptr Move_REVERSAL
+	asset_ptr Move_SPITE
+	asset_ptr Move_POWDER_SNOW
+	asset_ptr Move_PROTECT
+	asset_ptr Move_MACH_PUNCH
+	asset_ptr Move_SCARY_FACE
+	asset_ptr Move_FAINT_ATTACK
+	asset_ptr Move_SWEET_KISS
+	asset_ptr Move_BELLY_DRUM
+	asset_ptr Move_SLUDGE_BOMB
+	asset_ptr Move_MUD_SLAP
+	asset_ptr Move_OCTAZOOKA
+	asset_ptr Move_SPIKES
+	asset_ptr Move_ZAP_CANNON
+	asset_ptr Move_FORESIGHT
+	asset_ptr Move_DESTINY_BOND
+	asset_ptr Move_PERISH_SONG
+	asset_ptr Move_ICY_WIND
+	asset_ptr Move_DETECT
+	asset_ptr Move_BONE_RUSH
+	asset_ptr Move_LOCK_ON
+	asset_ptr Move_OUTRAGE
+	asset_ptr Move_SANDSTORM
+	asset_ptr Move_GIGA_DRAIN
+	asset_ptr Move_ENDURE
+	asset_ptr Move_CHARM
+	asset_ptr Move_ROLLOUT
+	asset_ptr Move_FALSE_SWIPE
+	asset_ptr Move_SWAGGER
+	asset_ptr Move_MILK_DRINK
+	asset_ptr Move_SPARK
+	asset_ptr Move_FURY_CUTTER
+	asset_ptr Move_STEEL_WING
+	asset_ptr Move_MEAN_LOOK
+	asset_ptr Move_ATTRACT
+	asset_ptr Move_SLEEP_TALK
+	asset_ptr Move_HEAL_BELL
+	asset_ptr Move_RETURN
+	asset_ptr Move_PRESENT
+	asset_ptr Move_FRUSTRATION
+	asset_ptr Move_SAFEGUARD
+	asset_ptr Move_PAIN_SPLIT
+	asset_ptr Move_SACRED_FIRE
+	asset_ptr Move_MAGNITUDE
+	asset_ptr Move_DYNAMIC_PUNCH
+	asset_ptr Move_MEGAHORN
+	asset_ptr Move_DRAGON_BREATH
+	asset_ptr Move_BATON_PASS
+	asset_ptr Move_ENCORE
+	asset_ptr Move_PURSUIT
+	asset_ptr Move_RAPID_SPIN
+	asset_ptr Move_SWEET_SCENT
+	asset_ptr Move_IRON_TAIL
+	asset_ptr Move_METAL_CLAW
+	asset_ptr Move_VITAL_THROW
+	asset_ptr Move_MORNING_SUN
+	asset_ptr Move_SYNTHESIS
+	asset_ptr Move_MOONLIGHT
+	asset_ptr Move_HIDDEN_POWER
+	asset_ptr Move_CROSS_CHOP
+	asset_ptr Move_TWISTER
+	asset_ptr Move_RAIN_DANCE
+	asset_ptr Move_SUNNY_DAY
+	asset_ptr Move_CRUNCH
+	asset_ptr Move_MIRROR_COAT
+	asset_ptr Move_PSYCH_UP
+	asset_ptr Move_EXTREME_SPEED
+	asset_ptr Move_ANCIENT_POWER
+	asset_ptr Move_SHADOW_BALL
+	asset_ptr Move_FUTURE_SIGHT
+	asset_ptr Move_ROCK_SMASH
+	asset_ptr Move_WHIRLPOOL
+	asset_ptr Move_BEAT_UP
+	asset_ptr Move_FAKE_OUT
+	asset_ptr Move_UPROAR
+	asset_ptr Move_STOCKPILE
+	asset_ptr Move_SPIT_UP
+	asset_ptr Move_SWALLOW
+	asset_ptr Move_HEAT_WAVE
+	asset_ptr Move_HAIL
+	asset_ptr Move_TORMENT
+	asset_ptr Move_FLATTER
+	asset_ptr Move_WILL_O_WISP
+	asset_ptr Move_MEMENTO
+	asset_ptr Move_FACADE
+	asset_ptr Move_FOCUS_PUNCH
+	asset_ptr Move_SMELLING_SALT
+	asset_ptr Move_FOLLOW_ME
+	asset_ptr Move_NATURE_POWER
+	asset_ptr Move_CHARGE
+	asset_ptr Move_TAUNT
+	asset_ptr Move_HELPING_HAND
+	asset_ptr Move_TRICK
+	asset_ptr Move_ROLE_PLAY
+	asset_ptr Move_WISH
+	asset_ptr Move_ASSIST
+	asset_ptr Move_INGRAIN
+	asset_ptr Move_SUPERPOWER
+	asset_ptr Move_MAGIC_COAT
+	asset_ptr Move_RECYCLE
+	asset_ptr Move_REVENGE
+	asset_ptr Move_BRICK_BREAK
+	asset_ptr Move_YAWN
+	asset_ptr Move_KNOCK_OFF
+	asset_ptr Move_ENDEAVOR
+	asset_ptr Move_ERUPTION
+	asset_ptr Move_SKILL_SWAP
+	asset_ptr Move_IMPRISON
+	asset_ptr Move_REFRESH
+	asset_ptr Move_GRUDGE
+	asset_ptr Move_SNATCH
+	asset_ptr Move_SECRET_POWER
+	asset_ptr Move_DIVE
+	asset_ptr Move_ARM_THRUST
+	asset_ptr Move_CAMOUFLAGE
+	asset_ptr Move_TAIL_GLOW
+	asset_ptr Move_LUSTER_PURGE
+	asset_ptr Move_MIST_BALL
+	asset_ptr Move_FEATHER_DANCE
+	asset_ptr Move_TEETER_DANCE
+	asset_ptr Move_BLAZE_KICK
+	asset_ptr Move_MUD_SPORT
+	asset_ptr Move_ICE_BALL
+	asset_ptr Move_NEEDLE_ARM
+	asset_ptr Move_SLACK_OFF
+	asset_ptr Move_HYPER_VOICE
+	asset_ptr Move_POISON_FANG
+	asset_ptr Move_CRUSH_CLAW
+	asset_ptr Move_BLAST_BURN
+	asset_ptr Move_HYDRO_CANNON
+	asset_ptr Move_METEOR_MASH
+	asset_ptr Move_ASTONISH
+	asset_ptr Move_WEATHER_BALL
+	asset_ptr Move_AROMATHERAPY
+	asset_ptr Move_FAKE_TEARS
+	asset_ptr Move_AIR_CUTTER
+	asset_ptr Move_OVERHEAT
+	asset_ptr Move_ODOR_SLEUTH
+	asset_ptr Move_ROCK_TOMB
+	asset_ptr Move_SILVER_WIND
+	asset_ptr Move_METAL_SOUND
+	asset_ptr Move_GRASS_WHISTLE
+	asset_ptr Move_TICKLE
+	asset_ptr Move_COSMIC_POWER
+	asset_ptr Move_WATER_SPOUT
+	asset_ptr Move_SIGNAL_BEAM
+	asset_ptr Move_SHADOW_PUNCH
+	asset_ptr Move_EXTRASENSORY
+	asset_ptr Move_SKY_UPPERCUT
+	asset_ptr Move_SAND_TOMB
+	asset_ptr Move_SHEER_COLD
+	asset_ptr Move_MUDDY_WATER
+	asset_ptr Move_BULLET_SEED
+	asset_ptr Move_AERIAL_ACE
+	asset_ptr Move_ICICLE_SPEAR
+	asset_ptr Move_IRON_DEFENSE
+	asset_ptr Move_BLOCK
+	asset_ptr Move_HOWL
+	asset_ptr Move_DRAGON_CLAW
+	asset_ptr Move_FRENZY_PLANT
+	asset_ptr Move_BULK_UP
+	asset_ptr Move_BOUNCE
+	asset_ptr Move_MUD_SHOT
+	asset_ptr Move_POISON_TAIL
+	asset_ptr Move_COVET
+	asset_ptr Move_VOLT_TACKLE
+	asset_ptr Move_MAGICAL_LEAF
+	asset_ptr Move_WATER_SPORT
+	asset_ptr Move_CALM_MIND
+	asset_ptr Move_LEAF_BLADE
+	asset_ptr Move_DRAGON_DANCE
+	asset_ptr Move_ROCK_BLAST
+	asset_ptr Move_SHOCK_WAVE
+	asset_ptr Move_WATER_PULSE
+	asset_ptr Move_DOOM_DESIRE
+	asset_ptr Move_PSYCHO_BOOST
+	asset_ptr Move_COUNT @ cannot be reached, because last move is Psycho Boost
 
-	.align 2
+	asset_ptr_align
 gBattleAnims_StatusConditions::
-	.4byte Status_Poison                    @ B_ANIM_STATUS_PSN
-	.4byte Status_Confusion                 @ B_ANIM_STATUS_CONFUSION
-	.4byte Status_Burn                      @ B_ANIM_STATUS_BRN
-	.4byte Status_Infatuation               @ B_ANIM_STATUS_INFATUATION
-	.4byte Status_Sleep                     @ B_ANIM_STATUS_SLP
-	.4byte Status_Paralysis                 @ B_ANIM_STATUS_PRZ
-	.4byte Status_Freeze                    @ B_ANIM_STATUS_FRZ
-	.4byte Status_Curse                     @ B_ANIM_STATUS_CURSED
-	.4byte Status_Nightmare                 @ B_ANIM_STATUS_NIGHTMARE
+	asset_ptr Status_Poison                    @ B_ANIM_STATUS_PSN
+	asset_ptr Status_Confusion                 @ B_ANIM_STATUS_CONFUSION
+	asset_ptr Status_Burn                      @ B_ANIM_STATUS_BRN
+	asset_ptr Status_Infatuation               @ B_ANIM_STATUS_INFATUATION
+	asset_ptr Status_Sleep                     @ B_ANIM_STATUS_SLP
+	asset_ptr Status_Paralysis                 @ B_ANIM_STATUS_PRZ
+	asset_ptr Status_Freeze                    @ B_ANIM_STATUS_FRZ
+	asset_ptr Status_Curse                     @ B_ANIM_STATUS_CURSED
+	asset_ptr Status_Nightmare                 @ B_ANIM_STATUS_NIGHTMARE
 
-	.align 2
+	asset_ptr_align
 gBattleAnims_General::
-	.4byte General_CastformChange           @ B_ANIM_CASTFORM_CHANGE
-	.4byte General_StatsChange              @ B_ANIM_STATS_CHANGE
-	.4byte General_SubstituteFade           @ B_ANIM_SUBSTITUTE_FADE
-	.4byte General_SubstituteAppear         @ B_ANIM_SUBSTITUTE_APPEAR
-	.4byte General_PokeblockThrow           @ B_ANIM_POKEBLOCK_THROW
-	.4byte General_ItemKnockoff             @ B_ANIM_ITEM_KNOCKOFF
-	.4byte General_TurnTrap                 @ B_ANIM_TURN_TRAP
-	.4byte General_HeldItemEffect           @ B_ANIM_HELD_ITEM_EFFECT
-	.4byte General_SmokeballEscape          @ B_ANIM_SMOKEBALL_ESCAPE
-	.4byte General_FocusBand                @ B_ANIM_FOCUS_BAND
-	.4byte General_Rain                     @ B_ANIM_RAIN_CONTINUES
-	.4byte General_Sun                      @ B_ANIM_SUN_CONTINUES
-	.4byte General_Sandstorm                @ B_ANIM_SANDSTORM_CONTINUES
-	.4byte General_Hail                     @ B_ANIM_HAIL_CONTINUES
-	.4byte General_LeechSeedDrain           @ B_ANIM_LEECH_SEED_DRAIN
-	.4byte General_MonHit                   @ B_ANIM_MON_HIT
-	.4byte General_ItemSteal                @ B_ANIM_ITEM_STEAL
-	.4byte General_SnatchMove               @ B_ANIM_SNATCH_MOVE
-	.4byte General_FutureSightHit           @ B_ANIM_FUTURE_SIGHT_HIT
-	.4byte General_DoomDesireHit            @ B_ANIM_DOOM_DESIRE_HIT
-	.4byte General_FocusPunchSetUp          @ B_ANIM_FOCUS_PUNCH_SETUP
-	.4byte General_IngrainHeal              @ B_ANIM_INGRAIN_HEAL
-	.4byte General_WishHeal                 @ B_ANIM_WISH_HEAL
+	asset_ptr General_CastformChange           @ B_ANIM_CASTFORM_CHANGE
+	asset_ptr General_StatsChange              @ B_ANIM_STATS_CHANGE
+	asset_ptr General_SubstituteFade           @ B_ANIM_SUBSTITUTE_FADE
+	asset_ptr General_SubstituteAppear         @ B_ANIM_SUBSTITUTE_APPEAR
+	asset_ptr General_PokeblockThrow           @ B_ANIM_POKEBLOCK_THROW
+	asset_ptr General_ItemKnockoff             @ B_ANIM_ITEM_KNOCKOFF
+	asset_ptr General_TurnTrap                 @ B_ANIM_TURN_TRAP
+	asset_ptr General_HeldItemEffect           @ B_ANIM_HELD_ITEM_EFFECT
+	asset_ptr General_SmokeballEscape          @ B_ANIM_SMOKEBALL_ESCAPE
+	asset_ptr General_FocusBand                @ B_ANIM_FOCUS_BAND
+	asset_ptr General_Rain                     @ B_ANIM_RAIN_CONTINUES
+	asset_ptr General_Sun                      @ B_ANIM_SUN_CONTINUES
+	asset_ptr General_Sandstorm                @ B_ANIM_SANDSTORM_CONTINUES
+	asset_ptr General_Hail                     @ B_ANIM_HAIL_CONTINUES
+	asset_ptr General_LeechSeedDrain           @ B_ANIM_LEECH_SEED_DRAIN
+	asset_ptr General_MonHit                   @ B_ANIM_MON_HIT
+	asset_ptr General_ItemSteal                @ B_ANIM_ITEM_STEAL
+	asset_ptr General_SnatchMove               @ B_ANIM_SNATCH_MOVE
+	asset_ptr General_FutureSightHit           @ B_ANIM_FUTURE_SIGHT_HIT
+	asset_ptr General_DoomDesireHit            @ B_ANIM_DOOM_DESIRE_HIT
+	asset_ptr General_FocusPunchSetUp          @ B_ANIM_FOCUS_PUNCH_SETUP
+	asset_ptr General_IngrainHeal              @ B_ANIM_INGRAIN_HEAL
+	asset_ptr General_WishHeal                 @ B_ANIM_WISH_HEAL
 
-	.align 2
+	asset_ptr_align
 gBattleAnims_Special::
-	.4byte Special_LevelUp                  @ B_ANIM_LVL_UP
-	.4byte Special_SwitchOutPlayerMon       @ B_ANIM_SWITCH_OUT_PLAYER_MON
-	.4byte Special_SwitchOutOpponentMon     @ B_ANIM_SWITCH_OUT_OPPONENT_MON
-	.4byte Special_BallThrow                @ B_ANIM_BALL_THROW
-	.4byte Special_BallThrowWithTrainer     @ B_ANIM_BALL_THROW_WITH_TRAINER
-	.4byte Special_SubstituteToMon          @ B_ANIM_SUBSTITUTE_TO_MON
-	.4byte Special_MonToSubstitute          @ B_ANIM_MON_TO_SUBSTITUTE
+	asset_ptr Special_LevelUp                  @ B_ANIM_LVL_UP
+	asset_ptr Special_SwitchOutPlayerMon       @ B_ANIM_SWITCH_OUT_PLAYER_MON
+	asset_ptr Special_SwitchOutOpponentMon     @ B_ANIM_SWITCH_OUT_OPPONENT_MON
+	asset_ptr Special_BallThrow                @ B_ANIM_BALL_THROW
+	asset_ptr Special_BallThrowWithTrainer     @ B_ANIM_BALL_THROW_WITH_TRAINER
+	asset_ptr Special_SubstituteToMon          @ B_ANIM_SUBSTITUTE_TO_MON
+	asset_ptr Special_MonToSubstitute          @ B_ANIM_MON_TO_SUBSTITUTE
 
 Move_NONE:
 Move_MIRROR_MOVE:

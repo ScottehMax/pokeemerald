@@ -139,6 +139,7 @@ void AgbMain(void)
         ReadKeys();
 #if PLATFORM_PC
         PcDiagnosticsFrame();
+        PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_CALLBACKS);
 #endif
 
         if (gSoftResetDisabled == FALSE
@@ -175,8 +176,12 @@ void AgbMain(void)
 
 #if PLATFORM_PC
         PcPlatformRunTestHooks();
+        PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_FRAME_HOUSEKEEPING);
 #endif
         PlayTimeCounter_Update();
+#if PLATFORM_PC
+        PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_MAP_MUSIC);
+#endif
         MapMusicMain();
         WaitForVBlank();
     }
@@ -413,7 +418,13 @@ static void VBlankIntr(void)
 
     gPcmDmaCounter = gSoundInfo.pcmDmaCounter;
 
+#if PLATFORM_PC
+    PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_AUDIO);
+#endif
     m4aSoundMain();
+#if PLATFORM_PC
+    PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_VBLANK);
+#endif
     TryReceiveLinkBattleData();
 
     if (!gMain.inBattle || !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_FRONTIER | BATTLE_TYPE_RECORDED)))
@@ -466,9 +477,13 @@ static void WaitForVBlank(void)
     gMain.intrCheck &= ~INTR_FLAG_VBLANK;
 
 #if PLATFORM_PC
+    PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_WAIT_FRAME);
     PcPlatformWaitForFrame();
+    PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_VCOUNT);
     VCountIntr();
+    PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_VBLANK);
     VBlankIntr();
+    PcDiagnosticsSetPhase(PC_DIAGNOSTIC_PHASE_RENDER);
     PcPlatformPresentFrame(HBlankIntr);
 #else
     while (!(gMain.intrCheck & INTR_FLAG_VBLANK))

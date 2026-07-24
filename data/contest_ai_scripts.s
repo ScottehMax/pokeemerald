@@ -13,40 +13,40 @@
 	enum MON_3
 	enum MON_4
 
-	.align 2
+	asset_ptr_align
 gContestAI_ScriptsTable::
-	.4byte AI_CheckBadMove      @ CONTEST_AI_CHECK_BAD_MOVE
-	.4byte AI_CheckCombo        @ CONTEST_AI_CHECK_COMBO
-	.4byte AI_CheckBoring       @ CONTEST_AI_CHECK_BORING
-	.4byte AI_CheckExcitement   @ CONTEST_AI_CHECK_EXCITEMENT
-	.4byte AI_CheckOrder        @ CONTEST_AI_CHECK_ORDER
-	.4byte AI_CheckGoodMove     @ CONTEST_AI_CHECK_GOOD_MOVE
-	.4byte AI_Erratic           @ CONTEST_AI_ERRATIC
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_1
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_2
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_3
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_4
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_5
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_6
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_7
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_8
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_9
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_10
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_11
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_12
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_13
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_14
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_15
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_16
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_17
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_18
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_19
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_20
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_21
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_22
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_23
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_24
-	.4byte AI_Nothing           @ CONTEST_AI_DUMMY_25
+	asset_ptr AI_CheckBadMove      @ CONTEST_AI_CHECK_BAD_MOVE
+	asset_ptr AI_CheckCombo        @ CONTEST_AI_CHECK_COMBO
+	asset_ptr AI_CheckBoring       @ CONTEST_AI_CHECK_BORING
+	asset_ptr AI_CheckExcitement   @ CONTEST_AI_CHECK_EXCITEMENT
+	asset_ptr AI_CheckOrder        @ CONTEST_AI_CHECK_ORDER
+	asset_ptr AI_CheckGoodMove     @ CONTEST_AI_CHECK_GOOD_MOVE
+	asset_ptr AI_Erratic           @ CONTEST_AI_ERRATIC
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_1
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_2
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_3
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_4
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_5
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_6
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_7
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_8
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_9
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_10
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_11
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_12
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_13
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_14
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_15
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_16
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_17
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_18
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_19
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_20
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_21
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_22
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_23
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_24
+	asset_ptr AI_Nothing           @ CONTEST_AI_DUMMY_25
 
 
 @ Unused. Encourages improving condition on the 1st appeal, or startling mons if the users turn is later

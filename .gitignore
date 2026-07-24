@@ -45,3 +45,21 @@ prefabs.json
 /pokeemerald-*.png
 /pokeemerald_modern-*.png
 /storage/
+# Android build products and machine-local configuration
+/android/.gradle/
+/android/.idea/
+/android/.kotlin/
+/android/.externalNativeBuild/
+/android/build/
+/android/captures/
+/android/app/.cxx/
+/android/app/.externalNativeBuild/
+/android/app/build/
+/android/local.properties
+/android/*.iml
+/android/app/*.iml
+/android/*.jks
+/android/*.keystore
+/android/**/*.apk
+/android/**/*.aab
+!/android/gradlew.bat

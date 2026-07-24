@@ -7,6 +7,7 @@ typedef void (*PcInterruptCallback)(void);
 
 bool32 PcPlatformInit(const char *sharedPath);
 void PcPlatformShutdown(void);
+void PcPlatformRecordExit(int status);
 const char *PcPlatformGetDefaultSavePath(void);
 const char *PcPlatformGetSavePath(void);
 bool32 PcPlatformShouldResumeMainMenu(void);

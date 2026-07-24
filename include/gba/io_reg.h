@@ -1,7 +1,12 @@
 #ifndef GUARD_GBA_IO_REG_H
 #define GUARD_GBA_IO_REG_H
 
-#define REG_BASE 0x4000000 // I/O register base address
+#if PLATFORM_ANDROID && !defined(__ASSEMBLER__)
+extern unsigned char gPcIoRegisters[0x1000];
+#define REG_BASE ((uintptr_t)gPcIoRegisters)
+#else
+#define REG_BASE 0x04000000 // I/O register base address
+#endif
 
 // I/O register offsets
 

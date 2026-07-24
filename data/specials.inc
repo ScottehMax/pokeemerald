@@ -1,8 +1,10 @@
 	.macro def_special ptr:req, waitstate=0
+	@ Keep script operands link-time constant on every target. Only the table
+	@ owner exports the name and emits its function-pointer entry.
+	.set SPECIAL_\ptr, __special__
 	.if ALLOCATE_SPECIAL_TABLE
 	.global SPECIAL_\ptr
-	.set SPECIAL_\ptr, __special__
-	.4byte \ptr
+	asset_ptr \ptr
 	.endif
 	.set SPECIAL_WAITSTATE_\ptr, \waitstate
 	.set __special__, __special__ + 1
@@ -10,7 +12,7 @@
 
 .set __special__, 0
 .if ALLOCATE_SPECIAL_TABLE
-		.align 2
+		asset_ptr_align
 gSpecials::
 .endif
 	def_special HealPlayerParty

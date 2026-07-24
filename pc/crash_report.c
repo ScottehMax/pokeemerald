@@ -34,10 +34,15 @@ struct PcSymbolizer
     SYM_TYPE symbolType;
     int initialized;
 #else
+#if PLATFORM_ANDROID
+    Elf64_Sym *symbols;
+#else
     Elf32_Sym *symbols;
+#endif
     size_t symbolCount;
     char *strings;
     size_t stringsSize;
+    uint32_t moduleBase;
 #endif
 };
 
@@ -77,10 +82,60 @@ static const char *GetDispatchName(uint32_t kind)
     }
 }
 
+static const char *GetPhaseName(uint32_t phase)
+{
+    switch (phase)
+    {
+    case PC_DIAGNOSTIC_PHASE_CALLBACKS:
+        return "callbacks";
+    case PC_DIAGNOSTIC_PHASE_FRAME_HOUSEKEEPING:
+        return "frame housekeeping";
+    case PC_DIAGNOSTIC_PHASE_MAP_MUSIC:
+        return "map music";
+    case PC_DIAGNOSTIC_PHASE_WAIT_FRAME:
+        return "frame wait";
+    case PC_DIAGNOSTIC_PHASE_VCOUNT:
+        return "VCount";
+    case PC_DIAGNOSTIC_PHASE_VBLANK:
+        return "VBlank";
+    case PC_DIAGNOSTIC_PHASE_AUDIO:
+        return "audio";
+    case PC_DIAGNOSTIC_PHASE_RENDER:
+        return "render";
+    default:
+        return "none";
+    }
+}
+
+static const char *GetRenderStageName(uint32_t stage)
+{
+    switch (stage)
+    {
+    case PC_DIAGNOSTIC_RENDER_CLEAR:
+        return "clear";
+    case PC_DIAGNOSTIC_RENDER_OBJECT_WINDOW:
+        return "object window";
+    case PC_DIAGNOSTIC_RENDER_WINDOWS:
+        return "windows";
+    case PC_DIAGNOSTIC_RENDER_BACKGROUNDS:
+        return "backgrounds";
+    case PC_DIAGNOSTIC_RENDER_SPRITES:
+        return "sprites";
+    case PC_DIAGNOSTIC_RENDER_OUTPUT:
+        return "output";
+    case PC_DIAGNOSTIC_RENDER_HBLANK_DMA:
+        return "HBlank DMA";
+    case PC_DIAGNOSTIC_RENDER_HBLANK_CALLBACK:
+        return "HBlank callback";
+    default:
+        return "none";
+    }
+}
+
 static uint64_t HashFile(const char *path)
 {
     unsigned char buffer[64 * 1024];
-    uint64_t hash = UINT64_C(1469598103934665603);
+    uint64_t hash = UINT64_C(14695981039346656037);
     FILE *file = fopen(path, "rb");
     size_t count;
 
@@ -227,12 +282,15 @@ static int GetCoreDirectory(const char *corePath, char *directory, size_t direct
     return 0;
 }
 
-static int InitSymbolizer(struct PcSymbolizer *symbolizer, const char *corePath)
+static int InitSymbolizer(struct PcSymbolizer *symbolizer,
+                          const char *corePath,
+                          uint32_t moduleBase)
 {
     IMAGEHLP_MODULE64 module = {0};
     char searchPath[PC_PATH_MAX];
 
     memset(symbolizer, 0, sizeof(*symbolizer));
+    (void)moduleBase;
     symbolizer->process = GetCurrentProcess();
     if (GetCoreDirectory(corePath, searchPath, sizeof(searchPath)) != 0)
     {
@@ -280,7 +338,7 @@ static void CloseSymbolizer(struct PcSymbolizer *symbolizer)
 }
 
 static void FormatSymbol(struct PcSymbolizer *symbolizer,
-                         uint32_t address,
+                         uint64_t address,
                          char *buffer,
                          size_t bufferSize)
 {
@@ -330,21 +388,34 @@ static int ReadAt(FILE *file, long offset, void *data, size_t size)
     return fseek(file, offset, SEEK_SET) == 0 && fread(data, 1, size, file) == size ? 0 : -1;
 }
 
-static int InitSymbolizer(struct PcSymbolizer *symbolizer, const char *corePath)
+static int InitSymbolizer(struct PcSymbolizer *symbolizer,
+                          const char *corePath,
+                          uint32_t moduleBase)
 {
+#if PLATFORM_ANDROID
+    Elf64_Ehdr header;
+    Elf64_Shdr *sections = NULL;
+#else
     Elf32_Ehdr header;
     Elf32_Shdr *sections = NULL;
+#endif
     FILE *file = NULL;
     size_t i;
     int result = -1;
 
     memset(symbolizer, 0, sizeof(*symbolizer));
+    symbolizer->moduleBase = moduleBase;
     file = fopen(corePath, "rb");
     if (file == NULL || fread(&header, 1, sizeof(header), file) != sizeof(header))
         goto cleanup;
     if (memcmp(header.e_ident, ELFMAG, SELFMAG) != 0
+#if PLATFORM_ANDROID
+     || header.e_ident[EI_CLASS] != ELFCLASS64
+     || header.e_shentsize != sizeof(Elf64_Shdr)
+#else
      || header.e_ident[EI_CLASS] != ELFCLASS32
      || header.e_shentsize != sizeof(Elf32_Shdr)
+#endif
      || header.e_shnum == 0)
         goto cleanup;
     sections = malloc((size_t)header.e_shnum * sizeof(*sections));
@@ -353,15 +424,24 @@ static int InitSymbolizer(struct PcSymbolizer *symbolizer, const char *corePath)
         goto cleanup;
     for (i = 0; i < header.e_shnum; i++)
     {
+#if PLATFORM_ANDROID
+        Elf64_Shdr *symbols = &sections[i];
+        Elf64_Shdr *strings;
+#else
         Elf32_Shdr *symbols = &sections[i];
         Elf32_Shdr *strings;
+#endif
 
         if (symbols->sh_type != SHT_SYMTAB
+#if PLATFORM_ANDROID
+         || symbols->sh_entsize != sizeof(Elf64_Sym)
+#else
          || symbols->sh_entsize != sizeof(Elf32_Sym)
+#endif
          || symbols->sh_link >= header.e_shnum)
             continue;
         strings = &sections[symbols->sh_link];
-        symbolizer->symbolCount = symbols->sh_size / sizeof(Elf32_Sym);
+        symbolizer->symbolCount = symbols->sh_size / sizeof(*symbolizer->symbols);
         symbolizer->symbols = malloc(symbols->sh_size);
         symbolizer->strings = malloc(strings->sh_size);
         symbolizer->stringsSize = strings->sh_size;
@@ -393,33 +473,52 @@ static void CloseSymbolizer(struct PcSymbolizer *symbolizer)
 }
 
 static void FormatSymbol(struct PcSymbolizer *symbolizer,
-                         uint32_t address,
+                         uint64_t address,
                          char *buffer,
                          size_t bufferSize)
 {
+#if PLATFORM_ANDROID
+    const Elf64_Sym *best = NULL;
+    uint64_t lookupAddress = symbolizer->moduleBase != 0 && address >= symbolizer->moduleBase
+                           ? address - symbolizer->moduleBase
+                           : address;
+#else
     const Elf32_Sym *best = NULL;
+    uint32_t lookupAddress = address;
+#endif
     size_t i;
 
     for (i = 0; i < symbolizer->symbolCount; i++)
     {
+#if PLATFORM_ANDROID
+        const Elf64_Sym *symbol = &symbolizer->symbols[i];
+        uint64_t end;
+#else
         const Elf32_Sym *symbol = &symbolizer->symbols[i];
         uint32_t end;
+#endif
 
-        if (ELF32_ST_TYPE(symbol->st_info) != STT_FUNC
+        if (
+#if PLATFORM_ANDROID
+            ELF64_ST_TYPE(symbol->st_info)
+#else
+            ELF32_ST_TYPE(symbol->st_info)
+#endif
+            != STT_FUNC
          || symbol->st_name >= symbolizer->stringsSize
-         || symbol->st_value > address)
+         || symbol->st_value > lookupAddress)
             continue;
         end = symbol->st_size == 0 ? symbol->st_value : symbol->st_value + symbol->st_size;
-        if (((symbol->st_size == 0 && address - symbol->st_value < 4096) || address < end)
+        if (((symbol->st_size == 0 && lookupAddress - symbol->st_value < 4096) || lookupAddress < end)
          && (best == NULL || symbol->st_value > best->st_value))
             best = symbol;
     }
     if (best != NULL)
         snprintf(buffer,
                  bufferSize,
-                 "%s+0x%x",
+                 "%s+0x%" PRIx64,
                  symbolizer->strings + best->st_name,
-                 address - best->st_value);
+                 (uint64_t)(lookupAddress - best->st_value));
     else
         snprintf(buffer, bufferSize, "unknown");
 }
@@ -439,6 +538,22 @@ static void PrintAddress(FILE *file,
     }
     FormatSymbol(symbolizer, address, symbol, sizeof(symbol));
     fprintf(file, "%s: 0x%08" PRIx32 " %s\n", label, address, symbol);
+}
+
+static void PrintNativeAddress(FILE *file,
+                               struct PcSymbolizer *symbolizer,
+                               const char *label,
+                               uint64_t address)
+{
+    char symbol[1024];
+
+    if (address == 0)
+    {
+        fprintf(file, "%s: 0x0000000000000000\n", label);
+        return;
+    }
+    FormatSymbol(symbolizer, address, symbol, sizeof(symbol));
+    fprintf(file, "%s: 0x%016" PRIx64 " %s\n", label, address, symbol);
 }
 
 static void PrintData(FILE *file, const int16_t *data, size_t count)
@@ -479,17 +594,22 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
     file = fopen(reportPath, "wb");
     if (file == NULL)
         return -1;
-    InitSymbolizer(&symbolizer, corePath);
+    InitSymbolizer(&symbolizer, corePath, shared->coreLoadBase);
     coreHash = HashFile(corePath);
 
     fprintf(file, "pokeemerald-pc crash report\n");
     fprintf(file, "format: %u\n", PC_CRASH_VERSION);
     fprintf(file, "core: %s\n", corePath);
     fprintf(file, "core_fnv1a64: %016" PRIx64 "\n", coreHash);
+#if PLATFORM_ANDROID
+    fprintf(file, "core_base: 0x%08" PRIx32 "\n", shared->coreLoadBase);
+#endif
 #ifdef _WIN32
     PrintSymbolizerStatus(file, &symbolizer);
 #endif
     fprintf(file, "exit_status: %d\n", exitStatus);
+    if (shared->coreErrorMessage[0] != '\0')
+        fprintf(file, "core_error: %s\n", shared->coreErrorMessage);
     fprintf(file, "frame: %" PRIu32 "\n", state->frame);
     if (crash->magic == PC_CRASH_MAGIC
      && crash->version == PC_CRASH_VERSION
@@ -497,8 +617,12 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
     {
         fprintf(file, "crash_code: 0x%08" PRIx32 "\n", crash->code);
         fprintf(file, "access: %s\n", GetAccessName(crash->access));
-        fprintf(file, "fault_address: 0x%08" PRIx32 "\n", crash->faultAddress);
-        PrintAddress(file, &symbolizer, "instruction", crash->instruction);
+        fprintf(file, "fault_address: 0x%016" PRIx64 "\n", crash->faultAddress);
+        PrintNativeAddress(file, &symbolizer, "instruction", crash->instruction);
+        if (crash->nativeModule[0] != '\0' && crash->instruction >= crash->nativeModuleBase)
+            fprintf(file, "native_module: %s+0x%" PRIx64 "\n",
+                    crash->nativeModule,
+                    crash->instruction - crash->nativeModuleBase);
     }
     else
     {
@@ -511,27 +635,34 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
     {
         char label[32];
         char symbol[1024];
-        uint32_t lookupAddress = i == 0 || crash->stackFrames[i] == 0
+        uint64_t lookupAddress = i == 0 || crash->stackFrames[i] == 0
                                ? crash->stackFrames[i]
                                : crash->stackFrames[i] - 1;
 
         snprintf(label, sizeof(label), "#%02" PRIu32, i);
         FormatSymbol(&symbolizer, lookupAddress, symbol, sizeof(symbol));
         fprintf(file,
-                "%s: 0x%08" PRIx32 " %s\n",
+                "%s: 0x%016" PRIx64 " %s\n",
                 label,
                 crash->stackFrames[i],
                 symbol);
     }
 
     fprintf(file, "\nRegisters\n");
-    fprintf(file, "eax=%08" PRIx32 " ebx=%08" PRIx32 " ecx=%08" PRIx32 " edx=%08" PRIx32 "\n",
+    fprintf(file, "eax=%016" PRIx64 " ebx=%016" PRIx64 " ecx=%016" PRIx64 " edx=%016" PRIx64 "\n",
             crash->eax, crash->ebx, crash->ecx, crash->edx);
-    fprintf(file, "esi=%08" PRIx32 " edi=%08" PRIx32 " ebp=%08" PRIx32 " esp=%08" PRIx32 "\n",
+    fprintf(file, "esi=%016" PRIx64 " edi=%016" PRIx64 " ebp=%016" PRIx64 " esp=%016" PRIx64 "\n",
             crash->esi, crash->edi, crash->ebp, crash->esp);
-    fprintf(file, "eflags=%08" PRIx32 "\n", crash->eflags);
+    fprintf(file, "link=%016" PRIx64 "\n", crash->link);
+    fprintf(file, "eflags=%016" PRIx64 "\n", crash->eflags);
 
     fprintf(file, "\nGame State\n");
+    fprintf(file, "threads: crash=%" PRIu32 " game=%" PRIu32 "%s\n",
+            crash->threadId,
+            state->gameThreadId,
+            crash->threadId != 0 && state->gameThreadId != 0 && crash->threadId != state->gameThreadId
+                ? " (different thread)"
+                : "");
     fprintf(file, "map=%d.%d position=%d,%d in_battle=%" PRIu32 "\n",
             state->mapGroup, state->mapNum, state->mapX, state->mapY, state->inBattle);
     fprintf(file, "battle_type=0x%08" PRIx32 " controller_flags=0x%08" PRIx32
@@ -546,6 +677,17 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
             state->linkType, state->linkPlayersReceived, state->wirelessCommType);
 
     fprintf(file, "\nDispatch State\n");
+    fprintf(file, "frame_phase: %s\n", GetPhaseName(state->phase));
+    if (state->phase == PC_DIAGNOSTIC_PHASE_RENDER)
+    {
+        if (state->renderScanline == UINT32_MAX)
+            fprintf(file, "render_progress: scanline=none stage=%s\n",
+                    GetRenderStageName(state->renderStage));
+        else
+            fprintf(file, "render_progress: scanline=%" PRIu32 " stage=%s\n",
+                    state->renderScanline,
+                    GetRenderStageName(state->renderStage));
+    }
     PrintAddress(file, &symbolizer, "main_callback_1", state->mainCallback1);
     PrintAddress(file, &symbolizer, "main_callback_2", state->mainCallback2);
     fprintf(file, "current_main_kind: %s\n", GetDispatchName(state->currentMainKind));
@@ -675,7 +817,7 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
      && crash->version == PC_CRASH_VERSION
      && crash->complete != 0)
         fprintf(stderr,
-                "crash location: 0x%08" PRIx32 " %s\n",
+                "crash location: 0x%016" PRIx64 " %s\n",
                 crash->instruction,
                 topSymbol);
     return 0;

@@ -6,6 +6,8 @@
 
 void PcDiagnosticsInit(struct PcSharedState *shared);
 void PcDiagnosticsFrame(void);
+void PcDiagnosticsSetPhase(u32 phase);
+void PcDiagnosticsSetRenderProgress(u32 scanline, u32 stage);
 void PcDiagnosticsEnterMain(u32 kind, const void *callback);
 void PcDiagnosticsLeaveMain(void);
 void PcDiagnosticsEnterTask(u8 taskId, const void *callback, const s16 *data);

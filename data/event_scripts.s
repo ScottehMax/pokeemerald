@@ -65,46 +65,48 @@
 	.set ALLOCATE_SCRIPT_CMD_TABLE, 1
 	.include "data/script_cmd_table.inc"
 
+asset_ptr_align
 gSpecialVars::
-	.4byte gSpecialVar_0x8000
-	.4byte gSpecialVar_0x8001
-	.4byte gSpecialVar_0x8002
-	.4byte gSpecialVar_0x8003
-	.4byte gSpecialVar_0x8004
-	.4byte gSpecialVar_0x8005
-	.4byte gSpecialVar_0x8006
-	.4byte gSpecialVar_0x8007
-	.4byte gSpecialVar_0x8008
-	.4byte gSpecialVar_0x8009
-	.4byte gSpecialVar_0x800A
-	.4byte gSpecialVar_0x800B
-	.4byte gSpecialVar_Facing
-	.4byte gSpecialVar_Result
-	.4byte gSpecialVar_ItemId
-	.4byte gSpecialVar_LastTalked
-	.4byte gSpecialVar_ContestRank
-	.4byte gSpecialVar_ContestCategory
-	.4byte gSpecialVar_MonBoxId
-	.4byte gSpecialVar_MonBoxPos
-	.4byte gSpecialVar_Unused_0x8014
-	.4byte gTrainerBattleOpponent_A
+	asset_ptr gSpecialVar_0x8000
+	asset_ptr gSpecialVar_0x8001
+	asset_ptr gSpecialVar_0x8002
+	asset_ptr gSpecialVar_0x8003
+	asset_ptr gSpecialVar_0x8004
+	asset_ptr gSpecialVar_0x8005
+	asset_ptr gSpecialVar_0x8006
+	asset_ptr gSpecialVar_0x8007
+	asset_ptr gSpecialVar_0x8008
+	asset_ptr gSpecialVar_0x8009
+	asset_ptr gSpecialVar_0x800A
+	asset_ptr gSpecialVar_0x800B
+	asset_ptr gSpecialVar_Facing
+	asset_ptr gSpecialVar_Result
+	asset_ptr gSpecialVar_ItemId
+	asset_ptr gSpecialVar_LastTalked
+	asset_ptr gSpecialVar_ContestRank
+	asset_ptr gSpecialVar_ContestCategory
+	asset_ptr gSpecialVar_MonBoxId
+	asset_ptr gSpecialVar_MonBoxPos
+	asset_ptr gSpecialVar_Unused_0x8014
+	asset_ptr gTrainerBattleOpponent_A
 
 	.purgem def_special
 	.set ALLOCATE_SPECIAL_TABLE, 1
 	.include "data/specials.inc"
 
+asset_ptr_align
 gStdScripts::
-	.4byte Std_ObtainItem              @ STD_OBTAIN_ITEM
-	.4byte Std_FindItem                @ STD_FIND_ITEM
-	.4byte Std_MsgboxNPC               @ MSGBOX_NPC
-	.4byte Std_MsgboxSign              @ MSGBOX_SIGN
-	.4byte Std_MsgboxDefault           @ MSGBOX_DEFAULT
-	.4byte Std_MsgboxYesNo             @ MSGBOX_YESNO
-	.4byte Std_MsgboxAutoclose         @ MSGBOX_AUTOCLOSE
-	.4byte Std_ObtainDecoration        @ STD_OBTAIN_DECORATION
-	.4byte Std_RegisteredInMatchCall   @ STD_REGISTER_MATCH_CALL
-	.4byte Std_MsgboxGetPoints         @ MSGBOX_GETPOINTS
-	.4byte Std_MsgboxPokenav           @ MSGBOX_POKENAV
+	asset_ptr Std_ObtainItem              @ STD_OBTAIN_ITEM
+	asset_ptr Std_FindItem                @ STD_FIND_ITEM
+	asset_ptr Std_MsgboxNPC               @ MSGBOX_NPC
+	asset_ptr Std_MsgboxSign              @ MSGBOX_SIGN
+	asset_ptr Std_MsgboxDefault           @ MSGBOX_DEFAULT
+	asset_ptr Std_MsgboxYesNo             @ MSGBOX_YESNO
+	asset_ptr Std_MsgboxAutoclose         @ MSGBOX_AUTOCLOSE
+	asset_ptr Std_ObtainDecoration        @ STD_OBTAIN_DECORATION
+	asset_ptr Std_RegisteredInMatchCall   @ STD_REGISTER_MATCH_CALL
+	asset_ptr Std_MsgboxGetPoints         @ MSGBOX_GETPOINTS
+	asset_ptr Std_MsgboxPokenav           @ MSGBOX_POKENAV
 gStdScripts_End::
 
 	.include "data/maps/PetalburgCity/scripts.inc"

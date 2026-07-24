@@ -11,41 +11,41 @@
 
 	.section script_data, "aw", %progbits
 
-	.align 2
+	asset_ptr_align
 gBattlescriptsForBallThrow::
-	.4byte BattleScript_BallThrow        @ ITEM_NONE
-	.4byte BattleScript_BallThrow        @ ITEM_MASTER_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_ULTRA_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_GREAT_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_POKE_BALL
-	.4byte BattleScript_SafariBallThrow  @ ITEM_SAFARI_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_NET_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_DIVE_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_NEST_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_REPEAT_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_TIMER_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_LUXURY_BALL
-	.4byte BattleScript_BallThrow        @ ITEM_PREMIER_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_NONE
+	asset_ptr BattleScript_BallThrow        @ ITEM_MASTER_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_ULTRA_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_GREAT_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_POKE_BALL
+	asset_ptr BattleScript_SafariBallThrow  @ ITEM_SAFARI_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_NET_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_DIVE_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_NEST_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_REPEAT_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_TIMER_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_LUXURY_BALL
+	asset_ptr BattleScript_BallThrow        @ ITEM_PREMIER_BALL
 
-	.align 2
+	asset_ptr_align
 gBattlescriptsForUsingItem::
-	.4byte BattleScript_PlayerUsesItem
-	.4byte BattleScript_OpponentUsesHealItem        @ AI_ITEM_FULL_RESTORE
-	.4byte BattleScript_OpponentUsesHealItem        @ AI_ITEM_HEAL_HP
-	.4byte BattleScript_OpponentUsesStatusCureItem  @ AI_ITEM_CURE_CONDITION
-	.4byte BattleScript_OpponentUsesXItem           @ AI_ITEM_X_STAT
-	.4byte BattleScript_OpponentUsesGuardSpec       @ AI_ITEM_GUARD_SPEC
+	asset_ptr BattleScript_PlayerUsesItem
+	asset_ptr BattleScript_OpponentUsesHealItem        @ AI_ITEM_FULL_RESTORE
+	asset_ptr BattleScript_OpponentUsesHealItem        @ AI_ITEM_HEAL_HP
+	asset_ptr BattleScript_OpponentUsesStatusCureItem  @ AI_ITEM_CURE_CONDITION
+	asset_ptr BattleScript_OpponentUsesXItem           @ AI_ITEM_X_STAT
+	asset_ptr BattleScript_OpponentUsesGuardSpec       @ AI_ITEM_GUARD_SPEC
 
-	.align 2
+	asset_ptr_align
 gBattlescriptsForRunningByItem::
-	.4byte BattleScript_RunByUsingItem
+	asset_ptr BattleScript_RunByUsingItem
 
-	.align 2
+	asset_ptr_align
 gBattlescriptsForSafariActions::
-	.4byte BattleScript_ActionWatchesCarefully
-	.4byte BattleScript_ActionGetNear
-	.4byte BattleScript_ActionThrowPokeblock
-	.4byte BattleScript_ActionWallyThrow
+	asset_ptr BattleScript_ActionWatchesCarefully
+	asset_ptr BattleScript_ActionGetNear
+	asset_ptr BattleScript_ActionThrowPokeblock
+	asset_ptr BattleScript_ActionWallyThrow
 
 BattleScript_BallThrow::
 	jumpifword CMP_COMMON_BITS, gBattleTypeFlags, BATTLE_TYPE_WALLY_TUTORIAL, BattleScript_BallThrowByWally

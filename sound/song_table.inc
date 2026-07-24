@@ -3,7 +3,7 @@
 	.equiv MUSIC_PLAYER_SE2,2
 	.equiv MUSIC_PLAYER_SE3,3
 
-	.align 2
+	asset_ptr_align
 
 gSongTable::
 	song mus_dummy, MUSIC_PLAYER_BGM, 0

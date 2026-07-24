@@ -14,14 +14,14 @@ struct ScriptContext
     u8 (*nativePtr)(void);
     const u8 *scriptPtr;
     const u8 *stack[20];
-    ScrCmdFunc *cmdTable;
-    ScrCmdFunc *cmdTableEnd;
+    const AssetPtr *cmdTable;
+    const AssetPtr *cmdTableEnd;
     u32 data[4];
 };
 
 #define ScriptReadByte(ctx) (*(ctx->scriptPtr++))
 
-void InitScriptContext(struct ScriptContext *ctx, void *cmdTable, void *cmdTableEnd);
+void InitScriptContext(struct ScriptContext *ctx, const AssetPtr *cmdTable, const AssetPtr *cmdTableEnd);
 u8 SetupBytecodeScript(struct ScriptContext *ctx, const u8 *ptr);
 void SetupNativeScript(struct ScriptContext *ctx, bool8 (*ptr)(void));
 void StopScript(struct ScriptContext *ctx);
@@ -31,6 +31,7 @@ void ScriptCall(struct ScriptContext *ctx, const u8 *ptr);
 void ScriptReturn(struct ScriptContext *ctx);
 u16 ScriptReadHalfword(struct ScriptContext *ctx);
 u32 ScriptReadWord(struct ScriptContext *ctx);
+void *ScriptReadPointer(struct ScriptContext *ctx);
 void LockPlayerFieldControls(void);
 void UnlockPlayerFieldControls(void);
 bool8 ArePlayerFieldControlsLocked(void);

@@ -27,7 +27,7 @@ EWRAM_DATA u16 gSpecialVar_MonBoxPos = 0;
 EWRAM_DATA u16 gSpecialVar_Unused_0x8014 = 0;
 EWRAM_DATA static u8 sSpecialFlags[SPECIAL_FLAGS_SIZE] = {0};
 
-extern u16 *const gSpecialVars[];
+extern const AssetPtr gSpecialVars[];
 
 void InitEventData(void)
 {
@@ -168,7 +168,7 @@ u16 *GetVarPointer(u16 id)
     else if (id < SPECIAL_VARS_START)
         return &gSaveBlock1Ptr->vars[id - VARS_START];
     else
-        return gSpecialVars[id - SPECIAL_VARS_START];
+        return ASSET_TABLE_ENTRY(u16 *, gSpecialVars, id - SPECIAL_VARS_START);
 }
 
 u16 VarGet(u16 id)

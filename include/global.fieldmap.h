@@ -82,6 +82,16 @@ struct MapLayout
     /*0x14*/ const struct Tileset *secondaryTileset;
 };
 
+struct MapLayoutAsset
+{
+    s32 width;
+    s32 height;
+    AssetPtr border;
+    AssetPtr map;
+    AssetPtr primaryTileset;
+    AssetPtr secondaryTileset;
+};
+
 struct BackupMapLayout
 {
     s32 width;
@@ -104,10 +114,27 @@ struct ObjectEventTemplate
              //u16 padding2:8;
     /*0x0C*/ u16 trainerType;
     /*0x0E*/ u16 trainerRange_berryTreeId;
+#if PLATFORM_RELATIVE_POINTERS
+    /*0x10*/ u32 script;
+#else
     /*0x10*/ const u8 *script;
+#endif
     /*0x14*/ u16 flagId;
     /*0x16*/ //u8 padding3[2];
 };
+
+#if PLATFORM_RELATIVE_POINTERS
+#define OBJECT_EVENT_SCRIPT(template) ((const u8 *)(uintptr_t)((template)->script))
+#define OBJECT_EVENT_SCRIPT_VALUE(script) ((u32)(uintptr_t)(script))
+#define MAP_OBJECT_EVENT_SCRIPT(template) \
+    ((template)->script == 0 \
+        ? NULL \
+        : (const u8 *)((const u8 *)&(template)->script + (s32)(template)->script))
+#else
+#define OBJECT_EVENT_SCRIPT(template) ((template)->script)
+#define OBJECT_EVENT_SCRIPT_VALUE(script) (script)
+#define MAP_OBJECT_EVENT_SCRIPT(template) ((template)->script)
+#endif
 
 struct WarpEvent
 {
@@ -124,8 +151,18 @@ struct CoordEvent
     u8 elevation;
     u16 trigger;
     u16 index;
+#if PLATFORM_RELATIVE_POINTERS
+    AssetPtr script;
+#else
     const u8 *script;
+#endif
 };
+
+#if PLATFORM_RELATIVE_POINTERS
+#define MAP_COORD_EVENT_SCRIPT(event) ASSET_POINTER(const u8 *, &(event)->script)
+#else
+#define MAP_COORD_EVENT_SCRIPT(event) ((event)->script)
+#endif
 
 struct BgEvent
 {
@@ -133,7 +170,11 @@ struct BgEvent
     u8 elevation;
     u8 kind; // The "kind" field determines how to access bgUnion union below.
     union {
+#if PLATFORM_RELATIVE_POINTERS
+        AssetPtr script;
+#else
         const u8 *script;
+#endif
         struct {
             u16 item;
             u16 hiddenItemId;
@@ -141,6 +182,12 @@ struct BgEvent
         u32 secretBaseId;
     } bgUnion;
 };
+
+#if PLATFORM_RELATIVE_POINTERS
+#define MAP_BG_EVENT_SCRIPT(event) ASSET_POINTER(const u8 *, &(event)->bgUnion.script)
+#else
+#define MAP_BG_EVENT_SCRIPT(event) ((event)->bgUnion.script)
+#endif
 
 struct MapEvents
 {
@@ -152,6 +199,18 @@ struct MapEvents
     const struct WarpEvent *warps;
     const struct CoordEvent *coordEvents;
     const struct BgEvent *bgEvents;
+};
+
+struct MapEventsAsset
+{
+    u8 objectEventCount;
+    u8 warpCount;
+    u8 coordEventCount;
+    u8 bgEventCount;
+    AssetPtr objectEvents;
+    AssetPtr warps;
+    AssetPtr coordEvents;
+    AssetPtr bgEvents;
 };
 
 struct MapConnection
@@ -166,6 +225,12 @@ struct MapConnections
 {
     s32 count;
     const struct MapConnection *connections;
+};
+
+struct MapConnectionsAsset
+{
+    s32 count;
+    AssetPtr connections;
 };
 
 struct MapHeader
@@ -189,6 +254,40 @@ struct MapHeader
                                     // but the 5 bit sized bitfield is required to match
     /* 0x1B */ u8 battleType;
 };
+
+struct MapHeaderAsset
+{
+    AssetPtr mapLayout;
+    AssetPtr events;
+    AssetPtr mapScripts;
+    AssetPtr connections;
+    u16 music;
+    u16 mapLayoutId;
+    mapsec_u8_t regionMapSectionId;
+    u8 cave;
+    u8 weather;
+    u8 mapType;
+    u8 filler_18[2];
+    bool8 allowCycling:1;
+    bool8 allowEscaping:1;
+    bool8 allowRunning:1;
+    bool8 showMapName:5;
+    u8 battleType;
+};
+
+_Static_assert(sizeof(struct MapLayoutAsset) == 24, "MapLayout asset layout changed");
+_Static_assert(sizeof(struct MapEventsAsset) == 20, "MapEvents asset layout changed");
+_Static_assert(sizeof(struct MapConnectionsAsset) == 8, "MapConnections asset layout changed");
+_Static_assert(sizeof(struct MapHeaderAsset) == 28, "MapHeader asset layout changed");
+#if PLATFORM_RELATIVE_POINTERS
+_Static_assert(sizeof(struct ObjectEventTemplate) == 24, "Object event asset layout changed");
+_Static_assert(offsetof(struct ObjectEventTemplate, script) == 16, "Object event script offset changed");
+_Static_assert(sizeof(struct CoordEvent) == 16, "Coordinate event asset layout changed");
+_Static_assert(offsetof(struct CoordEvent, script) == 12, "Coordinate event script offset changed");
+_Static_assert(sizeof(struct BgEvent) == 12, "Background event asset layout changed");
+_Static_assert(offsetof(struct BgEvent, bgUnion.script) == 8, "Background event script offset changed");
+_Static_assert(sizeof(struct MapConnection) == 12, "Map connection asset layout changed");
+#endif
 
 
 struct ObjectEvent

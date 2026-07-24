@@ -139,24 +139,24 @@ string generate_map_header_text(Json map_data, Json layouts_data) {
     string mapName = json_to_string(map_data, "name");
     text << get_generated_warning("data/maps/" + mapName + "/map.json", true);
 
-    text << mapName << ":\n"
-         << "\t.4byte " << json_to_string(layout, "name") << "\n";
+    text << "asset_ptr_align\n" << mapName << ":\n"
+         << "\tasset_ptr " << json_to_string(layout, "name") << "\n";
 
     if (map_data.object_items().find("shared_events_map") != map_data.object_items().end())
-        text << "\t.4byte " << json_to_string(map_data, "shared_events_map") << "_MapEvents\n";
+        text << "\tasset_ptr " << json_to_string(map_data, "shared_events_map") << "_MapEvents\n";
     else
-        text << "\t.4byte " << mapName << "_MapEvents\n";
+        text << "\tasset_ptr " << mapName << "_MapEvents\n";
 
     if (map_data.object_items().find("shared_scripts_map") != map_data.object_items().end())
-        text << "\t.4byte " << json_to_string(map_data, "shared_scripts_map") << "_MapScripts\n";
+        text << "\tasset_ptr " << json_to_string(map_data, "shared_scripts_map") << "_MapScripts\n";
     else
-        text << "\t.4byte " << mapName << "_MapScripts\n";
+        text << "\tasset_ptr " << mapName << "_MapScripts\n";
 
     if (map_data.object_items().find("connections") != map_data.object_items().end()
      && map_data["connections"].array_items().size() > 0 && json_to_string(map_data, "connections_no_include", true) != "TRUE")
-        text << "\t.4byte " << mapName << "_MapConnections\n";
+        text << "\tasset_ptr " << mapName << "_MapConnections\n";
     else
-        text << "\t.4byte NULL\n";
+        text << "\tasset_ptr NULL\n";
 
     text << "\t.2byte " << json_to_string(map_data, "music") << "\n"
          << "\t.2byte " << json_to_string(layout, "id") << "\n"
@@ -202,9 +202,9 @@ string generate_map_connections_text(Json map_data) {
              << json_to_string(connection, "map") << "\n";
     }
 
-    text << "\n" << mapName << "_MapConnections:\n"
-         << "\t.4byte " << map_data["connections"].array_items().size() << "\n"
-         << "\t.4byte " << mapName << "_MapConnectionsList\n\n";
+    text << "\nasset_ptr_align\n" << mapName << "_MapConnections:\n"
+         << "\tmap_connections " << map_data["connections"].array_items().size()
+         << ", " << mapName << "_MapConnectionsList\n\n";
 
     return text.str();
 }
@@ -217,7 +217,7 @@ string generate_map_events_text(Json map_data) {
 
     ostringstream text;
     text << get_generated_warning("data/maps/" + mapName + "/map.json", true);
-    text << "\t.align 2\n\n";
+    text << "\tasset_ptr_align\n\n";
 
     string objects_label, warps_label, coords_label, bgs_label;
 
@@ -440,16 +440,16 @@ string generate_groups_text(Json groups_data) {
 
     for (auto &key : groups_data["group_order"].array_items()) {
         string group = json_to_string(key);
-        text << group << "::\n";
+        text << "asset_ptr_align\n" << group << "::\n";
         auto maps = groups_data[group].array_items();
         for (Json &map_name : maps)
-            text << "\t.4byte " << json_to_string(map_name) << "\n";
+            text << "\tasset_ptr " << json_to_string(map_name) << "\n";
         text << "\n";
     }
 
-    text << "\t.align 2\n" << "gMapGroups::\n";
+    text << "\tasset_ptr_align\n" << "gMapGroups::\n";
     for (auto &group : groups_data["group_order"].array_items())
-        text << "\t.4byte " << json_to_string(group) << "\n";
+        text << "\tasset_ptr " << json_to_string(group) << "\n";
     text << "\n";
 
     return text.str();
@@ -604,14 +604,14 @@ string generate_layout_headers_text(Json layouts_data) {
              << "\t.incbin \"" << json_to_string(layout, "border_filepath") << "\"\n\n"
              << blockdata_label << "::\n"
              << "\t.incbin \"" << json_to_string(layout, "blockdata_filepath") << "\"\n\n"
-             << "\t.align 2\n"
+             << "\tasset_ptr_align\n"
              << layoutName << "::\n"
              << "\t.4byte " << json_to_string(layout, "width") << "\n"
              << "\t.4byte " << json_to_string(layout, "height") << "\n"
-             << "\t.4byte " << border_label << "\n"
-             << "\t.4byte " << blockdata_label << "\n"
-             << "\t.4byte " << json_to_string(layout, "primary_tileset") << "\n"
-             << "\t.4byte " << json_to_string(layout, "secondary_tileset") << "\n";
+             << "\tasset_ptr " << border_label << "\n"
+             << "\tasset_ptr " << blockdata_label << "\n"
+             << "\tasset_ptr " << json_to_string(layout, "primary_tileset") << "\n"
+             << "\tasset_ptr " << json_to_string(layout, "secondary_tileset") << "\n";
         if (version == "firered") {
             text << "\t.byte " << json_to_string(layout, "border_width") << "\n"
                  << "\t.byte " << json_to_string(layout, "border_height") << "\n"
@@ -628,13 +628,13 @@ string generate_layouts_table_text(Json layouts_data) {
 
     text << get_generated_warning("data/layouts/layouts.json", true);
 
-    text << "\t.align 2\n"
+    text << "\tasset_ptr_align\n"
          << json_to_string(layouts_data, "layouts_table_label") << "::\n";
 
     for (auto &layout : layouts_data["layouts"].array_items()) {
         string layout_name = json_to_string(layout, "name", true);
         if (layout_name.empty()) layout_name = "NULL";
-        text << "\t.4byte " << layout_name << "\n";
+        text << "\tasset_ptr " << layout_name << "\n";
     }
 
     return text.str();

@@ -31,8 +31,13 @@ struct Berry2
     u16 size;
     u8 maxYield;
     u8 minYield;
+#if PLATFORM_RELATIVE_POINTERS
+    u32 description1;
+    u32 description2;
+#else
     u8 *description1;
     u8 *description2;
+#endif
     u8 stageDuration;
     u8 spicy;
     u8 dry;

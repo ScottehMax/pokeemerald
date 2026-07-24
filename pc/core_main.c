@@ -14,6 +14,7 @@
 #include <windows.h>
 #else
 #include <signal.h>
+#include <sys/syscall.h>
 #include <ucontext.h>
 #include <unistd.h>
 #endif
@@ -32,6 +33,7 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS *exception)
     uintptr_t address = 0;
 
     PcDiagnosticsCaptureCrash(exception->ExceptionRecord->ExceptionCode, exception, NULL);
+    PcPlatformRecordExit(128);
     if (exception->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION
      && exception->ExceptionRecord->NumberParameters >= 2)
         address = exception->ExceptionRecord->ExceptionInformation[1];
@@ -54,15 +56,59 @@ static DWORD WINAPI WatchdogThread(void *rawSeconds)
     return 0;
 }
 #else
+static const int sCrashSignals[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGALRM};
+static struct sigaction sPreviousSignalActions[sizeof(sCrashSignals) / sizeof(sCrashSignals[0])];
+static pid_t sGameThreadId;
+
+static void ChainPreviousSignalHandler(int signalNumber, siginfo_t *info, void *rawContext)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof(sCrashSignals) / sizeof(sCrashSignals[0]); i++)
+    {
+        const struct sigaction *previous;
+
+        if (sCrashSignals[i] != signalNumber)
+            continue;
+        previous = &sPreviousSignalActions[i];
+        if (previous->sa_handler == SIG_IGN)
+            return;
+        if (previous->sa_handler == SIG_DFL)
+        {
+            sigaction(signalNumber, previous, NULL);
+            raise(signalNumber);
+            return;
+        }
+        if (previous->sa_flags & SA_SIGINFO)
+            previous->sa_sigaction(signalNumber, info, rawContext);
+        else
+            previous->sa_handler(signalNumber);
+        return;
+    }
+}
+
 static void CrashHandler(int signalNumber, siginfo_t *info, void *rawContext)
 {
     ucontext_t *context = rawContext;
     uintptr_t instruction = 0;
 
+#if PLATFORM_ANDROID
+    if ((pid_t)syscall(SYS_gettid) != sGameThreadId)
+    {
+        ChainPreviousSignalHandler(signalNumber, info, rawContext);
+        return;
+    }
+#endif
+
 #if defined(__i386__) && defined(REG_EIP)
     instruction = context->uc_mcontext.gregs[REG_EIP];
+#elif defined(__x86_64__) && defined(REG_RIP)
+    instruction = context->uc_mcontext.gregs[REG_RIP];
+#elif defined(__aarch64__)
+    instruction = context->uc_mcontext.pc;
 #endif
     PcDiagnosticsCaptureCrash(signalNumber, info, rawContext);
+    PcPlatformRecordExit(128 + signalNumber);
     fprintf(stderr,
             "pokeemerald-core signal %d at address %p (instruction 0x%08lx)\n",
             signalNumber,
@@ -77,7 +123,6 @@ static void InstallCrashHandlers(void)
 #ifdef _WIN32
     SetUnhandledExceptionFilter(CrashHandler);
 #else
-    static const int signals[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGALRM};
     static unsigned char signalStack[64 * 1024];
     struct sigaction action;
     stack_t stack;
@@ -87,26 +132,24 @@ static void InstallCrashHandlers(void)
     stack.ss_sp = signalStack;
     stack.ss_size = sizeof(signalStack);
     sigaltstack(&stack, NULL);
+    sGameThreadId = (pid_t)syscall(SYS_gettid);
     action.sa_sigaction = CrashHandler;
     sigemptyset(&action.sa_mask);
-    action.sa_flags = SA_SIGINFO | SA_RESETHAND | SA_ONSTACK;
-    for (i = 0; i < sizeof(signals) / sizeof(signals[0]); i++)
-        sigaction(signals[i], &action, NULL);
+    action.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    for (i = 0; i < sizeof(sCrashSignals) / sizeof(sCrashSignals[0]); i++)
+        sigaction(sCrashSignals[i], &action, &sPreviousSignalActions[i]);
 #endif
 }
 
-int main(int argc, char **argv)
+#if PLATFORM_ANDROID
+__attribute__((visibility("default")))
+#endif
+int PcCoreMain(const char *sharedPath)
 {
     const char *watchdog;
 
     InstallCrashHandlers();
-    if (argc != 2)
-    {
-        fprintf(stderr, "usage: %s SHARED_MEMORY\n", argv[0]);
-        return 2;
-    }
-
-    if (!PcPlatformInit(argv[1]))
+    if (!PcPlatformInit(sharedPath))
         return 1;
 
     watchdog = getenv("POKEEMERALD_PC_WATCHDOG");
@@ -132,3 +175,15 @@ int main(int argc, char **argv)
     PcPlatformShutdown();
     return 0;
 }
+
+#if !PLATFORM_ANDROID
+int main(int argc, char **argv)
+{
+    if (argc != 2)
+    {
+        fprintf(stderr, "usage: %s SHARED_MEMORY\n", argv[0]);
+        return 2;
+    }
+    return PcCoreMain(argv[1]);
+}
+#endif

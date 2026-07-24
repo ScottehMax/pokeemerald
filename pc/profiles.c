@@ -167,25 +167,24 @@ static int AddProfile(const char *name, const char *savePath, int isDefault)
         goto fail;
     profile->isDefault = isDefault;
     profile->hasSave = SaveExists(savePath);
-    if (isDefault)
+    separator = strrchr(savePath, '/');
+#ifdef _WIN32
     {
-        if (snprintf(profile->storagePath, sizeof(profile->storagePath), "storage")
+        const char *backslash = strrchr(savePath, '\\');
+
+        if (backslash != NULL && (separator == NULL || backslash > separator))
+            separator = backslash;
+    }
+#endif
+    if (separator == NULL)
+    {
+        if (!isDefault
+         || snprintf(profile->storagePath, sizeof(profile->storagePath), "storage")
             >= (int)sizeof(profile->storagePath))
             goto fail;
     }
     else
     {
-        separator = strrchr(savePath, '/');
-#ifdef _WIN32
-        {
-            const char *backslash = strrchr(savePath, '\\');
-
-            if (backslash != NULL && (separator == NULL || backslash > separator))
-                separator = backslash;
-        }
-#endif
-        if (separator == NULL)
-            goto fail;
         directoryLength = (size_t)(separator - savePath + 1);
         if (directoryLength + sizeof("storage") > sizeof(profile->storagePath))
             goto fail;

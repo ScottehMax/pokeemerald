@@ -92,8 +92,13 @@ struct CableClubPlayer
 #define FACING_FORCED_LEFT 9
 #define FACING_FORCED_RIGHT 10
 
+#if PLATFORM_RELATIVE_POINTERS
+extern const AssetPtr gMapLayouts[];
+extern const AssetPtr gMapGroups[];
+#else
 extern const struct MapLayout *const gMapLayouts[];
 extern const struct MapHeader *const *const gMapGroups[];
+#endif
 
 static void Overworld_ResetStateAfterWhiteOut(void);
 static void CB2_ReturnToFieldLocal(void);
@@ -468,13 +473,20 @@ void ApplyNewEncryptionKeyToGameStats(u32 newKey)
 
 void LoadObjEventTemplatesFromHeader(void)
 {
+    const struct ObjectEventTemplate *source = gMapHeader.events->objectEvents;
+    struct ObjectEventTemplate *destination = gSaveBlock1Ptr->objectEventTemplates;
+    u8 count = gMapHeader.events->objectEventCount;
+    u8 i;
+
     // Clear map object templates
     CpuFill32(0, gSaveBlock1Ptr->objectEventTemplates, sizeof(gSaveBlock1Ptr->objectEventTemplates));
 
     // Copy map header events to save block
-    CpuCopy32(gMapHeader.events->objectEvents,
-              gSaveBlock1Ptr->objectEventTemplates,
-              gMapHeader.events->objectEventCount * sizeof(struct ObjectEventTemplate));
+    for (i = 0; i < count; i++)
+    {
+        destination[i] = source[i];
+        destination[i].script = OBJECT_EVENT_SCRIPT_VALUE(MAP_OBJECT_EVENT_SCRIPT(&source[i]));
+    }
 }
 
 void LoadSaveblockObjEventScripts(void)
@@ -484,7 +496,7 @@ void LoadSaveblockObjEventScripts(void)
     s32 i;
 
     for (i = 0; i < OBJECT_EVENT_TEMPLATES_COUNT; i++)
-        savObjTemplates[i].script = mapHeaderObjTemplates[i].script;
+        savObjTemplates[i].script = OBJECT_EVENT_SCRIPT_VALUE(MAP_OBJECT_EVENT_SCRIPT(&mapHeaderObjTemplates[i]));
 }
 
 void SetObjEventTemplateCoords(u8 localId, s16 x, s16 y)
@@ -529,12 +541,122 @@ static void InitMapView(void)
     InitTilesetAnimations();
 }
 
+#if PLATFORM_RELATIVE_POINTERS
+struct DecodedMapHeader
+{
+    struct MapHeader header;
+    struct MapLayout layout;
+    struct MapEvents events;
+    struct MapConnections connections;
+};
+
+static struct DecodedMapHeader sCurrentMapHeader;
+static struct DecodedMapHeader sMapHeaderCache[4];
+static u8 sMapHeaderCacheIndex;
+static struct MapLayout sMapLayoutCache;
+
+static const struct MapLayoutAsset *GetMapLayoutAsset(u16 mapLayoutId)
+{
+    if (mapLayoutId == 0)
+        return NULL;
+    return ASSET_TABLE_ENTRY(const struct MapLayoutAsset *, gMapLayouts, mapLayoutId - 1);
+}
+
+static void DecodeMapLayout(struct MapLayout *destination, const struct MapLayoutAsset *source)
+{
+    destination->width = source->width;
+    destination->height = source->height;
+    destination->border = ASSET_POINTER(const u16 *, &source->border);
+    destination->map = ASSET_POINTER(const u16 *, &source->map);
+    destination->primaryTileset = ASSET_POINTER(const struct Tileset *, &source->primaryTileset);
+    destination->secondaryTileset = ASSET_POINTER(const struct Tileset *, &source->secondaryTileset);
+}
+
+static const struct MapHeaderAsset *GetMapHeaderAsset(u16 mapGroup, u16 mapNum)
+{
+    const AssetPtr *group = ASSET_TABLE_ENTRY(const AssetPtr *, gMapGroups, mapGroup);
+
+    return ASSET_TABLE_ENTRY(const struct MapHeaderAsset *, group, mapNum);
+}
+
+static void DecodeMapHeader(struct DecodedMapHeader *destination, const struct MapHeaderAsset *source)
+{
+    const struct MapLayoutAsset *layout = ASSET_POINTER(const struct MapLayoutAsset *, &source->mapLayout);
+    const struct MapEventsAsset *events = ASSET_POINTER(const struct MapEventsAsset *, &source->events);
+    const struct MapConnectionsAsset *connections = ASSET_POINTER(const struct MapConnectionsAsset *, &source->connections);
+
+    DecodeMapLayout(&destination->layout, layout);
+    destination->header.mapLayout = &destination->layout;
+    if (events != NULL)
+    {
+        destination->events.objectEventCount = events->objectEventCount;
+        destination->events.warpCount = events->warpCount;
+        destination->events.coordEventCount = events->coordEventCount;
+        destination->events.bgEventCount = events->bgEventCount;
+        destination->events.objectEvents = ASSET_POINTER(const struct ObjectEventTemplate *, &events->objectEvents);
+        destination->events.warps = ASSET_POINTER(const struct WarpEvent *, &events->warps);
+        destination->events.coordEvents = ASSET_POINTER(const struct CoordEvent *, &events->coordEvents);
+        destination->events.bgEvents = ASSET_POINTER(const struct BgEvent *, &events->bgEvents);
+        destination->header.events = &destination->events;
+    }
+    else
+    {
+        destination->header.events = NULL;
+    }
+    destination->header.mapScripts = ASSET_POINTER(const u8 *, &source->mapScripts);
+    if (connections != NULL)
+    {
+        destination->connections.count = connections->count;
+        destination->connections.connections = ASSET_POINTER(const struct MapConnection *, &connections->connections);
+        destination->header.connections = &destination->connections;
+    }
+    else
+    {
+        destination->header.connections = NULL;
+    }
+    destination->header.music = source->music;
+    destination->header.mapLayoutId = source->mapLayoutId;
+    destination->header.regionMapSectionId = source->regionMapSectionId;
+    destination->header.cave = source->cave;
+    destination->header.weather = source->weather;
+    destination->header.mapType = source->mapType;
+    destination->header.filler_18[0] = source->filler_18[0];
+    destination->header.filler_18[1] = source->filler_18[1];
+    destination->header.allowCycling = source->allowCycling;
+    destination->header.allowEscaping = source->allowEscaping;
+    destination->header.allowRunning = source->allowRunning;
+    destination->header.showMapName = source->showMapName;
+    destination->header.battleType = source->battleType;
+}
+#endif
+
 const struct MapLayout *GetMapLayout(void)
 {
     u16 mapLayoutId = gSaveBlock1Ptr->mapLayoutId;
     if (mapLayoutId)
+#if PLATFORM_RELATIVE_POINTERS
+    {
+        DecodeMapLayout(&sCurrentMapHeader.layout, GetMapLayoutAsset(mapLayoutId));
+        return &sCurrentMapHeader.layout;
+    }
+#else
         return gMapLayouts[mapLayoutId - 1];
+#endif
     return NULL;
+}
+
+const struct MapLayout *GetMapLayoutById(u16 mapLayoutId)
+{
+#if PLATFORM_RELATIVE_POINTERS
+    const struct MapLayoutAsset *layout = GetMapLayoutAsset(mapLayoutId);
+
+    if (layout == NULL)
+        return NULL;
+    DecodeMapLayout(&sMapLayoutCache, layout);
+    return &sMapLayoutCache;
+#else
+    return mapLayoutId == 0 ? NULL : gMapLayouts[mapLayoutId - 1];
+#endif
 }
 
 void ApplyCurrentWarp(void)
@@ -578,7 +700,14 @@ static bool32 IsDummyWarp(struct WarpData *warp)
 
 struct MapHeader const *const Overworld_GetMapHeaderByGroupAndId(u16 mapGroup, u16 mapNum)
 {
+#if PLATFORM_RELATIVE_POINTERS
+    struct DecodedMapHeader *decoded = &sMapHeaderCache[sMapHeaderCacheIndex++ % ARRAY_COUNT(sMapHeaderCache)];
+
+    DecodeMapHeader(decoded, GetMapHeaderAsset(mapGroup, mapNum));
+    return &decoded->header;
+#else
     return gMapGroups[mapGroup][mapNum];
+#endif
 }
 
 struct MapHeader const *const GetDestinationWarpMapHeader(void)
@@ -589,14 +718,24 @@ struct MapHeader const *const GetDestinationWarpMapHeader(void)
 static void LoadCurrentMapData(void)
 {
     sLastMapSectionId = gMapHeader.regionMapSectionId;
+#if PLATFORM_RELATIVE_POINTERS
+    DecodeMapHeader(&sCurrentMapHeader, GetMapHeaderAsset(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum));
+    gMapHeader = sCurrentMapHeader.header;
+#else
     gMapHeader = *Overworld_GetMapHeaderByGroupAndId(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum);
+#endif
     gSaveBlock1Ptr->mapLayoutId = gMapHeader.mapLayoutId;
     gMapHeader.mapLayout = GetMapLayout();
 }
 
 static void LoadSaveblockMapHeader(void)
 {
+#if PLATFORM_RELATIVE_POINTERS
+    DecodeMapHeader(&sCurrentMapHeader, GetMapHeaderAsset(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum));
+    gMapHeader = sCurrentMapHeader.header;
+#else
     gMapHeader = *Overworld_GetMapHeaderByGroupAndId(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum);
+#endif
     gMapHeader.mapLayout = GetMapLayout();
 }
 

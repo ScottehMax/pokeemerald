@@ -208,6 +208,7 @@ static void ResetSharedState(struct PcSharedState *shared,
         SDL_PauseAudioDevice(audioDevice, 1);
     memset(shared, 0, sizeof(*shared));
     shared->magic = PC_SHARED_MAGIC;
+    shared->version = PC_SHARED_VERSION;
     shared->resumeMainMenu = (uint32_t)resumeMainMenu;
     memcpy(shared->defaultSavePath, defaultSavePath, strlen(defaultSavePath) + 1);
     memcpy(shared->savePath, savePath, strlen(savePath) + 1);

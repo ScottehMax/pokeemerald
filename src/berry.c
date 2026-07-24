@@ -981,7 +981,28 @@ const struct Berry *GetBerryInfo(u8 berry)
 {
     if (berry == ITEM_TO_BERRY(ITEM_ENIGMA_BERRY) && IsEnigmaBerryValid())
     {
+#if PLATFORM_RELATIVE_POINTERS
+        static struct Berry enigmaBerry;
+        const struct Berry2 *savedBerry = &gSaveBlock1Ptr->enigmaBerry.berry;
+
+        memcpy((void *)enigmaBerry.name, savedBerry->name, sizeof(enigmaBerry.name));
+        enigmaBerry.firmness = savedBerry->firmness;
+        enigmaBerry.size = savedBerry->size;
+        enigmaBerry.maxYield = savedBerry->maxYield;
+        enigmaBerry.minYield = savedBerry->minYield;
+        enigmaBerry.description1 = (const u8 *)(uintptr_t)savedBerry->description1;
+        enigmaBerry.description2 = (const u8 *)(uintptr_t)savedBerry->description2;
+        enigmaBerry.stageDuration = savedBerry->stageDuration;
+        enigmaBerry.spicy = savedBerry->spicy;
+        enigmaBerry.dry = savedBerry->dry;
+        enigmaBerry.sweet = savedBerry->sweet;
+        enigmaBerry.bitter = savedBerry->bitter;
+        enigmaBerry.sour = savedBerry->sour;
+        enigmaBerry.smoothness = savedBerry->smoothness;
+        return &enigmaBerry;
+#else
         return (struct Berry *)(&gSaveBlock1Ptr->enigmaBerry.berry);
+#endif
     }
     else
     {

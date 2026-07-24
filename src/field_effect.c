@@ -239,7 +239,7 @@ static u8 sActiveList[32];
 extern struct CompressedSpritePalette gMonPaletteTable[]; // GF made a mistake and did not extern it as const.
 extern const struct CompressedSpritePalette gTrainerFrontPicPaletteTable[];
 extern const struct CompressedSpriteSheet gTrainerFrontPicTable[];
-extern u8 *gFieldEffectScriptPointers[];
+extern const AssetPtr gFieldEffectScriptPointers[];
 extern const struct SpriteTemplate *const gFieldEffectObjectTemplatePointers[];
 
 static const u32 sNewGameBirch_Gfx[] = INCGFX_U32("graphics/birch_speech/birch.png", ".4bpp");
@@ -696,7 +696,7 @@ u32 FieldEffectStart(u8 id)
 
     FieldEffectActiveListAdd(id);
 
-    script = gFieldEffectScriptPointers[id];
+    script = ASSET_TABLE_ENTRY(u8 *, gFieldEffectScriptPointers, id);
 
     while (gFieldEffectScriptFuncs[*script](&script, &val))
         ;
@@ -762,17 +762,26 @@ bool8 FieldEffectCmd_loadfadedpal_callnative(u8 **script, u32 *val)
     return TRUE;
 }
 
-u32 FieldEffectScript_ReadWord(u8 **script)
+static void *FieldEffectScript_ReadPointer(u8 **script)
 {
-    return (*script)[0]
-         + ((*script)[1] << 8)
-         + ((*script)[2] << 16)
-         + ((*script)[3] << 24);
+    u8 *operand = *script;
+    u32 value = operand[0]
+              + (operand[1] << 8)
+              + (operand[2] << 16)
+              + (operand[3] << 24);
+
+#if PLATFORM_RELATIVE_POINTERS
+    if (value == 0)
+        return NULL;
+    return operand + (s32)value;
+#else
+    return (void *)(uintptr_t)value;
+#endif
 }
 
 void FieldEffectScript_LoadTiles(u8 **script)
 {
-    struct SpriteSheet *sheet = (struct SpriteSheet *)FieldEffectScript_ReadWord(script);
+    struct SpriteSheet *sheet = FieldEffectScript_ReadPointer(script);
     if (GetSpriteTileStartByTag(sheet->tag) == 0xFFFF)
         LoadSpriteSheet(sheet);
     (*script) += 4;
@@ -780,7 +789,7 @@ void FieldEffectScript_LoadTiles(u8 **script)
 
 void FieldEffectScript_LoadFadedPalette(u8 **script)
 {
-    struct SpritePalette *palette = (struct SpritePalette *)FieldEffectScript_ReadWord(script);
+    struct SpritePalette *palette = FieldEffectScript_ReadPointer(script);
     LoadSpritePalette(palette);
     UpdateSpritePaletteWithWeather(IndexOfSpritePaletteTag(palette->tag));
     (*script) += 4;
@@ -788,14 +797,14 @@ void FieldEffectScript_LoadFadedPalette(u8 **script)
 
 void FieldEffectScript_LoadPalette(u8 **script)
 {
-    struct SpritePalette *palette = (struct SpritePalette *)FieldEffectScript_ReadWord(script);
+    struct SpritePalette *palette = FieldEffectScript_ReadPointer(script);
     LoadSpritePalette(palette);
     (*script) += 4;
 }
 
 void FieldEffectScript_CallNative(u8 **script, u32 *val)
 {
-    u32 (*func)(void) = (u32 (*)(void))FieldEffectScript_ReadWord(script);
+    u32 (*func)(void) = FieldEffectScript_ReadPointer(script);
     *val = func();
     (*script) += 4;
 }

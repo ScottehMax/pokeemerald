@@ -2,7 +2,7 @@
 	.set SCRIPT_CMD_TABLE_ENTRY_MACRO, 1
 	.macro script_cmd_table_entry constant:req, value:req
 	.if ALLOCATE_SCRIPT_CMD_TABLE
-	.4byte \value
+	asset_ptr \value
 	.else
 	enum \constant
 	.endif
@@ -12,7 +12,7 @@
 
 	enum_start
 	.if ALLOCATE_SCRIPT_CMD_TABLE
-	.align 2
+	asset_ptr_align
 gScriptCmdTable::
 	.endif
 	script_cmd_table_entry SCR_OP_NOP                           ScrCmd_nop                            @ 0x00
@@ -245,5 +245,5 @@ gScriptCmdTable::
 
 	.if ALLOCATE_SCRIPT_CMD_TABLE
 gScriptCmdTableEnd::
-	.4byte ScrCmd_nop
+	asset_ptr ScrCmd_nop
 	.endif

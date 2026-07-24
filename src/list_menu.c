@@ -15,7 +15,13 @@
 
 // GF cast Task data to ListMenu in many places, which effectively puts
 // an upper bound on sizeof(struct ListMenu).
+#if UINTPTR_MAX <= UINT32_MAX
 STATIC_ASSERT(sizeof(struct ListMenu) <= sizeof(((struct Task *)NULL)->data), ListMenuTooLargeForTaskData);
+#define GET_LIST_MENU(taskId) ((struct ListMenu *)(void *)gTasks[taskId].data)
+#else
+static EWRAM_DATA struct ListMenu sListMenus[NUM_TASKS] = {0};
+#define GET_LIST_MENU(taskId) (&sListMenus[taskId])
+#endif
 
 // Cursors after this point are created using a sprite with their own task.
 // This allows them to have idle animations. Cursors prior to this are simply printed text.
@@ -393,7 +399,7 @@ u8 ListMenuInitInRect(struct ListMenuTemplate *listMenuTemplate, struct ListMenu
 
 s32 ListMenu_ProcessInput(u8 listTaskId)
 {
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
     if (JOY_NEW(A_BUTTON))
     {
@@ -454,7 +460,7 @@ s32 ListMenu_ProcessInput(u8 listTaskId)
 
 void DestroyListMenuTask(u8 listTaskId, u16 *scrollOffset, u16 *selectedRow)
 {
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
     if (scrollOffset != NULL)
         *scrollOffset = list->scrollOffset;
@@ -469,7 +475,7 @@ void DestroyListMenuTask(u8 listTaskId, u16 *scrollOffset, u16 *selectedRow)
 
 void RedrawListMenu(u8 listTaskId)
 {
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
     FillWindowPixelBuffer(list->template.windowId, PIXEL_FILL(list->template.fillValue));
     ListMenuPrintEntries(list, list->scrollOffset, 0, list->template.maxShowed);
@@ -480,7 +486,7 @@ void RedrawListMenu(u8 listTaskId)
 // unused
 void ChangeListMenuPals(u8 listTaskId, u8 cursorPal, u8 fillValue, u8 cursorShadowPal)
 {
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
     list->template.cursorPal = cursorPal;
     list->template.fillValue = fillValue;
@@ -490,7 +496,7 @@ void ChangeListMenuPals(u8 listTaskId, u8 cursorPal, u8 fillValue, u8 cursorShad
 // unused
 void ChangeListMenuCoords(u8 listTaskId, u8 x, u8 y)
 {
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
     SetWindowAttribute(list->template.windowId, WINDOW_TILEMAP_LEFT, x);
     SetWindowAttribute(list->template.windowId, WINDOW_TILEMAP_TOP, y);
@@ -522,7 +528,7 @@ s32 ListMenuTestInput(struct ListMenuTemplate *template, u32 scrollOffset, u32 s
 
 void ListMenuGetCurrentItemArrayId(u8 listTaskId, u16 *arrayId)
 {
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
     if (arrayId != NULL)
         *arrayId = list->scrollOffset + list->selectedRow;
@@ -530,7 +536,7 @@ void ListMenuGetCurrentItemArrayId(u8 listTaskId, u16 *arrayId)
 
 void ListMenuGetScrollAndRow(u8 listTaskId, u16 *scrollOffset, u16 *selectedRow)
 {
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
     if (scrollOffset != NULL)
         *scrollOffset = list->scrollOffset;
@@ -540,7 +546,7 @@ void ListMenuGetScrollAndRow(u8 listTaskId, u16 *scrollOffset, u16 *selectedRow)
 
 u16 ListMenuGetYCoordForPrintingArrowCursor(u8 listTaskId)
 {
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
     u8 yMultiplier = GetFontAttribute(list->template.fontId, FONTATTR_MAX_LETTER_HEIGHT) + list->template.itemVerticalPadding;
 
     return list->selectedRow * yMultiplier + list->template.upText_Y;
@@ -549,7 +555,7 @@ u16 ListMenuGetYCoordForPrintingArrowCursor(u8 listTaskId)
 static u8 ListMenuInitInternal(struct ListMenuTemplate *listMenuTemplate, u16 scrollOffset, u16 selectedRow)
 {
     u8 listTaskId = CreateTask(ListMenuDummyTask, 0);
-    struct ListMenu *list = (void *) gTasks[listTaskId].data;
+    struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
     list->template = *listMenuTemplate;
     list->scrollOffset = scrollOffset;
@@ -887,7 +893,7 @@ void ListMenuDefaultCursorMoveFunc(s32 itemIndex, bool8 onInit, struct ListMenu 
 // unused
 s32 ListMenuGetTemplateField(u8 taskId, u8 field)
 {
-    struct ListMenu *data = (void *) gTasks[taskId].data;
+    struct ListMenu *data = GET_LIST_MENU(taskId);
 
     switch (field)
     {
@@ -931,7 +937,7 @@ s32 ListMenuGetTemplateField(u8 taskId, u8 field)
 
 void ListMenuSetTemplateField(u8 taskId, u8 field, s32 value)
 {
-    struct ListMenu *data = (void *) &gTasks[taskId].data;
+    struct ListMenu *data = GET_LIST_MENU(taskId);
 
     switch (field)
     {

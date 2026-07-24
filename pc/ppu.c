@@ -1,4 +1,5 @@
 #include "gba/gba.h"
+#include "pc_diagnostics.h"
 #include "pc_platform.h"
 #include "pc_ppu.h"
 
@@ -15,6 +16,27 @@ struct PixelStack
 {
     struct LayerPixel top;
     struct LayerPixel second;
+};
+
+struct BgScanlineState
+{
+    u16 control;
+    u16 hofs;
+    u16 vofs;
+    s16 pa;
+    s16 pb;
+    s16 pc;
+    s16 pd;
+    s32 referenceX;
+    s32 referenceY;
+};
+
+struct ColorEffectState
+{
+    u16 control;
+    u8 eva;
+    u8 evb;
+    u8 evy;
 };
 
 static u16 ReadIo16(u32 offset)
@@ -63,92 +85,109 @@ static s32 ApplyMosaic(s32 coordinate, u8 size)
     return coordinate - coordinate % size;
 }
 
-static void ApplyBgMosaic(u16 control, s32 *screenX, s32 *screenY)
+static void ApplyBgMosaic(u16 control, u16 mosaic, s32 *screenX, s32 *screenY)
 {
-    u16 mosaic;
-
     if (!(control & BGCNT_MOSAIC))
         return;
 
-    mosaic = ReadIo16(REG_OFFSET_MOSAIC);
     *screenX = ApplyMosaic(*screenX, (mosaic & 0xF) + 1);
     *screenY = ApplyMosaic(*screenY, ((mosaic >> 4) & 0xF) + 1);
 }
 
-static bool8 ReadTextBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
+static void DrawTextBgScanline(struct PixelStack *line,
+                               const u8 *windowMasks,
+                               const struct BgScanlineState *state,
+                               u16 mosaic,
+                               u8 layer,
+                               s32 screenY)
 {
     const u8 *vram = (const u8 *)VRAM;
     const u16 *palette = (const u16 *)PLTT;
-    u16 control = ReadIo16(REG_OFFSET_BG0CNT + bg * 2);
-    u16 hofs = ReadIo16(REG_OFFSET_BG0HOFS + bg * 4);
-    u16 vofs = ReadIo16(REG_OFFSET_BG0VOFS + bg * 4);
+    u16 control = state->control;
     u32 size = control >> 14;
     u32 width = (size & 1) ? 512 : 256;
     u32 height = (size & 2) ? 512 : 256;
-    u32 x;
-    u32 y;
-    u32 tileX;
+    u32 sourceY;
     u32 tileY;
-    u32 block;
     u32 mapBase = ((control >> 8) & 0x1F) * BG_SCREEN_SIZE;
-    u32 mapOffset;
-    u16 entry;
-    u32 tile;
-    u32 pixelX;
-    u32 pixelY;
     u32 charBase = ((control >> 2) & 3) * BG_CHAR_SIZE;
-    u8 paletteIndex;
+    bool8 mosaicEnabled = (control & BGCNT_MOSAIC) != 0;
+    u8 mosaicWidth = (mosaic & 0xF) + 1;
+    u8 mosaicHeight = ((mosaic >> 4) & 0xF) + 1;
+    u32 cachedTileX = UINT32_MAX;
+    const u8 *tileRow = NULL;
+    u16 entry = 0;
+    s32 screenX;
 
-    ApplyBgMosaic(control, &screenX, &screenY);
-    x = (screenX + hofs) & (width - 1);
-    y = (screenY + vofs) & (height - 1);
-    tileX = x >> 3;
-    tileY = y >> 3;
-    block = (tileX >> 5) + (tileY >> 5) * (width >> 8);
-    mapOffset = block * BG_SCREEN_SIZE + ((tileY & 31) * 32 + (tileX & 31)) * 2;
-    entry = *(const u16 *)(vram + mapBase + mapOffset);
-    tile = entry & 0x3FF;
-    pixelX = x & 7;
-    pixelY = y & 7;
+    if (mosaicEnabled)
+        screenY = ApplyMosaic(screenY, mosaicHeight);
+    sourceY = (screenY + state->vofs) & (height - 1);
+    tileY = sourceY >> 3;
 
-    if (entry & 0x400)
-        pixelX = 7 - pixelX;
-    if (entry & 0x800)
-        pixelY = 7 - pixelY;
-
-    if (control & 0x80)
+    for (screenX = 0; screenX < DISPLAY_WIDTH; screenX++)
     {
-        paletteIndex = vram[charBase + tile * TILE_SIZE_8BPP + pixelY * 8 + pixelX];
-        if (paletteIndex == 0)
-            return FALSE;
-        *color = palette[paletteIndex];
-    }
-    else
-    {
-        u8 packed = vram[charBase + tile * TILE_SIZE_4BPP + pixelY * 4 + pixelX / 2];
-        paletteIndex = (pixelX & 1) ? packed >> 4 : packed & 0xF;
-        if (paletteIndex == 0)
-            return FALSE;
-        *color = palette[((entry >> 12) & 0xF) * 16 + paletteIndex];
-    }
+        u32 effectiveX;
+        u32 sourceX;
+        u32 tileX;
+        u32 pixelX;
+        u8 paletteIndex;
+        u16 color;
 
-    return TRUE;
+        if (!(windowMasks[screenX] & layer))
+            continue;
+
+        effectiveX = mosaicEnabled ? ApplyMosaic(screenX, mosaicWidth) : (u32)screenX;
+        sourceX = (effectiveX + state->hofs) & (width - 1);
+        tileX = sourceX >> 3;
+        if (tileX != cachedTileX)
+        {
+            u32 block = (tileX >> 5) + (tileY >> 5) * (width >> 8);
+            u32 mapOffset = block * BG_SCREEN_SIZE
+                          + ((tileY & 31) * 32 + (tileX & 31)) * 2;
+            u32 pixelY = sourceY & 7;
+            u32 tile;
+
+            entry = *(const u16 *)(vram + mapBase + mapOffset);
+            tile = entry & 0x3FF;
+            if (entry & 0x800)
+                pixelY = 7 - pixelY;
+            if (control & 0x80)
+                tileRow = vram + charBase + tile * TILE_SIZE_8BPP + pixelY * 8;
+            else
+                tileRow = vram + charBase + tile * TILE_SIZE_4BPP + pixelY * 4;
+            cachedTileX = tileX;
+        }
+
+        pixelX = sourceX & 7;
+        if (entry & 0x400)
+            pixelX = 7 - pixelX;
+        if (control & 0x80)
+        {
+            paletteIndex = tileRow[pixelX];
+            color = palette[paletteIndex];
+        }
+        else
+        {
+            u8 packed = tileRow[pixelX >> 1];
+
+            paletteIndex = (pixelX & 1) ? packed >> 4 : packed & 0xF;
+            color = palette[((entry >> 12) & 0xF) * 16 + paletteIndex];
+        }
+        if (paletteIndex == 0)
+            continue;
+        PushPixel(&line[screenX], color, layer, FALSE);
+    }
 }
 
-static bool8 ReadAffineBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
+static bool8 ReadAffineBgPixel(const struct BgScanlineState *state,
+                               u16 mosaic,
+                               s32 screenX,
+                               s32 screenY,
+                               u16 *color)
 {
     const u8 *vram = (const u8 *)VRAM;
     const u16 *palette = (const u16 *)PLTT;
-    u32 registerBase = bg == 2 ? REG_OFFSET_BG2PA : REG_OFFSET_BG3PA;
-    u16 control = ReadIo16(REG_OFFSET_BG0CNT + bg * 2);
-    s16 pa = (s16)ReadIo16(registerBase + 0);
-    s16 pb = (s16)ReadIo16(registerBase + 2);
-    s16 pc = (s16)ReadIo16(registerBase + 4);
-    s16 pd = (s16)ReadIo16(registerBase + 6);
-    u32 rawX = *(vu32 *)(REG_BASE + registerBase + 8);
-    u32 rawY = *(vu32 *)(REG_BASE + registerBase + 12);
-    s32 referenceX = SignExtend28(rawX);
-    s32 referenceY = SignExtend28(rawY);
+    u16 control = state->control;
     s32 x;
     s32 y;
     u32 size = 128u << (control >> 14);
@@ -158,9 +197,9 @@ static bool8 ReadAffineBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
     u8 tile;
     u8 paletteIndex;
 
-    ApplyBgMosaic(control, &screenX, &screenY);
-    x = (referenceX + pa * screenX + pb * screenY) >> 8;
-    y = (referenceY + pc * screenX + pd * screenY) >> 8;
+    ApplyBgMosaic(control, mosaic, &screenX, &screenY);
+    x = (state->referenceX + state->pa * screenX + state->pb * screenY) >> 8;
+    y = (state->referenceY + state->pc * screenX + state->pd * screenY) >> 8;
 
     if (control & (1 << 13))
     {
@@ -181,12 +220,17 @@ static bool8 ReadAffineBgPixel(u8 bg, s32 screenX, s32 screenY, u16 *color)
     return TRUE;
 }
 
-static bool8 ReadBitmapPixel(u8 mode, s32 x, s32 y, u16 *color)
+static bool8 ReadBitmapPixel(u8 mode,
+                             u16 displayControl,
+                             u16 bgControl,
+                             u16 mosaic,
+                             s32 x,
+                             s32 y,
+                             u16 *color)
 {
     const u8 *vram = (const u8 *)VRAM;
-    u16 control = ReadIo16(REG_OFFSET_BG2CNT);
 
-    ApplyBgMosaic(control, &x, &y);
+    ApplyBgMosaic(bgControl, mosaic, &x, &y);
 
     if (mode == 3)
     {
@@ -196,7 +240,7 @@ static bool8 ReadBitmapPixel(u8 mode, s32 x, s32 y, u16 *color)
 
     if (mode == 4)
     {
-        u32 page = (REG_DISPCNT & (1 << 4)) ? 0xA000 : 0;
+        u32 page = (displayControl & (1 << 4)) ? 0xA000 : 0;
         u8 paletteIndex = vram[page + y * DISPLAY_WIDTH + x];
         *color = ((const u16 *)PLTT)[paletteIndex];
         return TRUE;
@@ -204,7 +248,7 @@ static bool8 ReadBitmapPixel(u8 mode, s32 x, s32 y, u16 *color)
 
     if (mode == 5 && x < 160 && y < 128)
     {
-        u32 page = (REG_DISPCNT & (1 << 4)) ? 0xA000 : 0;
+        u32 page = (displayControl & (1 << 4)) ? 0xA000 : 0;
         *color = *(const u16 *)(vram + page + (y * 160 + x) * 2);
         return TRUE;
     }
@@ -285,12 +329,13 @@ static void DrawSpritesForPriority(struct PixelStack *line,
                                    s32 y,
                                    u8 priority,
                                    u8 mode,
+                                   u16 displayControl,
+                                   u16 mosaic,
                                    bool8 objectWindowPass)
 {
     const u16 *oam = (const u16 *)OAM;
     const u8 *vram = (const u8 *)VRAM;
     const u16 *palette = (const u16 *)OBJ_PLTT;
-    u16 mosaic = ReadIo16(REG_OFFSET_MOSAIC);
     u8 mosaicWidth = ((mosaic >> 8) & 0xF) + 1;
     u8 mosaicHeight = ((mosaic >> 12) & 0xF) + 1;
     s32 sprite;
@@ -392,7 +437,7 @@ static void DrawSpritesForPriority(struct PixelStack *line,
             tileNumber = attr2 & 0x3FF;
             if (color256)
                 tileNumber &= ~1u;
-            if (REG_DISPCNT & (1 << 6))
+            if (displayControl & (1 << 6))
                 tileNumber += (sourceY >> 3) * (width >> 3) * (color256 ? 2 : 1);
             else
                 tileNumber += (sourceY >> 3) * 32;
@@ -459,35 +504,26 @@ static u16 DarkenColor(u16 color, u8 amount)
     return (u16)(red | (green << 5) | (blue << 10));
 }
 
-static u16 ApplyColorEffects(const struct PixelStack *stack, bool8 effectsEnabled)
+static u16 ApplyColorEffects(const struct PixelStack *stack,
+                             const struct ColorEffectState *effects,
+                             bool8 effectsEnabled)
 {
-    u16 blendControl = REG_BLDCNT;
-    u8 effect = (blendControl >> 6) & 3;
-    bool8 firstTarget = (blendControl & stack->top.layer) != 0;
-    bool8 secondTarget = (blendControl & (stack->second.layer << 8)) != 0;
-    u8 eva = REG_BLDALPHA & 0x1F;
-    u8 evb = (REG_BLDALPHA >> 8) & 0x1F;
-    u8 evy = REG_BLDY & 0x1F;
-
-    if (eva > 16)
-        eva = 16;
-    if (evb > 16)
-        evb = 16;
-    if (evy > 16)
-        evy = 16;
+    u8 effect = (effects->control >> 6) & 3;
+    bool8 firstTarget = (effects->control & stack->top.layer) != 0;
+    bool8 secondTarget = (effects->control & (stack->second.layer << 8)) != 0;
 
     // Semi-transparent OBJ pixels force alpha blending even where a window
     // disables the regular BLDCNT color effect.
     if (stack->top.semiTransparent && secondTarget)
-        return BlendColors(stack->top.color, stack->second.color, eva, evb);
+        return BlendColors(stack->top.color, stack->second.color, effects->eva, effects->evb);
     if (!effectsEnabled)
         return stack->top.color;
     if (effect == 1 && firstTarget && secondTarget)
-        return BlendColors(stack->top.color, stack->second.color, eva, evb);
+        return BlendColors(stack->top.color, stack->second.color, effects->eva, effects->evb);
     if (effect == 2 && firstTarget)
-        return BrightenColor(stack->top.color, evy);
+        return BrightenColor(stack->top.color, effects->evy);
     if (effect == 3 && firstTarget)
-        return DarkenColor(stack->top.color, evy);
+        return DarkenColor(stack->top.color, effects->evy);
     return stack->top.color;
 }
 
@@ -499,6 +535,7 @@ void PcPpuRender(u32 *pixels, PcInterruptCallback hblankCallback)
 
     if (REG_DISPCNT & (1 << 7))
     {
+        PcDiagnosticsSetRenderProgress(UINT32_MAX, PC_DIAGNOSTIC_RENDER_CLEAR);
         for (y = 0; y < DISPLAY_WIDTH * DISPLAY_HEIGHT; y++)
             pixels[y] = 0xFFFFFFFFu;
         REG_VCOUNT = 161;
@@ -510,12 +547,58 @@ void PcPpuRender(u32 *pixels, PcInterruptCallback hblankCallback)
         struct PixelStack line[DISPLAY_WIDTH];
         bool8 objectWindow[DISPLAY_WIDTH] = {FALSE};
         u8 windowMasks[DISPLAY_WIDTH];
+        struct BgScanlineState bgStates[4];
+        struct ColorEffectState effects;
+        u16 displayControl = REG_DISPCNT;
+        u16 mosaic = REG_MOSAIC;
         s32 x;
         s32 priority;
+        s32 bg;
 
+        PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_CLEAR);
         REG_VCOUNT = (u16)y;
-        if (REG_DISPCNT & DISPCNT_OBJWIN_ON)
-            DrawSpritesForPriority(NULL, NULL, objectWindow, y, 0, mode, TRUE);
+        for (bg = 0; bg < 4; bg++)
+        {
+            u32 registerBase;
+
+            bgStates[bg].control = ReadIo16(REG_OFFSET_BG0CNT + bg * 2);
+            bgStates[bg].hofs = ReadIo16(REG_OFFSET_BG0HOFS + bg * 4);
+            bgStates[bg].vofs = ReadIo16(REG_OFFSET_BG0VOFS + bg * 4);
+            if (bg < 2)
+                continue;
+            registerBase = bg == 2 ? REG_OFFSET_BG2PA : REG_OFFSET_BG3PA;
+            bgStates[bg].pa = (s16)ReadIo16(registerBase + 0);
+            bgStates[bg].pb = (s16)ReadIo16(registerBase + 2);
+            bgStates[bg].pc = (s16)ReadIo16(registerBase + 4);
+            bgStates[bg].pd = (s16)ReadIo16(registerBase + 6);
+            bgStates[bg].referenceX = SignExtend28(*(vu32 *)(REG_BASE + registerBase + 8));
+            bgStates[bg].referenceY = SignExtend28(*(vu32 *)(REG_BASE + registerBase + 12));
+        }
+        effects.control = REG_BLDCNT;
+        effects.eva = REG_BLDALPHA & 0x1F;
+        effects.evb = (REG_BLDALPHA >> 8) & 0x1F;
+        effects.evy = REG_BLDY & 0x1F;
+        if (effects.eva > 16)
+            effects.eva = 16;
+        if (effects.evb > 16)
+            effects.evb = 16;
+        if (effects.evy > 16)
+            effects.evy = 16;
+
+        if (displayControl & DISPCNT_OBJWIN_ON)
+        {
+            PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_OBJECT_WINDOW);
+            DrawSpritesForPriority(NULL,
+                                   NULL,
+                                   objectWindow,
+                                   y,
+                                   0,
+                                   mode,
+                                   displayControl,
+                                   mosaic,
+                                   TRUE);
+        }
+        PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_WINDOWS);
         BuildWindowMasks(windowMasks, objectWindow, y);
         for (x = 0; x < DISPLAY_WIDTH; x++)
         {
@@ -527,17 +610,26 @@ void PcPpuRender(u32 *pixels, PcInterruptCallback hblankCallback)
 
         for (priority = 3; priority >= 0; priority--)
         {
-            s32 bg;
-
+            PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_BACKGROUNDS);
             for (bg = 3; bg >= 0; bg--)
             {
-                u16 control;
+                u16 control = bgStates[bg].control;
 
-                if (!(REG_DISPCNT & (1 << (8 + bg))))
+                if (!(displayControl & (1 << (8 + bg))))
                     continue;
-                control = ReadIo16(REG_OFFSET_BG0CNT + bg * 2);
                 if ((control & 3) != priority)
                     continue;
+
+                if (mode == 0 || (mode == 1 && bg < 2))
+                {
+                    DrawTextBgScanline(line,
+                                       windowMasks,
+                                       &bgStates[bg],
+                                       mosaic,
+                                       (u8)(1 << bg),
+                                       y);
+                    continue;
+                }
 
                 for (x = 0; x < DISPLAY_WIDTH; x++)
                 {
@@ -546,46 +638,58 @@ void PcPpuRender(u32 *pixels, PcInterruptCallback hblankCallback)
 
                     if (!(windowMasks[x] & (1 << bg)))
                         continue;
-                    if (mode == 0)
-                        opaque = ReadTextBgPixel((u8)bg, x, y, &color);
-                    else if (mode == 1)
-                    {
-                        if (bg < 2)
-                            opaque = ReadTextBgPixel((u8)bg, x, y, &color);
-                        else if (bg == 2)
-                            opaque = ReadAffineBgPixel((u8)bg, x, y, &color);
-                    }
+                    if (mode == 1 && bg == 2)
+                        opaque = ReadAffineBgPixel(&bgStates[bg], mosaic, x, y, &color);
                     else if (mode == 2 && bg >= 2)
-                        opaque = ReadAffineBgPixel((u8)bg, x, y, &color);
+                        opaque = ReadAffineBgPixel(&bgStates[bg], mosaic, x, y, &color);
                     else if (mode >= 3 && mode <= 5 && bg == 2)
-                        opaque = ReadBitmapPixel(mode, x, y, &color);
+                        opaque = ReadBitmapPixel(mode,
+                                                 displayControl,
+                                                 control,
+                                                 mosaic,
+                                                 x,
+                                                 y,
+                                                 &color);
 
                     if (opaque)
                         PushPixel(&line[x], color, (u8)(1 << bg), FALSE);
                 }
             }
 
-            if (REG_DISPCNT & (1 << 12))
+            if (displayControl & (1 << 12))
+            {
+                PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_SPRITES);
                 DrawSpritesForPriority(line,
                                        windowMasks,
                                        objectWindow,
                                        y,
                                        (u8)priority,
                                        mode,
+                                       displayControl,
+                                       mosaic,
                                        FALSE);
+            }
         }
 
+        PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_OUTPUT);
         for (x = 0; x < DISPLAY_WIDTH; x++)
         {
             bool8 effectsEnabled = (windowMasks[x] & (1 << 5)) != 0;
 
-            pixels[y * DISPLAY_WIDTH + x] = ColorToArgb(ApplyColorEffects(&line[x], effectsEnabled));
+            pixels[y * DISPLAY_WIDTH + x] = ColorToArgb(ApplyColorEffects(&line[x],
+                                                                          &effects,
+                                                                          effectsEnabled));
         }
 
+        PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_HBLANK_DMA);
         PcDmaRunHBlank();
         if ((REG_IE & INTR_FLAG_HBLANK) && hblankCallback != NULL)
+        {
+            PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_HBLANK_CALLBACK);
             hblankCallback();
+        }
     }
 
+    PcDiagnosticsSetRenderProgress(UINT32_MAX, PC_DIAGNOSTIC_RENDER_NONE);
     REG_VCOUNT = 161;
 }

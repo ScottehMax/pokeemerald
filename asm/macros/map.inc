@@ -13,14 +13,14 @@
 	@ Defines a map script. 'type' is any MAP_SCRIPT_* constant (see include/constants/map_scripts.h)
 	.macro map_script type:req, script:req
 	.byte \type
-	.4byte \script
+	script_ptr \script
 	.endm
 
 	@ Defines an entry in a map script table (for either ON_WARP_INTO_MAP_TABLE or ON_FRAME_TABLE)
 	.macro map_script_2 var:req, compare:req, script:req
 	.2byte \var
 	.2byte \compare
-	.4byte \script
+	script_ptr \script
 	.endm
 
 	@ Defines an object event template for map data, to be used by a normal object. Mirrors the struct layout of ObjectEventTemplate in include/global.fieldmap.h
@@ -36,7 +36,7 @@
 	.space 1  @ Padding
 	.2byte \trainer_type
 	.2byte \sight_radius_tree_etc
-	.4byte \script
+	script_ptr \script
 	.2byte \event_flag
 	.space 2  @ Padding
 	inc _num_npcs
@@ -54,7 +54,7 @@
 	.space 3  @ Padding
 	.2byte \target_map_id & 0xFF  @ map num
 	.2byte \target_map_id >> 8    @ map group
-	.space 8  @ Padding
+	.space 8  @ Script pointer, flag, and padding
 	inc _num_npcs
 	.endm
 
@@ -76,7 +76,7 @@
 	.2byte \var
 	.2byte \varValue
 	.space 2  @ Padding
-	.4byte \script
+	asset_ptr \script
 	inc _num_traps
 	.endm
 
@@ -94,7 +94,7 @@
 	.byte \kind
 	.space 2  @ Padding
 	.if \kind != BG_EVENT_HIDDEN_ITEM
-		.4byte \arg6
+		asset_ptr \arg6
 	.else
 		.2byte \arg6
 		.2byte \arg7
@@ -123,8 +123,16 @@
 	@ Defines the table of event data for a map. Mirrors the struct layout of MapEvents in include/global.fieldmap.h
 	.macro map_events npcs:req, warps:req, traps:req, signs:req
 	.byte _num_npcs, _num_warps, _num_traps, _num_signs
-	.4byte \npcs, \warps, \traps, \signs
+	asset_ptr \npcs
+	asset_ptr \warps
+	asset_ptr \traps
+	asset_ptr \signs
 	reset_map_events
+	.endm
+
+	.macro map_connections count:req, connections:req
+	.4byte \count
+	asset_ptr \connections
 	.endm
 
 	@ Resets the event counters used to track how many events a map has. Run when the events table is created by map_events
@@ -141,12 +149,12 @@
 
 	@ Directions for connecting maps
 	@ The map.json files will only have e.g. "down" as direction data, and this will be appended to "connection_" by the connection macro
-	.equiv connection_down, CONNECTION_SOUTH
-	.equiv connection_up, CONNECTION_NORTH
-	.equiv connection_left, CONNECTION_WEST
-	.equiv connection_right, CONNECTION_EAST
-	.equiv connection_dive, CONNECTION_DIVE
-	.equiv connection_emerge, CONNECTION_EMERGE
+	.equiv connection_down, 1
+	.equiv connection_up, 2
+	.equiv connection_left, 3
+	.equiv connection_right, 4
+	.equiv connection_dive, 5
+	.equiv connection_emerge, 6
 
 	@ Defines a map connection. Mirrors the struct layout of MapConnection in include/global.fieldmap.h
 	.macro connection direction:req, offset:req, map:req

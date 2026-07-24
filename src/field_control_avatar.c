@@ -319,14 +319,14 @@ static const u8 *GetInteractedBackgroundEventScript(struct MapPosition *position
 
     if (bgEvent == NULL)
         return NULL;
-    if (bgEvent->bgUnion.script == NULL)
+    if (MAP_BG_EVENT_SCRIPT(bgEvent) == NULL)
         return EventScript_TestSignpostMsg;
 
     switch (bgEvent->kind)
     {
     case BG_EVENT_PLAYER_FACING_ANY:
     default:
-        return bgEvent->bgUnion.script;
+        return MAP_BG_EVENT_SCRIPT(bgEvent);
     case BG_EVENT_PLAYER_FACING_NORTH:
         if (direction != DIR_NORTH)
             return NULL;
@@ -361,7 +361,7 @@ static const u8 *GetInteractedBackgroundEventScript(struct MapPosition *position
         return NULL;
     }
 
-    return bgEvent->bgUnion.script;
+    return MAP_BG_EVENT_SCRIPT(bgEvent);
 }
 
 static const u8 *GetInteractedMetatileScript(struct MapPosition *position, u8 metatileBehavior, u8 direction)
@@ -878,18 +878,18 @@ static const u8 *TryRunCoordEventScript(const struct CoordEvent *coordEvent)
 {
     if (coordEvent != NULL)
     {
-        if (coordEvent->script == NULL)
+        if (MAP_COORD_EVENT_SCRIPT(coordEvent) == NULL)
         {
             DoCoordEventWeather(coordEvent->trigger);
             return NULL;
         }
         if (coordEvent->trigger == TRIGGER_RUN_IMMEDIATELY)
         {
-            RunScriptImmediately(coordEvent->script);
+            RunScriptImmediately(MAP_COORD_EVENT_SCRIPT(coordEvent));
             return NULL;
         }
         if (VarGet(coordEvent->trigger) == (u8)coordEvent->index)
-            return coordEvent->script;
+            return MAP_COORD_EVENT_SCRIPT(coordEvent);
     }
     return NULL;
 }

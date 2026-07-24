@@ -2,6 +2,7 @@
 #define GUARD_GBA_DEFINES_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define TRUE  1
 #define FALSE 0
@@ -27,23 +28,45 @@
 #define GBA_SAVE_RECORD
 #endif
 
-#define SOUND_INFO_PTR (*(struct SoundInfo **)0x3007FF0)
-#define INTR_CHECK     (*(u16 *)0x3007FF8)
-#define INTR_VECTOR    (*(void **)0x3007FFC)
+#if PLATFORM_ANDROID && !defined(__ASSEMBLER__)
+extern unsigned char gPcEwram[0x40000];
+extern unsigned char gPcIwram[0x8000];
+extern unsigned char gPcPaletteRam[0x1000];
+extern unsigned char gPcVram[0x18000];
+extern unsigned char gPcOam[0x1000];
 
+#define EWRAM_START ((uintptr_t)gPcEwram)
+#define IWRAM_START ((uintptr_t)gPcIwram)
+#define PLTT        ((uintptr_t)gPcPaletteRam)
+#define VRAM        ((uintptr_t)gPcVram)
+#define OAM         ((uintptr_t)gPcOam)
+#else
 #define EWRAM_START 0x02000000
-#define EWRAM_END   (EWRAM_START + 0x40000)
 #define IWRAM_START 0x03000000
+#define PLTT        0x05000000
+#define VRAM        0x06000000
+#define OAM         0x07000000
+#endif
+
+#define EWRAM_END   (EWRAM_START + 0x40000)
 #define IWRAM_END   (IWRAM_START + 0x8000)
 
-#define PLTT          0x5000000
+#if PLATFORM_ANDROID && !defined(__ASSEMBLER__)
+#define SOUND_INFO_PTR ((struct SoundInfo *)(uintptr_t)(*(u32 *)(IWRAM_START + 0x7FF0)))
+#define SET_SOUND_INFO_PTR(pointer) (*(u32 *)(IWRAM_START + 0x7FF0) = (u32)(uintptr_t)(pointer))
+#else
+#define SOUND_INFO_PTR (*(struct SoundInfo **)(IWRAM_START + 0x7FF0))
+#define SET_SOUND_INFO_PTR(pointer) (SOUND_INFO_PTR = (pointer))
+#endif
+#define INTR_CHECK     (*(u16 *)(IWRAM_START + 0x7FF8))
+#define INTR_VECTOR    (*(void **)(IWRAM_START + 0x7FFC))
+
 #define BG_PLTT       PLTT
 #define BG_PLTT_SIZE  0x200
 #define OBJ_PLTT      (PLTT + BG_PLTT_SIZE)
 #define OBJ_PLTT_SIZE 0x200
 #define PLTT_SIZE     (BG_PLTT_SIZE + OBJ_PLTT_SIZE)
 
-#define VRAM      0x6000000
 #define VRAM_SIZE 0x18000
 
 #define BG_VRAM           VRAM
@@ -66,7 +89,6 @@
 #define OBJ_VRAM1      (VRAM + 0x14000)
 #define OBJ_VRAM1_SIZE 0x4000
 
-#define OAM      0x7000000
 #define OAM_SIZE 0x400
 
 #define ROM_HEADER_SIZE   0xC0

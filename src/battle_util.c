@@ -43,11 +43,11 @@ match the ROM; this is also why sSoundMovesTable's declaration is in the middle 
 functions instead of at the top of the file with the other declarations.
 */
 
-extern const u8 *const gBattleScriptsForMoveEffects[];
-extern const u8 *const gBattlescriptsForBallThrow[];
-extern const u8 *const gBattlescriptsForRunningByItem[];
-extern const u8 *const gBattlescriptsForUsingItem[];
-extern const u8 *const gBattlescriptsForSafariActions[];
+extern const AssetPtr gBattleScriptsForMoveEffects[];
+extern const AssetPtr gBattlescriptsForBallThrow[];
+extern const AssetPtr gBattlescriptsForRunningByItem[];
+extern const AssetPtr gBattlescriptsForUsingItem[];
+extern const AssetPtr gBattlescriptsForSafariActions[];
 
 static const u8 sPkblToEscapeFactor[][3] = {
     {
@@ -282,7 +282,7 @@ void HandleAction_UseMove(void)
     }
     else
     {
-        gBattlescriptCurrInstr = gBattleScriptsForMoveEffects[gBattleMoves[gCurrentMove].effect];
+        gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattleScriptsForMoveEffects, gBattleMoves[gCurrentMove].effect);
     }
 
     if (gBattleTypeFlags & BATTLE_TYPE_ARENA)
@@ -319,15 +319,15 @@ void HandleAction_UseItem(void)
 
     if (gLastUsedItem <= LAST_BALL) // is ball
     {
-        gBattlescriptCurrInstr = gBattlescriptsForBallThrow[gLastUsedItem];
+        gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForBallThrow, gLastUsedItem);
     }
     else if (gLastUsedItem == ITEM_POKE_DOLL || gLastUsedItem == ITEM_FLUFFY_TAIL)
     {
-        gBattlescriptCurrInstr = gBattlescriptsForRunningByItem[0]; // BattleScript_RunByUsingItem
+        gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForRunningByItem, 0); // BattleScript_RunByUsingItem
     }
     else if (GetBattlerSide(gBattlerAttacker) == B_SIDE_PLAYER)
     {
-        gBattlescriptCurrInstr = gBattlescriptsForUsingItem[0]; // BattleScript_PlayerUsesItem
+        gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForUsingItem, 0); // BattleScript_PlayerUsesItem
     }
     else
     {
@@ -399,7 +399,7 @@ void HandleAction_UseItem(void)
             break;
         }
 
-        gBattlescriptCurrInstr = gBattlescriptsForUsingItem[*(gBattleStruct->AI_itemType + gBattlerAttacker / 2)];
+        gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForUsingItem, *(gBattleStruct->AI_itemType + gBattlerAttacker / 2));
     }
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
 }
@@ -543,7 +543,7 @@ void HandleAction_WatchesCarefully(void)
     gBattlerAttacker = gBattlerByTurnOrder[gCurrentTurnActionNumber];
     gBattle_BG0_X = 0;
     gBattle_BG0_Y = 0;
-    gBattlescriptCurrInstr = gBattlescriptsForSafariActions[0];
+    gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForSafariActions, 0);
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
 }
 
@@ -554,7 +554,7 @@ void HandleAction_SafariZoneBallThrow(void)
     gBattle_BG0_Y = 0;
     gNumSafariBalls--;
     gLastUsedItem = ITEM_SAFARI_BALL;
-    gBattlescriptCurrInstr = gBattlescriptsForBallThrow[ITEM_SAFARI_BALL];
+    gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForBallThrow, ITEM_SAFARI_BALL);
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
 }
 
@@ -583,7 +583,7 @@ void HandleAction_ThrowPokeblock(void)
             gBattleStruct->safariEscapeFactor -= sPkblToEscapeFactor[gBattleStruct->safariPkblThrowCounter][gBattleCommunication[MULTISTRING_CHOOSER]];
     }
 
-    gBattlescriptCurrInstr = gBattlescriptsForSafariActions[2];
+    gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForSafariActions, 2);
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
 }
 
@@ -610,7 +610,7 @@ void HandleAction_GoNear(void)
     {
         gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_CANT_GET_CLOSER;
     }
-    gBattlescriptCurrInstr = gBattlescriptsForSafariActions[1];
+    gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForSafariActions, 1);
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
 }
 
@@ -630,7 +630,7 @@ void HandleAction_WallyBallThrow(void)
 
     PREPARE_MON_NICK_BUFFER(gBattleTextBuff1, gBattlerAttacker, gBattlerPartyIndexes[gBattlerAttacker])
 
-    gBattlescriptCurrInstr = gBattlescriptsForSafariActions[3];
+    gBattlescriptCurrInstr = ASSET_TABLE_ENTRY(const u8 *, gBattlescriptsForSafariActions, 3);
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
     gActionsByTurnOrder[1] = B_ACTION_FINISHED;
 }

@@ -8,4 +8,7 @@ It builds the following ROM:
 
 To set up the repository, see [INSTALL.md](INSTALL.md).
 
+Native ports are documented in [pc/README.md](pc/README.md) and
+[android/README.md](android/README.md).
+
 For contacts and other pret projects, see [pret.github.io](https://pret.github.io/).

@@ -40,7 +40,6 @@
 
 #define NUM_LAYOUT_OFFSETS 8
 
-extern const struct MapLayout *const gMapLayouts[];
 
 struct PyramidWildMon
 {
@@ -1532,7 +1531,7 @@ void GenerateBattlePyramidFloorLayout(u16 *backupMapData, bool8 setPlayerPositio
     for (i = 0; i < NUM_PYRAMID_FLOOR_SQUARES; i++)
     {
         u16 *map;
-        const struct MapLayout *mapLayout = gMapLayouts[floorLayoutOffsets[i] + LAYOUT_BATTLE_FRONTIER_BATTLE_PYRAMID_FLOOR];
+        const struct MapLayout *mapLayout = GetMapLayoutById(floorLayoutOffsets[i] + LAYOUT_BATTLE_FRONTIER_BATTLE_PYRAMID_FLOOR + 1);
         const u16 *layoutMap = mapLayout->map;
 
         gBackupMapLayout.map = backupMapData;
@@ -1626,9 +1625,9 @@ void LoadBattlePyramidFloorObjectEventScripts(void)
     for (i = 0; i < OBJECT_EVENT_TEMPLATES_COUNT; i++)
     {
         if (events[i].graphicsId != OBJ_EVENT_GFX_ITEM_BALL)
-            events[i].script = BattlePyramid_TrainerBattle;
+            events[i].script = OBJECT_EVENT_SCRIPT_VALUE(BattlePyramid_TrainerBattle);
         else
-            events[i].script = BattlePyramid_FindItemBall;
+            events[i].script = OBJECT_EVENT_SCRIPT_VALUE(BattlePyramid_FindItemBall);
     }
 }
 

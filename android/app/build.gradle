@@ -1,0 +1,63 @@
+plugins {
+    id "com.android.application"
+}
+
+def repoRoot = file("../..").canonicalFile
+def properties = new Properties()
+def propertiesFile = rootProject.file("local.properties")
+if (propertiesFile.exists()) {
+    propertiesFile.withInputStream { properties.load(it) }
+}
+def sdl2Source = properties.getProperty("sdl2.dir", System.getenv("SDL2_SOURCE"))
+if (sdl2Source == null) {
+    throw new GradleException("Set sdl2.dir in android/local.properties or SDL2_SOURCE to an SDL 2.32.x source tree")
+}
+
+android {
+    namespace "org.pokeemerald.pc"
+    compileSdk 35
+    buildToolsVersion "35.0.0"
+    ndkVersion "27.2.12479018"
+
+    defaultConfig {
+        applicationId "org.pokeemerald.pc"
+        minSdk 23
+        targetSdk 35
+        versionCode 18
+        versionName "0.2"
+
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64", "x86"
+        }
+        externalNativeBuild {
+            cmake {
+                arguments "-DPOKEEMERALD_ROOT=${repoRoot}", "-DSDL2_SOURCE=${file(sdl2Source).canonicalPath}"
+            }
+        }
+    }
+
+    sourceSets {
+        main.java.srcDir file("${sdl2Source}/android-project/app/src/main/java")
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file("../CMakeLists.txt")
+            version "3.22.1"
+        }
+    }
+
+    buildTypes {
+        debug {
+            jniDebuggable true
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    packaging {
+        jniLibs.useLegacyPackaging = true
+        jniLibs.keepDebugSymbols += ["**/libpokeemerald_core.so"]
+    }
+}

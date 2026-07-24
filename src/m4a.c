@@ -20,6 +20,75 @@ COMMON_DATA struct PokemonCrySong gPokemonCrySong = {0};
 COMMON_DATA u8 gMPlayMemAccArea[0x10] = {0};
 COMMON_DATA struct MusicPlayerInfo gMPlayInfo_SE3 = {0};
 
+struct DecodedSongHeader
+{
+    u8 trackCount;
+    u8 blockCount;
+    u8 priority;
+    u8 reverb;
+    struct ToneData *tone;
+    u8 *part[MAX_MUSICPLAYER_TRACKS];
+};
+
+_Static_assert(offsetof(struct DecodedSongHeader, tone) == offsetof(struct SongHeader, tone),
+               "Decoded song tone offset changed");
+_Static_assert(offsetof(struct DecodedSongHeader, part) == offsetof(struct SongHeader, part),
+               "Decoded song track offset changed");
+
+static struct DecodedSongHeader sDecodedSongHeaders[NUM_MUSIC_PLAYERS][2];
+static const struct SongHeaderAsset *sCurrentSongHeaders[NUM_MUSIC_PLAYERS];
+static u8 sDecodedSongHeaderIndex[NUM_MUSIC_PLAYERS];
+#if PLATFORM_RELATIVE_POINTERS
+static struct ToneData sPokemonCryTones[MAX_POKEMON_CRIES];
+#endif
+
+static struct MusicPlayerInfo *GetMusicPlayerInfo(u8 player)
+{
+    return ASSET_POINTER(struct MusicPlayerInfo *, &gMPlayTable[player].info);
+}
+
+static struct MusicPlayerTrack *GetMusicPlayerTracks(u8 player)
+{
+    return ASSET_POINTER(struct MusicPlayerTrack *, &gMPlayTable[player].track);
+}
+
+static const struct SongHeaderAsset *GetSongHeaderAsset(u16 song)
+{
+    return ASSET_POINTER(const struct SongHeaderAsset *, &gSongTable[song].header);
+}
+
+static void DecodeSongHeader(struct DecodedSongHeader *destination, const struct SongHeaderAsset *source)
+{
+    const AssetPtr *parts = &source->part[0];
+    u8 i;
+
+    destination->trackCount = source->trackCount;
+    destination->blockCount = source->blockCount;
+    destination->priority = source->priority;
+    destination->reverb = source->reverb;
+    destination->tone = ASSET_POINTER(struct ToneData *, &source->tone);
+    for (i = 0; i < source->trackCount && i < MAX_MUSICPLAYER_TRACKS; i++)
+        destination->part[i] = ASSET_POINTER(u8 *, &parts[i]);
+}
+
+static void StartSongAsset(u8 player, const struct SongHeaderAsset *source)
+{
+    struct MusicPlayerInfo *mplayInfo = GetMusicPlayerInfo(player);
+    u8 slot = sDecodedSongHeaderIndex[player] ^ 1;
+    struct DecodedSongHeader *decoded = &sDecodedSongHeaders[player][slot];
+
+    DecodeSongHeader(decoded, source);
+    MPlayStart(mplayInfo, (struct SongHeader *)decoded);
+    if (mplayInfo->songHeader == (struct SongHeader *)decoded)
+    {
+        sDecodedSongHeaderIndex[player] = slot;
+        sCurrentSongHeaders[player] = source;
+#if PLATFORM_RELATIVE_POINTERS
+        mplayInfo->toneAssets = ASSET_POINTER(const struct ToneDataAsset *, &source->tone);
+#endif
+    }
+}
+
 u32 MidiKeyToFreq(struct WaveData *wav, u8 key, u8 fineAdjust)
 {
     u32 val1;
@@ -84,8 +153,8 @@ void m4aSoundInit(void)
 
     for (i = 0; i < NUM_MUSIC_PLAYERS; i++)
     {
-        struct MusicPlayerInfo *mplayInfo = gMPlayTable[i].info;
-        MPlayOpen(mplayInfo, gMPlayTable[i].track, gMPlayTable[i].numTracks);
+        struct MusicPlayerInfo *mplayInfo = GetMusicPlayerInfo(i);
+        MPlayOpen(mplayInfo, GetMusicPlayerTracks(i), gMPlayTable[i].numTracks);
         mplayInfo->unk_B = gMPlayTable[i].unk_A;
         mplayInfo->memAccArea = gMPlayMemAccArea;
     }
@@ -108,70 +177,59 @@ void m4aSoundMain(void)
 
 void m4aSongNumStart(u16 n)
 {
-    const struct MusicPlayer *mplayTable = gMPlayTable;
-    const struct Song *songTable = gSongTable;
-    const struct Song *song = &songTable[n];
-    const struct MusicPlayer *mplay = &mplayTable[song->ms];
-
-    MPlayStart(mplay->info, song->header);
+    StartSongAsset(gSongTable[n].ms, GetSongHeaderAsset(n));
 }
 
 void m4aSongNumStartOrChange(u16 n)
 {
-    const struct MusicPlayer *mplayTable = gMPlayTable;
-    const struct Song *songTable = gSongTable;
-    const struct Song *song = &songTable[n];
-    const struct MusicPlayer *mplay = &mplayTable[song->ms];
+    u8 player = gSongTable[n].ms;
+    const struct SongHeaderAsset *songHeader = GetSongHeaderAsset(n);
+    struct MusicPlayerInfo *mplayInfo = GetMusicPlayerInfo(player);
 
-    if (mplay->info->songHeader != song->header)
+    if (sCurrentSongHeaders[player] != songHeader)
     {
-        MPlayStart(mplay->info, song->header);
+        StartSongAsset(player, songHeader);
     }
     else
     {
-        if ((mplay->info->status & MUSICPLAYER_STATUS_TRACK) == 0
-         || (mplay->info->status & MUSICPLAYER_STATUS_PAUSE))
+        if ((mplayInfo->status & MUSICPLAYER_STATUS_TRACK) == 0
+         || (mplayInfo->status & MUSICPLAYER_STATUS_PAUSE))
         {
-            MPlayStart(mplay->info, song->header);
+            StartSongAsset(player, songHeader);
         }
     }
 }
 
 static void UNUSED m4aSongNumStartOrContinue(u16 n)
 {
-    const struct MusicPlayer *mplayTable = gMPlayTable;
-    const struct Song *songTable = gSongTable;
-    const struct Song *song = &songTable[n];
-    const struct MusicPlayer *mplay = &mplayTable[song->ms];
+    u8 player = gSongTable[n].ms;
+    const struct SongHeaderAsset *songHeader = GetSongHeaderAsset(n);
+    struct MusicPlayerInfo *mplayInfo = GetMusicPlayerInfo(player);
 
-    if (mplay->info->songHeader != song->header)
-        MPlayStart(mplay->info, song->header);
-    else if ((mplay->info->status & MUSICPLAYER_STATUS_TRACK) == 0)
-        MPlayStart(mplay->info, song->header);
-    else if (mplay->info->status & MUSICPLAYER_STATUS_PAUSE)
-        MPlayContinue(mplay->info);
+    if (sCurrentSongHeaders[player] != songHeader)
+        StartSongAsset(player, songHeader);
+    else if ((mplayInfo->status & MUSICPLAYER_STATUS_TRACK) == 0)
+        StartSongAsset(player, songHeader);
+    else if (mplayInfo->status & MUSICPLAYER_STATUS_PAUSE)
+        MPlayContinue(mplayInfo);
 }
 
 void m4aSongNumStop(u16 n)
 {
-    const struct MusicPlayer *mplayTable = gMPlayTable;
-    const struct Song *songTable = gSongTable;
-    const struct Song *song = &songTable[n];
-    const struct MusicPlayer *mplay = &mplayTable[song->ms];
+    u8 player = gSongTable[n].ms;
+    struct MusicPlayerInfo *mplayInfo = GetMusicPlayerInfo(player);
 
-    if (mplay->info->songHeader == song->header)
-        m4aMPlayStop(mplay->info);
+    if (sCurrentSongHeaders[player] == GetSongHeaderAsset(n))
+        m4aMPlayStop(mplayInfo);
 }
 
 static void UNUSED m4aSongNumContinue(u16 n)
 {
-    const struct MusicPlayer *mplayTable = gMPlayTable;
-    const struct Song *songTable = gSongTable;
-    const struct Song *song = &songTable[n];
-    const struct MusicPlayer *mplay = &mplayTable[song->ms];
+    u8 player = gSongTable[n].ms;
+    struct MusicPlayerInfo *mplayInfo = GetMusicPlayerInfo(player);
 
-    if (mplay->info->songHeader == song->header)
-        MPlayContinue(mplay->info);
+    if (sCurrentSongHeaders[player] == GetSongHeaderAsset(n))
+        MPlayContinue(mplayInfo);
 }
 
 void m4aMPlayAllStop(void)
@@ -179,7 +237,7 @@ void m4aMPlayAllStop(void)
     s32 i;
 
     for (i = 0; i < NUM_MUSIC_PLAYERS; i++)
-        m4aMPlayStop(gMPlayTable[i].info);
+        m4aMPlayStop(GetMusicPlayerInfo(i));
 
     for (i = 0; i < MAX_POKEMON_CRIES; i++)
         m4aMPlayStop(&gPokemonCryMusicPlayers[i]);
@@ -195,7 +253,7 @@ void m4aMPlayAllContinue(void)
     s32 i;
 
     for (i = 0; i < NUM_MUSIC_PLAYERS; i++)
-        MPlayContinue(gMPlayTable[i].info);
+        MPlayContinue(GetMusicPlayerInfo(i));
 
     for (i = 0; i < MAX_POKEMON_CRIES; i++)
         MPlayContinue(&gPokemonCryMusicPlayers[i]);
@@ -383,7 +441,7 @@ void SoundInit(struct SoundInfo *soundInfo)
     REG_DMA2SAD = (s32)soundInfo->pcmBuffer + PCM_DMA_BUF_SIZE;
     REG_DMA2DAD = (s32)&REG_FIFO_B;
 
-    SOUND_INFO_PTR = soundInfo;
+    SET_SOUND_INFO_PTR(soundInfo);
     CpuFill32(0, soundInfo, sizeof(struct SoundInfo));
 
     soundInfo->maxChans = 8;
@@ -637,6 +695,9 @@ void MPlayStart(struct MusicPlayerInfo *mplayInfo, struct SongHeader *songHeader
         mplayInfo->status = 0;
         mplayInfo->songHeader = songHeader;
         mplayInfo->tone = songHeader->tone;
+#if PLATFORM_RELATIVE_POINTERS
+        mplayInfo->toneAssets = NULL;
+#endif
         mplayInfo->priority = songHeader->priority;
         mplayInfo->clock = 0;
         mplayInfo->tempoD = 150;
@@ -1665,7 +1726,11 @@ void DummyFunc(void)
 {
 }
 
-struct MusicPlayerInfo *SetPokemonCryTone(struct ToneData *tone)
+static struct MusicPlayerInfo *StartPokemonCryTone(struct ToneData *tone
+#if PLATFORM_RELATIVE_POINTERS
+                                                   , const struct ToneDataAsset *toneAsset
+#endif
+)
 {
     u32 maxClock = 0;
     s32 maxClockIndex = 0;
@@ -1692,12 +1757,25 @@ start_song:
     mplayInfo = &gPokemonCryMusicPlayers[i];
     mplayInfo->ident++;
 
+#if PLATFORM_RELATIVE_POINTERS
+    if (toneAsset != NULL)
+    {
+        DecodeToneDataAsset(&sPokemonCryTones[i], toneAsset);
+        tone = &sPokemonCryTones[i];
+    }
+#endif
+
     gPokemonCrySongs[i] = gPokemonCrySong;
 
     gPokemonCrySongs[i].tone = tone;
     gPokemonCrySongs[i].part[0] = &gPokemonCrySongs[i].part0;
     gPokemonCrySongs[i].part[1] = &gPokemonCrySongs[i].part1;
+#if PLATFORM_RELATIVE_POINTERS
+    gPokemonCrySongs[i].gotoTarget = (u8 *)&gPokemonCrySongs[i].cont
+                                    - (u8 *)&gPokemonCrySongs[i].gotoTarget;
+#else
     gPokemonCrySongs[i].gotoTarget = (u32)&gPokemonCrySongs[i].cont;
+#endif
 
     mplayInfo->ident = ID_NUMBER;
 
@@ -1705,6 +1783,22 @@ start_song:
 
     return mplayInfo;
 }
+
+struct MusicPlayerInfo *SetPokemonCryTone(struct ToneData *tone)
+{
+    return StartPokemonCryTone(tone
+#if PLATFORM_RELATIVE_POINTERS
+                               , NULL
+#endif
+    );
+}
+
+#if PLATFORM_RELATIVE_POINTERS
+struct MusicPlayerInfo *SetPokemonCryToneAsset(const struct ToneDataAsset *tone)
+{
+    return StartPokemonCryTone(NULL, tone);
+}
+#endif
 
 void SetPokemonCryVolume(u8 val)
 {

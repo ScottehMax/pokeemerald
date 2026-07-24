@@ -16,8 +16,8 @@
 #include "mystery_event_msg.h"
 #include "pokemon_storage_system.h"
 
-extern ScrCmdFunc gMysteryEventScriptCmdTable[];
-extern ScrCmdFunc gMysteryEventScriptCmdTableEnd[];
+extern const AssetPtr gMysteryEventScriptCmdTable[];
+extern const AssetPtr gMysteryEventScriptCmdTableEnd[];
 
 // 0x1 in FireRed, 0x2 in LeafGreen, 0x80 in Ruby, 0x100 in Sapphire
 #define VERSION_MASK (1 << 9)

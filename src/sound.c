@@ -25,8 +25,13 @@ static u16 sFanfareCounter;
 
 COMMON_DATA bool8 gDisableMusic = 0;
 
+#if PLATFORM_RELATIVE_POINTERS
+extern const struct ToneDataAsset gCryTable[];
+extern const struct ToneDataAsset gCryTable_Reverse[];
+#else
 extern struct ToneData gCryTable[];
 extern struct ToneData gCryTable_Reverse[];
+#endif
 
 static void Task_Fanfare(u8 taskId);
 static void CreateFanfareTask(void);
@@ -474,24 +479,30 @@ void PlayCryInternal(u16 species, s8 pan, s8 volume, u8 priority, u8 mode)
 
     #define GET_CRY(speciesIndex, tableId, reversed) \
         ((reversed) ? &gCryTable_Reverse[(128 * (tableId)) + (speciesIndex)] : &gCryTable[(128 * (tableId)) + (speciesIndex)])
+#if PLATFORM_RELATIVE_POINTERS
+    #define START_CRY(tone) SetPokemonCryToneAsset(tone)
+#else
+    #define START_CRY(tone) SetPokemonCryTone(tone)
+#endif
 
     switch (table)
     {
     case 0:
-        gMPlay_PokemonCry = SetPokemonCryTone(GET_CRY(index, 0, reverse));
+        gMPlay_PokemonCry = START_CRY(GET_CRY(index, 0, reverse));
         break;
     case 1:
-        gMPlay_PokemonCry = SetPokemonCryTone(GET_CRY(index, 1, reverse));
+        gMPlay_PokemonCry = START_CRY(GET_CRY(index, 1, reverse));
         break;
     case 2:
-        gMPlay_PokemonCry = SetPokemonCryTone(GET_CRY(index, 2, reverse));
+        gMPlay_PokemonCry = START_CRY(GET_CRY(index, 2, reverse));
         break;
     case 3:
-        gMPlay_PokemonCry = SetPokemonCryTone(GET_CRY(index, 3, reverse));
+        gMPlay_PokemonCry = START_CRY(GET_CRY(index, 3, reverse));
         break;
     }
 
     #undef GET_CRY
+    #undef START_CRY
 }
 
 bool8 IsCryFinished(void)

@@ -1,0 +1,6 @@
+# Android SDK path may also be supplied through ANDROID_HOME.
+sdk.dir=/path/to/Android/Sdk
+
+# SDL 2.32.x source checkout. This is used for both SDL's Java activity code
+# and the native SDL2 library.
+sdl2.dir=/path/to/SDL2-2.32.10
