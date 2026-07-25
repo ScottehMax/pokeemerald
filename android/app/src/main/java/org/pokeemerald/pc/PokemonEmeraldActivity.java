@@ -4,10 +4,16 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Process;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.Surface;
+import android.widget.ImageButton;
 import android.widget.Toast;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -30,8 +36,18 @@ public final class PokemonEmeraldActivity extends SDLActivity {
         }
     };
 
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        addLinkSettingsButton();
+    }
+
     public String getGameCorePath() {
         return getApplicationInfo().nativeLibraryDir + "/libpokeemerald_core.so";
+    }
+
+    public String getLinkServer() {
+        return LinkServerSettings.get(this);
     }
 
     public synchronized void startGameCore(String sharedPath) {
@@ -70,6 +86,35 @@ public final class PokemonEmeraldActivity extends SDLActivity {
                 surface.setFrameRate(59.7275f, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
             }
         });
+    }
+
+    private void addLinkSettingsButton() {
+        int size = dp(42);
+        GradientDrawable background = new GradientDrawable();
+        ImageButton button = new ImageButton(this);
+        android.widget.FrameLayout.LayoutParams layout =
+            new android.widget.FrameLayout.LayoutParams(
+                size,
+                size,
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+
+        background.setColor(Color.argb(145, 18, 22, 20));
+        background.setShape(GradientDrawable.OVAL);
+        button.setBackground(background);
+        button.setImageResource(R.drawable.ic_link_settings);
+        button.setContentDescription(getString(R.string.link_settings));
+        button.setPadding(dp(10), dp(10), dp(10), dp(10));
+        button.setOnClickListener(view ->
+            startActivity(new Intent(this, LinkSettingsActivity.class)));
+        layout.topMargin = dp(8);
+        addContentView(button, layout);
+    }
+
+    private int dp(int value) {
+        return (int)TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            value,
+            getResources().getDisplayMetrics());
     }
 
     @Override

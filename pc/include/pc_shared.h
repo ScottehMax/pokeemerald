@@ -4,12 +4,13 @@
 #include <stdint.h>
 
 #define PC_SHARED_MAGIC 0x50454D45u
-#define PC_SHARED_VERSION 9u
+#define PC_SHARED_VERSION 10u
 #define PC_FRAME_WIDTH 240
 #define PC_FRAME_MAX_WIDTH 400
 #define PC_FRAME_HEIGHT 160
 #define PC_FRAME_BUFFER_COUNT 3
 #define PC_PATH_MAX 1024
+#define PC_LINK_SERVER_MAX 256
 #define PC_CORE_ERROR_MAX 512
 #define PC_AUDIO_RATE 48000
 #define PC_AUDIO_BUFFER_FRAMES 32768
@@ -258,6 +259,7 @@ struct PcSharedState
     char defaultSavePath[PC_PATH_MAX];
     char savePath[PC_PATH_MAX];
     char storagePath[PC_PATH_MAX];
+    char linkServer[PC_LINK_SERVER_MAX];
     char requestedSavePath[PC_PATH_MAX];
     char requestedStoragePath[PC_PATH_MAX];
     uint32_t audioRead;

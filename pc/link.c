@@ -34,12 +34,15 @@ typedef int PcSocket;
 #include "overworld.h"
 #include "pc_link.h"
 #include "pc_link_protocol.h"
+#include "pc_platform.h"
 #include "constants/characters.h"
 
 _Static_assert(CMD_LENGTH == PC_LINK_COMMAND_WORDS, "PC link command size mismatch");
 
 #define PC_LINK_RENDEZVOUS_INTERVAL_MS 500
 #define PC_LINK_PUNCH_INTERVAL_MS 100
+#define PC_LINK_DIRECT_TIMEOUT_MS 1200
+#define PC_LINK_DIRECT_RETRY_MS 1000
 #define PC_LINK_RETRY_INTERVAL_MS 50
 #define PC_LINK_CONNECT_TIMEOUT_MS 15000
 #define PC_LINK_PEER_TIMEOUT_MS 5000
@@ -93,8 +96,12 @@ struct PcLinkClient
     u64 stateStartedAt;
     u64 lastServerSend;
     u64 lastPunchSend;
+    u64 lastDirectProbeSend;
     u64 lastRetrySend;
     u64 lastPeerReceive;
+    bool8 sendErrorReported;
+    bool8 usingRelay;
+    bool8 directEnabled;
 };
 
 static struct PcLinkClient sLink = {.socket = PC_INVALID_SOCKET};
@@ -139,6 +146,16 @@ static u64 MakeNonce(void)
     return value ? value : 1;
 }
 
+static bool32 DirectLinkEnabled(void)
+{
+    const char *setting = getenv("POKEEMERALD_LINK_P2P");
+
+    return setting != NULL
+        && (strcmp(setting, "1") == 0
+         || strcmp(setting, "true") == 0
+         || strcmp(setting, "yes") == 0);
+}
+
 static bool32 SetNonblocking(PcSocket socket)
 {
 #ifdef _WIN32
@@ -181,7 +198,7 @@ static bool32 IsTransientUdpError(int error)
 
 static bool32 ParseServerAddress(struct sockaddr_in *address)
 {
-    const char *setting = getenv("POKEEMERALD_LINK_SERVER");
+    const char *setting = PcPlatformGetLinkServer();
     const char *host = "127.0.0.1";
     const char *port = "8765";
     char hostBuffer[256];
@@ -245,7 +262,32 @@ static bool32 SendPacketTo(const struct PcLinkPacket *packet, const struct socka
                       (const struct sockaddr *)address,
                       sizeof(*address));
 
-    return sent == sizeof(*packet);
+    if (sent != sizeof(*packet))
+    {
+        if (!sLink.sendErrorReported)
+        {
+            char addressText[INET_ADDRSTRLEN];
+            int error = GetSocketError();
+
+            inet_ntop(AF_INET, &address->sin_addr, addressText, sizeof(addressText));
+#ifdef _WIN32
+            fprintf(stderr,
+                    "PC link sendto %s:%u failed: Windows error %d\n",
+                    addressText,
+                    ntohs(address->sin_port),
+                    error);
+#else
+            fprintf(stderr,
+                    "PC link sendto %s:%u failed: %s\n",
+                    addressText,
+                    ntohs(address->sin_port),
+                    strerror(error));
+#endif
+            sLink.sendErrorReported = TRUE;
+        }
+        return FALSE;
+    }
+    return TRUE;
 }
 
 static void SendHello(u64 now)
@@ -259,12 +301,28 @@ static void SendHello(u64 now)
     sLink.lastServerSend = now;
 }
 
-static void SendPunch(u64 now)
+static void SendDirectPunch(u64 now)
 {
     struct PcLinkPacket packet;
 
     InitializePacket(&packet, PC_LINK_PACKET_PUNCH);
     SendPacketTo(&packet, &sLink.peer);
+    sLink.lastDirectProbeSend = now;
+}
+
+static void SendPunch(u64 now)
+{
+    struct PcLinkPacket packet;
+
+    if (sLink.usingRelay)
+    {
+        InitializePacket(&packet, PC_LINK_PACKET_RELAY_PUNCH);
+        SendPacketTo(&packet, &sLink.server);
+    }
+    else
+    {
+        SendDirectPunch(now);
+    }
     sLink.lastPunchSend = now;
 }
 
@@ -288,11 +346,14 @@ static void SendFrame(const struct PcLinkFrame *frame)
 {
     struct PcLinkPacket packet;
 
-    InitializePacket(&packet, PC_LINK_PACKET_FRAME);
+    InitializePacket(&packet,
+                     sLink.usingRelay
+                         ? PC_LINK_PACKET_RELAY_FRAME
+                         : PC_LINK_PACKET_FRAME);
     packet.sequence = htonl(frame->sequence);
     packet.acknowledgeSequence = htonl(sLink.nextReceiveSequence - 1);
     EncodeCommands(&packet, frame->commands);
-    SendPacketTo(&packet, &sLink.peer);
+    SendPacketTo(&packet, sLink.usingRelay ? &sLink.server : &sLink.peer);
 }
 
 static void AcknowledgeLocalFrames(u32 sequence)
@@ -529,46 +590,126 @@ static void ReceivePackets(u64 now)
         if ((sLink.state == PC_LINK_STATE_RENDEZVOUS
           || sLink.state == PC_LINK_STATE_PUNCHING)
          && packet.type == PC_LINK_PACKET_MATCH
-         && NetworkToHost64(packet.nonce) == sLink.nonce
-         && AddressesEqual(&source, &sLink.server))
+         && NetworkToHost64(packet.nonce) == sLink.nonce)
         {
-            sLink.session = NetworkToHost64(packet.session);
+            bool32 firstMatch = sLink.state == PC_LINK_STATE_RENDEZVOUS;
+            bool32 endpointChanged;
+            bool32 sessionChanged;
+            u64 session = NetworkToHost64(packet.session);
+
+            // A UDP reply may come from a different local interface than the
+            // configured or DNS-resolved rendezvous address. The random
+            // per-attempt nonce authenticates the reply; retain its actual
+            // source so subsequent HELLO and relay packets follow it.
+            sLink.server = source;
+            sessionChanged = sLink.session != 0 && sLink.session != session;
+            sLink.session = session;
             sLink.playerId = packet.playerId;
-            memset(&sLink.peer, 0, sizeof(sLink.peer));
-            sLink.peer.sin_family = AF_INET;
-            sLink.peer.sin_addr.s_addr = packet.peerAddress;
-            sLink.peer.sin_port = packet.peerPort;
-            if (sLink.state == PC_LINK_STATE_RENDEZVOUS)
+            endpointChanged = sLink.peer.sin_addr.s_addr != packet.peerAddress
+                           || sLink.peer.sin_port != packet.peerPort;
+            if (firstMatch || endpointChanged || sessionChanged)
+            {
+                char peerAddress[INET_ADDRSTRLEN];
+
+                memset(&sLink.peer, 0, sizeof(sLink.peer));
+                sLink.peer.sin_family = AF_INET;
+                sLink.peer.sin_addr.s_addr = packet.peerAddress;
+                sLink.peer.sin_port = packet.peerPort;
+                inet_ntop(AF_INET,
+                          &sLink.peer.sin_addr,
+                          peerAddress,
+                          sizeof(peerAddress));
+                if (sLink.directEnabled)
+                {
+                    fprintf(stderr,
+                            "PC link %s as player %u; punching %s:%u directly\n",
+                            sessionChanged ? "rematched" : "matched",
+                            sLink.playerId + 1,
+                            peerAddress,
+                            ntohs(sLink.peer.sin_port));
+                }
+                else
+                {
+                    fprintf(stderr,
+                            "PC link %s as player %u; using server relay\n",
+                            sessionChanged ? "rematched" : "matched",
+                            sLink.playerId + 1);
+                }
+                sLink.usingRelay = !sLink.directEnabled;
+            }
+            if (firstMatch || sessionChanged)
                 sLink.stateStartedAt = now;
             sLink.state = PC_LINK_STATE_PUNCHING;
             sLink.lastPunchSend = 0;
             continue;
         }
 
-        if (packet.type == PC_LINK_PACKET_PUNCH
+        if (sLink.directEnabled
+         && packet.type == PC_LINK_PACKET_PUNCH
          && sLink.session != 0
          && NetworkToHost64(packet.session) == sLink.session
          && packet.playerId != sLink.playerId)
         {
+            bool32 shouldReply = sLink.state != PC_LINK_STATE_CONNECTED || sLink.usingRelay;
+
             sLink.peer = source;
             sLink.lastPeerReceive = now;
-            SendPunch(now);
+            if (sLink.usingRelay)
+                fprintf(stderr, "PC link upgraded from relay to direct P2P\n");
+            sLink.usingRelay = FALSE;
+            if (shouldReply)
+                SendPunch(now);
             if (sLink.state != PC_LINK_STATE_CONNECTED)
             {
                 sLink.state = PC_LINK_STATE_CONNECTED;
-                fprintf(stderr, "PC link peer connected as player %u\n", sLink.playerId + 1);
+                fprintf(stderr,
+                        "PC link peer connected directly as player %u\n",
+                        sLink.playerId + 1);
+            }
+            continue;
+        }
+
+        if (packet.type == PC_LINK_PACKET_RELAY_PUNCH
+         && sLink.session != 0
+         && NetworkToHost64(packet.session) == sLink.session
+         && packet.playerId != sLink.playerId
+         && AddressesEqual(&source, &sLink.server))
+        {
+            bool32 shouldReply = sLink.state != PC_LINK_STATE_CONNECTED || !sLink.usingRelay;
+
+            sLink.lastPeerReceive = now;
+            sLink.usingRelay = TRUE;
+            if (shouldReply)
+                SendPunch(now);
+            if (sLink.state != PC_LINK_STATE_CONNECTED)
+            {
+                sLink.state = PC_LINK_STATE_CONNECTED;
+                fprintf(stderr,
+                        "PC link peer connected through relay as player %u\n",
+                        sLink.playerId + 1);
             }
             continue;
         }
 
         if (sLink.state != PC_LINK_STATE_CONNECTED
-         || !AddressesEqual(&source, &sLink.peer)
-         || NetworkToHost64(packet.session) != sLink.session)
+         || NetworkToHost64(packet.session) != sLink.session
+         || packet.playerId == sLink.playerId)
             continue;
 
-        sLink.lastPeerReceive = now;
-        if (packet.type == PC_LINK_PACKET_FRAME && packet.playerId != sLink.playerId)
+        if (packet.type == PC_LINK_PACKET_FRAME
+         && !sLink.usingRelay
+         && AddressesEqual(&source, &sLink.peer))
+        {
+            sLink.lastPeerReceive = now;
             StoreRemoteFrame(&packet);
+        }
+        else if (packet.type == PC_LINK_PACKET_RELAY_FRAME
+              && sLink.usingRelay
+              && AddressesEqual(&source, &sLink.server))
+        {
+            sLink.lastPeerReceive = now;
+            StoreRemoteFrame(&packet);
+        }
     }
 }
 
@@ -592,6 +733,7 @@ void PcLinkSetCode(const u8 *code)
 
 bool32 PcLinkOpen(void)
 {
+    struct sockaddr_in localAddress;
     u64 now;
 
     PcLinkClose();
@@ -622,9 +764,23 @@ bool32 PcLinkOpen(void)
         return FALSE;
     }
     sLink.socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sLink.socket == PC_INVALID_SOCKET || !SetNonblocking(sLink.socket))
+    if (sLink.socket == PC_INVALID_SOCKET)
     {
         fprintf(stderr, "could not create PC link UDP socket\n");
+        PcLinkClose();
+        sLink.state = PC_LINK_STATE_ERROR;
+        return FALSE;
+    }
+    memset(&localAddress, 0, sizeof(localAddress));
+    localAddress.sin_family = AF_INET;
+    localAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+    localAddress.sin_port = 0;
+    if (bind(sLink.socket,
+             (const struct sockaddr *)&localAddress,
+             sizeof(localAddress)) != 0
+     || !SetNonblocking(sLink.socket))
+    {
+        fprintf(stderr, "could not bind PC link UDP socket\n");
         PcLinkClose();
         sLink.state = PC_LINK_STATE_ERROR;
         return FALSE;
@@ -666,8 +822,12 @@ bool32 PcLinkOpen(void)
     sLink.stateStartedAt = now;
     sLink.lastServerSend = 0;
     sLink.lastPunchSend = 0;
+    sLink.lastDirectProbeSend = 0;
     sLink.lastRetrySend = now;
     sLink.lastPeerReceive = now;
+    sLink.sendErrorReported = FALSE;
+    sLink.directEnabled = DirectLinkEnabled();
+    sLink.usingRelay = !sLink.directEnabled;
     sLink.state = PC_LINK_STATE_RENDEZVOUS;
     SendHello(now);
     return TRUE;
@@ -702,12 +862,21 @@ u32 PcLinkMain(u16 *sendCmd, u16 (*recvCmds)[CMD_LENGTH])
     if (sLink.state == PC_LINK_STATE_IDLE)
         return 0;
     memset(recvCmds, 0, sizeof(u16) * MAX_RFU_PLAYERS * CMD_LENGTH);
-    if (sLink.state != PC_LINK_STATE_IDLE && sLink.state != PC_LINK_STATE_ERROR)
+    if (sLink.state != PC_LINK_STATE_ERROR)
         ReceivePackets(now);
 
     if ((sLink.state == PC_LINK_STATE_RENDEZVOUS || sLink.state == PC_LINK_STATE_PUNCHING)
      && now - sLink.lastServerSend >= PC_LINK_RENDEZVOUS_INTERVAL_MS)
         SendHello(now);
+    if (sLink.state == PC_LINK_STATE_PUNCHING
+     && sLink.directEnabled
+     && !sLink.usingRelay
+     && now - sLink.stateStartedAt >= PC_LINK_DIRECT_TIMEOUT_MS)
+    {
+        sLink.usingRelay = TRUE;
+        sLink.lastPunchSend = 0;
+        fprintf(stderr, "PC link direct path unavailable; trying relay\n");
+    }
     if (sLink.state == PC_LINK_STATE_PUNCHING
      && now - sLink.lastPunchSend >= PC_LINK_PUNCH_INTERVAL_MS)
         SendPunch(now);
@@ -727,6 +896,10 @@ u32 PcLinkMain(u16 *sendCmd, u16 (*recvCmds)[CMD_LENGTH])
 
     if (sLink.state == PC_LINK_STATE_CONNECTED)
     {
+        if (sLink.directEnabled
+         && sLink.usingRelay
+         && now - sLink.lastDirectProbeSend >= PC_LINK_DIRECT_RETRY_MS)
+            SendDirectPunch(now);
         QueueGameCommands(sendCmd);
         if (sLink.state == PC_LINK_STATE_CONNECTED
          && sLink.nextSendSequence - sLink.nextDeliverySequence < PC_LINK_MAX_IN_FLIGHT)

@@ -48,7 +48,7 @@
 #define FRONTEND_UPLOAD_BUFFER_COUNT 6
 #define ANDROID_OPENSL_BUFFER_COUNT 3
 #define ANDROID_FRAME_WAIT "futex"
-#define ANDROID_BUILD_REVISION "0.3.1"
+#define ANDROID_BUILD_REVISION "0.3.2"
 
 static uint64_t sLastAudioCallbackNs;
 static uint64_t sLastAudioUnderrunEventNs;
@@ -759,6 +759,14 @@ static int GetStoragePath(const char *savePath, char *storagePath, size_t storag
     return 0;
 }
 
+static void UpdateLinkServerSetting(struct PcSharedState *shared)
+{
+    char server[PC_LINK_SERVER_MAX];
+
+    if (GetActivityString("getLinkServer", server, sizeof(server)) == 0)
+        snprintf(shared->linkServer, sizeof(shared->linkServer), "%s", server);
+}
+
 static uint32_t ReadKeyboard(void)
 {
     const Uint8 *keyboard = SDL_GetKeyboardState(NULL);
@@ -1068,6 +1076,7 @@ int main(int argc, char **argv)
     }
     if (GetActivityString("getGameCorePath", corePath, sizeof(corePath)) != 0)
         goto cleanup;
+    UpdateLinkServerSetting(shared);
 
     {
         SDL_AudioSpec desired = {0};
@@ -1147,6 +1156,7 @@ int main(int argc, char **argv)
             else if (event.type == SDL_APP_DIDENTERFOREGROUND)
             {
                 DiscardQueuedAudio(shared);
+                UpdateLinkServerSetting(shared);
                 __atomic_store_n(&sLifecyclePaused, 0, __ATOMIC_RELEASE);
                 __atomic_store_n(&shared->paused, 0, __ATOMIC_RELEASE);
                 resumeAudio = 1;
@@ -1453,6 +1463,7 @@ int main(int argc, char **argv)
                 PcProfileRememberBySavePath(defaultSavePath, savePath);
             }
             ResetSharedState(shared, defaultSavePath, savePath, storagePath, resumeMainMenu, audioDevice);
+            UpdateLinkServerSetting(shared);
             UpdateRequestedFrameWidth(shared, renderer);
             suppressKeys = 1;
             lastFrame = UINT32_MAX;

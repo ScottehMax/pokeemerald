@@ -10,6 +10,7 @@ void PcPlatformShutdown(void);
 void PcPlatformRecordExit(int status);
 const char *PcPlatformGetDefaultSavePath(void);
 const char *PcPlatformGetSavePath(void);
+const char *PcPlatformGetLinkServer(void);
 bool32 PcPlatformShouldResumeMainMenu(void);
 void PcPlatformSwitchProfile(const char *savePath, const char *storagePath) __attribute__((noreturn));
 void PcPlatformWaitForFrame(void);

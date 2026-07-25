@@ -19,6 +19,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".LinkSettingsActivity"
+            android:exported="false"
+            android:theme="@style/SettingsTheme" />
+
         <service
             android:name=".CoreService"
             android:exported="false"

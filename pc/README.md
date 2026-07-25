@@ -130,9 +130,15 @@ the game:
 POKEEMERALD_LINK_SERVER=example.com:8765 ./build/pc/pokeemerald-pc
 ```
 
-The server only matches codes and exchanges the clients' observed UDP
-endpoints. Game traffic then travels directly between peers using UDP hole
-punching, so the players do not need to configure port forwarding. The server
-can use a different address or port with `--bind ADDRESS` and `--port PORT`.
-Symmetric NATs that assign a different public port for each destination may
-still prevent direct peer-to-peer connectivity.
+The server matches codes and relays game traffic between clients by default.
+It can use a different address or port with `--bind ADDRESS` and `--port PORT`.
+
+Direct peer-to-peer UDP hole punching remains available as an experimental
+option. Set `POKEEMERALD_LINK_P2P=1` for both clients to try it. If no direct
+packet arrives within 1.2 seconds, the clients automatically fall back to the
+relay and continue probing for a direct path. With the option unset, clients
+start relaying immediately and do not send peer probes.
+
+Relay traffic is forwarded immediately without batching, but its latency and
+bandwidth depend on the server's location and connection. Deploy the server near
+its expected players when relay use is common.

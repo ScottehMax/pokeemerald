@@ -3,8 +3,9 @@
 The Android build runs the SDL frontend in the main app process and the game
 core in a private `:core` service process. The core is loaded below 4 GiB with
 `android_dlopen_ext`, preserving Emerald's 32-bit encoded script addresses on
-64-bit devices without limiting the APK to one CPU architecture. The APK
-contains `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86` builds.
+64-bit devices without limiting the port to one CPU architecture. The build
+produces separate `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86` APKs so a
+device does not carry native libraries for three unused architectures.
 
 ## Prerequisites
 
@@ -29,7 +30,8 @@ cd android
 ./gradlew :app:assembleDebug
 ```
 
-The APK is written to `android/app/build/outputs/apk/debug/`. Saves, profiles,
+The ABI-specific APKs are written to `android/app/build/outputs/apk/debug/`.
+For example, use `app-arm64-v8a-debug.apk` on an arm64 device. Saves, profiles,
 expanded `.ek3` storage, and the remembered-profile preference live in the
 app's private files directory. Uninstalling the app removes those files unless
 Android backup restores them.
@@ -37,6 +39,14 @@ Android backup restores them.
 The overworld viewport follows the device aspect ratio, up to 400x160, so wider
 screens reveal more of the map instead of adding side bars. Battles, menus, and
 other fixed-layout scenes remain at their original 240x160 composition.
+
+Use the settings button at the top center of the game to choose the rendezvous
+server used by Link Play. The value is stored by Android and accepts either a
+host name or an IPv4 address, with an optional UDP port. Port 8765 is used when
+the port is omitted. A changed server applies after returning to the game and
+before starting the next link session. Link Play sends game traffic through the
+configured server; direct peer-to-peer transport is disabled in the standard
+Android build.
 
 If the game core crashes or cannot start, the frontend writes the same
 diagnostic text report and last-frame PPM used by the desktop port under the
@@ -54,5 +64,5 @@ Hold L, R, and Select for 1.5 seconds to share an on-device performance report.
 It separates game callback, VBlank/audio, software PPU, and Android presentation
 timing so stalls can be attributed without ADB.
 
-No Android-native menu is used at present; profile selection remains in the
-game. If native settings are added later, use Jetpack Compose for that UI.
+Profile selection remains in the game. The native link-server settings screen
+uses Jetpack Compose.

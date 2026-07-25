@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Pokemon Emerald</string>
+    <string name="link_settings">Link server settings</string>
 </resources>

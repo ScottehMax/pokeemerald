@@ -835,6 +835,13 @@ const char *PcPlatformGetSavePath(void)
     return sShared->savePath;
 }
 
+const char *PcPlatformGetLinkServer(void)
+{
+    if (sShared != NULL && sShared->linkServer[0] != '\0')
+        return sShared->linkServer;
+    return getenv("POKEEMERALD_LINK_SERVER");
+}
+
 bool32 PcPlatformShouldResumeMainMenu(void)
 {
     return sShared->resumeMainMenu != 0;
