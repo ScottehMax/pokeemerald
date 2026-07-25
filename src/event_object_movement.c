@@ -4804,6 +4804,42 @@ u8 GetCollisionAtCoords(struct ObjectEvent *objectEvent, s16 x, s16 y, u32 dir)
     return COLLISION_NONE;
 }
 
+#if PLATFORM_PC
+bool32 IsObjectEventPathTilePassable(struct ObjectEvent *objectEvent,
+                                     s16 fromX,
+                                     s16 fromY,
+                                     s16 toX,
+                                     s16 toY,
+                                     u8 direction)
+{
+    u8 fromElevation;
+    u8 toElevation;
+
+    if (MapGridGetCollisionAt(toX, toY)
+     || GetMapBorderIdAt(toX, toY) == CONNECTION_INVALID
+     || gOppositeDirectionBlockedMetatileFuncs[direction - 1](
+            MapGridGetMetatileBehaviorAt(fromX, fromY))
+     || gDirectionBlockedMetatileFuncs[direction - 1](
+            MapGridGetMetatileBehaviorAt(toX, toY)))
+        return FALSE;
+
+    fromElevation = MapGridGetElevationAt(fromX, fromY);
+    if (fromX == objectEvent->currentCoords.x
+     && fromY == objectEvent->currentCoords.y)
+        fromElevation = objectEvent->currentElevation;
+    toElevation = MapGridGetElevationAt(toX, toY);
+    if (fromElevation != ELEVATION_TRANSITION
+     && fromElevation != ELEVATION_MULTI_LEVEL
+     && toElevation != ELEVATION_TRANSITION
+     && toElevation != ELEVATION_MULTI_LEVEL
+     && fromElevation != toElevation)
+        return FALSE;
+    if (DoesObjectCollideWithObjectAt(objectEvent, toX, toY))
+        return FALSE;
+    return TRUE;
+}
+#endif
+
 u8 GetCollisionFlagsAtCoords(struct ObjectEvent *objectEvent, s16 x, s16 y, u8 direction)
 {
     u8 flags = 0;

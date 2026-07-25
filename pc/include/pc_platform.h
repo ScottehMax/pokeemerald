@@ -3,6 +3,8 @@
 
 #include "gba/types.h"
 
+struct PcTouchEvent;
+
 typedef void (*PcInterruptCallback)(void);
 
 bool32 PcPlatformInit(const char *sharedPath);
@@ -18,6 +20,7 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback);
 u32 PcPlatformGetOverworldViewportWidth(void);
 u32 PcPlatformGetOverworldViewportHeight(void);
 bool32 PcPlatformIsOverworldViewportActive(void);
+bool32 PcPlatformPopTouchEvent(struct PcTouchEvent *event);
 void PcPlatformSoftReset(void) __attribute__((noreturn));
 void PcPlatformQueueAudio(const s16 *samples, u32 frameCount);
 void PcPlatformRunTestHooks(void);

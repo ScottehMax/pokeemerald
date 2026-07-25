@@ -25,6 +25,7 @@ import org.libsdl.app.SDLActivity;
 
 public final class PokemonEmeraldActivity extends SDLActivity {
     private static native void nativeNotifyPaused();
+    private static native void nativeNotifyResumed();
 
     private boolean coreBindingRequested;
     private final ServiceConnection coreConnection = new ServiceConnection() {
@@ -127,6 +128,12 @@ public final class PokemonEmeraldActivity extends SDLActivity {
     protected void onPause() {
         nativeNotifyPaused();
         super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        nativeNotifyResumed();
     }
 
     public void shareCrashReport(String path) {

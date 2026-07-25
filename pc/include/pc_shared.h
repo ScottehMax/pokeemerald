@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #define PC_SHARED_MAGIC 0x50454D45u
-#define PC_SHARED_VERSION 11u
+#define PC_SHARED_VERSION 12u
 #define PC_FRAME_WIDTH 240
 #define PC_FRAME_MAX_WIDTH 400
 #define PC_FRAME_HEIGHT 160
@@ -23,6 +23,29 @@
 #define PC_DIAGNOSTIC_TASK_DATA 16
 #define PC_DIAGNOSTIC_SPRITE_DATA 8
 #define PC_PERFORMANCE_STALLS 16
+#define PC_TOUCH_EVENT_COUNT 16
+
+enum PcTouchPhase
+{
+    PC_TOUCH_PHASE_DOWN,
+    PC_TOUCH_PHASE_MOVE,
+    PC_TOUCH_PHASE_UP,
+};
+
+enum PcTouchFlags
+{
+    PC_TOUCH_FLAG_VIRTUAL_CONTROL = 1 << 0,
+};
+
+struct PcTouchEvent
+{
+    uint32_t phase;
+    uint32_t flags;
+    int32_t x;
+    int32_t y;
+    uint32_t frameWidth;
+    uint32_t frameHeight;
+};
 
 #define PC_CRASH_MAGIC 0x43525348u
 #define PC_CRASH_VERSION 2
@@ -245,6 +268,9 @@ struct PcSharedState
     uint32_t quit;
     uint32_t paused;
     uint32_t keys;
+    uint32_t touchRead;
+    uint32_t touchWrite;
+    struct PcTouchEvent touchEvents[PC_TOUCH_EVENT_COUNT];
     uint32_t frameSequence;
     uint32_t frameBufferIndex;
     uint32_t requestedFrameWidth;

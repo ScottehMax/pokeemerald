@@ -42,6 +42,7 @@
 #include "pc_ppu.h"
 #include "pc_services.h"
 #include "pc_shared.h"
+#include "pc_touch.h"
 #include "constants/maps.h"
 #include "constants/moves.h"
 #include "constants/pokedex.h"
@@ -942,6 +943,7 @@ void PcPlatformWaitForFrame(void)
     }
 
     keys = __atomic_load_n(&sShared->keys, __ATOMIC_ACQUIRE) & KEYS_MASK;
+    keys |= PcTouchGetKeys(keys);
     for (i = 0; i < sTestInputEventCount; i++)
     {
         const struct PcTestInputEvent *event = &sTestInputEvents[i];
@@ -1111,6 +1113,22 @@ bool32 PcPlatformIsOverworldViewportActive(void)
 {
     return gMain.callback2 == CB2_Overworld
         || gMain.callback2 == CB2_OverworldBasic;
+}
+
+bool32 PcPlatformPopTouchEvent(struct PcTouchEvent *event)
+{
+    u32 read;
+    u32 write;
+
+    if (sShared == NULL || event == NULL)
+        return FALSE;
+    read = __atomic_load_n(&sShared->touchRead, __ATOMIC_RELAXED);
+    write = __atomic_load_n(&sShared->touchWrite, __ATOMIC_ACQUIRE);
+    if (read == write)
+        return FALSE;
+    *event = sShared->touchEvents[read % PC_TOUCH_EVENT_COUNT];
+    __atomic_store_n(&sShared->touchRead, read + 1, __ATOMIC_RELEASE);
+    return TRUE;
 }
 
 void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)

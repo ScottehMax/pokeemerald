@@ -86,7 +86,8 @@ PLATFORM_C_SRCS := \
 	$(PC_DIR)/platform.c \
 	$(PC_DIR)/profiles.c \
 	$(PC_DIR)/ppu.c \
-	$(PC_DIR)/services.c
+	$(PC_DIR)/services.c \
+	$(PC_DIR)/touch.c
 PLATFORM_C_OBJS := $(patsubst $(PC_DIR)/%.c,$(PLATFORM_OBJ_DIR)/%.o,$(PLATFORM_C_SRCS))
 WIN_PLATFORM_C_OBJS := $(patsubst $(PC_DIR)/%.c,$(WIN_PLATFORM_OBJ_DIR)/%.o,$(PLATFORM_C_SRCS))
 

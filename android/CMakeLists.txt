@@ -124,6 +124,7 @@ set(PLATFORM_SOURCES
     "${POKEEMERALD_ROOT}/pc/profiles.c"
     "${POKEEMERALD_ROOT}/pc/ppu.c"
     "${POKEEMERALD_ROOT}/pc/services.c"
+    "${POKEEMERALD_ROOT}/pc/touch.c"
 )
 
 # These two translation units contain the per-pixel PPU and per-sample mixer

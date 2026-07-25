@@ -139,15 +139,6 @@ static u8 PositiveModulo16(s32 value)
     return remainder;
 }
 
-static s32 GetNativeFieldPhase(u16 scroll, u8 tileOffset)
-{
-    s32 phase = (scroll - tileOffset * 8) & 0xFF;
-
-    if (phase >= 128)
-        phase -= 256;
-    return phase;
-}
-
 static const u8 *GetNativeTilesetTiles(const struct Tileset *tileset)
 {
     struct NativeTilesetCache *cache = NULL;
@@ -352,10 +343,8 @@ static void DrawTextBgScanline(struct PixelStack *line,
     struct NativeFieldTile cachedNativeFieldTile = {0};
     const u8 *tileRow = NULL;
     u16 entry = 0;
-    u8 fieldTileOffsetX = 0;
-    u8 fieldTileOffsetY = 0;
-    s32 fieldPhaseX = 0;
-    s32 fieldPhaseY = 0;
+    s16 fieldPhaseX = 0;
+    s16 fieldPhaseY = 0;
     s32 outputX;
 
     if (mosaicEnabled)
@@ -363,11 +352,10 @@ static void DrawTextBgScanline(struct PixelStack *line,
     sourceY = (screenY + state->vofs) & (height - 1);
     tileY = sourceY >> 3;
     if ((outputWidth > DISPLAY_WIDTH || outputHeight > DISPLAY_HEIGHT) && bg != 0)
-    {
-        GetFieldCameraBgTileOffset(&fieldTileOffsetX, &fieldTileOffsetY);
-        fieldPhaseX = GetNativeFieldPhase(state->hofs, fieldTileOffsetX);
-        fieldPhaseY = GetNativeFieldPhase(state->vofs, fieldTileOffsetY);
-    }
+        GetFieldCameraMapPixelOffset(state->hofs,
+                                     state->vofs,
+                                     &fieldPhaseX,
+                                     &fieldPhaseY);
 
     for (outputX = 0; outputX < outputWidth; outputX++)
     {

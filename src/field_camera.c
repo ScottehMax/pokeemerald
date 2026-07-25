@@ -92,10 +92,17 @@ void GetCameraOffsetWithPan(s16 *x, s16 *y)
 }
 
 #if PLATFORM_PC
-void GetFieldCameraBgTileOffset(u8 *x, u8 *y)
+void GetFieldCameraMapPixelOffset(u16 scrollX,
+                                  u16 scrollY,
+                                  s16 *x,
+                                  s16 *y)
 {
-    *x = sFieldCameraOffset.xTileOffset;
-    *y = sFieldCameraOffset.yTileOffset;
+    *x = (scrollX - sFieldCameraOffset.xTileOffset * 8) & 0xFF;
+    *y = (scrollY - sFieldCameraOffset.yTileOffset * 8) & 0xFF;
+    if (*x >= 128)
+        *x -= 256;
+    if (*y >= 128)
+        *y -= 256;
 }
 #endif
 

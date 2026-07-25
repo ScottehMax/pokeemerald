@@ -153,6 +153,15 @@ u8 GetWalkInPlaceFastMovementAction(u32);
 u8 GetWalkInPlaceNormalMovementAction(u32);
 u8 GetWalkInPlaceSlowMovementAction(u32);
 u8 GetCollisionAtCoords(struct ObjectEvent *objectEvent, s16 x, s16 y, u32 dir);
+#if PLATFORM_PC
+bool32 IsObjectEventPathTilePassable(struct ObjectEvent *objectEvent,
+                                     s16 fromX,
+                                     s16 fromY,
+                                     s16 toX,
+                                     s16 toY,
+                                     u8 direction);
+u8 GetDirectionToFace(s16 x, s16 y, s16 targetX, s16 targetY);
+#endif
 void MoveCoords(u8 direction, s16 *x, s16 *y);
 bool8 ObjectEventIsHeldMovementActive(struct ObjectEvent *objectEvent);
 u8 ObjectEventClearHeldMovementIfFinished(struct ObjectEvent *objectEvent);

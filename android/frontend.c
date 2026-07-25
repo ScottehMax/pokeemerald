@@ -57,6 +57,7 @@ static const char *sTextureUploadBackend = "sdl-subimage";
 static struct PcSharedState *sFrontendSharedState;
 static uint32_t sLifecyclePaused;
 static uint32_t sLifecycleCallbackActive;
+static uint32_t sLifecycleResumeRequested;
 
 JNIEXPORT void JNICALL
 Java_org_pokeemerald_pc_PokemonEmeraldActivity_nativeNotifyPaused(
@@ -68,10 +69,38 @@ Java_org_pokeemerald_pc_PokemonEmeraldActivity_nativeNotifyPaused(
     (void)env;
     (void)activityClass;
     __atomic_store_n(&sLifecyclePaused, 1, __ATOMIC_RELEASE);
+    __atomic_store_n(&sLifecycleResumeRequested, 0, __ATOMIC_RELEASE);
     __atomic_add_fetch(&sLifecycleCallbackActive, 1, __ATOMIC_ACQUIRE);
     shared = __atomic_load_n(&sFrontendSharedState, __ATOMIC_ACQUIRE);
     if (shared != NULL)
         __atomic_store_n(&shared->paused, 1, __ATOMIC_RELEASE);
+    __atomic_sub_fetch(&sLifecycleCallbackActive, 1, __ATOMIC_RELEASE);
+}
+
+JNIEXPORT void JNICALL
+Java_org_pokeemerald_pc_PokemonEmeraldActivity_nativeNotifyResumed(
+    JNIEnv *env,
+    jclass activityClass)
+{
+    struct PcSharedState *shared;
+
+    (void)env;
+    (void)activityClass;
+    __atomic_store_n(&sLifecyclePaused, 0, __ATOMIC_RELEASE);
+    __atomic_add_fetch(&sLifecycleCallbackActive, 1, __ATOMIC_ACQUIRE);
+    shared = __atomic_load_n(&sFrontendSharedState, __ATOMIC_ACQUIRE);
+    if (shared != NULL)
+    {
+        __atomic_store_n(&shared->paused, 0, __ATOMIC_RELEASE);
+        __atomic_store_n(&sLifecycleResumeRequested, 1, __ATOMIC_RELEASE);
+        syscall(SYS_futex,
+                &shared->frameSequence,
+                FUTEX_WAKE,
+                1,
+                NULL,
+                NULL,
+                0);
+    }
     __atomic_sub_fetch(&sLifecycleCallbackActive, 1, __ATOMIC_RELEASE);
 }
 
@@ -888,6 +917,92 @@ static uint32_t ReadTouch(void)
     return keys;
 }
 
+static SDL_Rect GetGameDestination(int outputWidth,
+                                   int outputHeight,
+                                   uint32_t frameWidth,
+                                   uint32_t frameHeight)
+{
+    SDL_Rect destination;
+
+    destination.h = outputHeight;
+    destination.w = destination.h * (int)frameWidth / (int)frameHeight;
+    if (destination.w > outputWidth)
+    {
+        destination.w = outputWidth;
+        destination.h = outputWidth * (int)frameHeight / (int)frameWidth;
+    }
+    destination.x = (outputWidth - destination.w) / 2;
+    destination.y = (outputHeight - destination.h) / 2;
+    return destination;
+}
+
+static int GetLogicalTouchPosition(SDL_Renderer *renderer,
+                                   float normalizedX,
+                                   float normalizedY,
+                                   uint32_t frameWidth,
+                                   uint32_t frameHeight,
+                                   int32_t *logicalX,
+                                   int32_t *logicalY)
+{
+    SDL_Rect destination;
+    int outputWidth;
+    int outputHeight;
+    int screenX;
+    int screenY;
+
+    if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) != 0
+     || outputWidth <= 0
+     || outputHeight <= 0)
+        return -1;
+    destination = GetGameDestination(outputWidth,
+                                     outputHeight,
+                                     frameWidth,
+                                     frameHeight);
+    screenX = (int)(normalizedX * outputWidth);
+    screenY = (int)(normalizedY * outputHeight);
+    if (screenX < destination.x
+     || screenY < destination.y
+     || screenX >= destination.x + destination.w
+     || screenY >= destination.y + destination.h)
+        return -1;
+    *logicalX = (screenX - destination.x) * (int32_t)frameWidth / destination.w;
+    *logicalY = (screenY - destination.y) * (int32_t)frameHeight / destination.h;
+    return 0;
+}
+
+static void PublishTouchEvent(struct PcSharedState *shared,
+                              SDL_Renderer *renderer,
+                              const SDL_TouchFingerEvent *touch,
+                              uint32_t phase,
+                              uint32_t frameWidth,
+                              uint32_t frameHeight)
+{
+    struct PcTouchEvent event;
+    uint32_t read;
+    uint32_t write;
+
+    if (GetLogicalTouchPosition(renderer,
+                                touch->x,
+                                touch->y,
+                                frameWidth,
+                                frameHeight,
+                                &event.x,
+                                &event.y) != 0)
+        return;
+    event.phase = phase;
+    event.flags = KeysAtPoint(touch->x, touch->y) != 0
+                ? PC_TOUCH_FLAG_VIRTUAL_CONTROL
+                : 0;
+    event.frameWidth = frameWidth;
+    event.frameHeight = frameHeight;
+    write = __atomic_load_n(&shared->touchWrite, __ATOMIC_RELAXED);
+    read = __atomic_load_n(&shared->touchRead, __ATOMIC_ACQUIRE);
+    if (write - read >= PC_TOUCH_EVENT_COUNT)
+        return;
+    shared->touchEvents[write % PC_TOUCH_EVENT_COUNT] = event;
+    __atomic_store_n(&shared->touchWrite, write + 1, __ATOMIC_RELEASE);
+}
+
 static void DrawRect(SDL_Renderer *renderer,
                      int x,
                      int y,
@@ -990,6 +1105,7 @@ int main(int argc, char **argv)
     int sharedFd = -1;
     int running = 1;
     int suppressKeys = 0;
+    int lifecyclePauseHandled = 0;
     int redraw = 1;
     int resumeAudio = 0;
     Uint32 performanceHoldStart = 0;
@@ -1133,7 +1249,9 @@ int main(int argc, char **argv)
         uint64_t frameObservedNs;
         int newFrame = 0;
         int touchChanged = 0;
+        int hasPendingTouchMotion = 0;
         int eventCount = 0;
+        SDL_TouchFingerEvent pendingTouchMotion;
 
         if (lastLoopStartNs != 0
          && !__atomic_load_n(&shared->paused, __ATOMIC_ACQUIRE))
@@ -1162,28 +1280,15 @@ int main(int argc, char **argv)
                 running = 0;
             else if (event.type == SDL_APP_WILLENTERBACKGROUND)
             {
-                if (audioDevice != 0)
-                    SDL_PauseAudioDevice(audioDevice, 1);
-                DiscardQueuedAudio(shared);
-                __atomic_store_n(&sLifecyclePaused, 1, __ATOMIC_RELEASE);
-                __atomic_store_n(&shared->paused, 1, __ATOMIC_RELEASE);
-                touchKeys = 0;
-                lastLoopStartNs = 0;
-                lastWaitUs = 0;
+                // Java owns the lifecycle state. Its callback runs before
+                // SDLActivity posts this event, so a delayed event cannot
+                // re-pause a game that has already resumed.
             }
             else if (event.type == SDL_APP_DIDENTERFOREGROUND)
             {
-                DiscardQueuedAudio(shared);
-                UpdateLinkServerSetting(shared);
-                __atomic_store_n(&sLifecyclePaused, 0, __ATOMIC_RELEASE);
-                __atomic_store_n(&shared->paused, 0, __ATOMIC_RELEASE);
-                resumeAudio = 1;
-                lastFrameObservedNs = 0;
-                lastLoopStartNs = 0;
-                lastWaitUs = 0;
-                CallActivityMethod("configureGameSurface", NULL);
-                UpdateRequestedFrameSize(shared, renderer);
-                redraw = 1;
+                if (!__atomic_load_n(&sLifecyclePaused, __ATOMIC_ACQUIRE))
+                    __atomic_store_n(&sLifecycleResumeRequested, 1,
+                                     __ATOMIC_RELEASE);
             }
             else if (event.type == SDL_WINDOWEVENT
                   && (event.window.event == SDL_WINDOWEVENT_EXPOSED
@@ -1192,11 +1297,43 @@ int main(int argc, char **argv)
                 UpdateRequestedFrameSize(shared, renderer);
                 redraw = 1;
             }
-            else if (event.type == SDL_FINGERDOWN
-                  || event.type == SDL_FINGERMOTION
-                  || event.type == SDL_FINGERUP)
+            else if (event.type == SDL_FINGERMOTION)
+            {
+                pendingTouchMotion = event.tfinger;
                 touchChanged = 1;
+                hasPendingTouchMotion = 1;
+            }
+            else if (event.type == SDL_FINGERDOWN
+                  || event.type == SDL_FINGERUP)
+            {
+                if (hasPendingTouchMotion)
+                {
+                    PublishTouchEvent(shared,
+                                      renderer,
+                                      &pendingTouchMotion,
+                                      PC_TOUCH_PHASE_MOVE,
+                                      frameWidth,
+                                      frameHeight);
+                    hasPendingTouchMotion = 0;
+                }
+                PublishTouchEvent(shared,
+                                  renderer,
+                                  &event.tfinger,
+                                  event.type == SDL_FINGERDOWN
+                                    ? PC_TOUCH_PHASE_DOWN
+                                    : PC_TOUCH_PHASE_UP,
+                                  frameWidth,
+                                  frameHeight);
+                touchChanged = 1;
+            }
         }
+        if (hasPendingTouchMotion)
+            PublishTouchEvent(shared,
+                              renderer,
+                              &pendingTouchMotion,
+                              PC_TOUCH_PHASE_MOVE,
+                              frameWidth,
+                              frameHeight);
         if (touchChanged)
             SDL_FlushEvent(SDL_FINGERMOTION);
         eventEndNs = GetMonotonicNs();
@@ -1212,13 +1349,37 @@ int main(int argc, char **argv)
             uint32_t expectedFrame =
                 __atomic_load_n(&shared->frameSequence, __ATOMIC_ACQUIRE);
 
+            if (!lifecyclePauseHandled)
+            {
+                if (audioDevice != 0)
+                    SDL_PauseAudioDevice(audioDevice, 1);
+                DiscardQueuedAudio(shared);
+                lifecyclePauseHandled = 1;
+            }
             touchKeys = 0;
             __atomic_store_n(&shared->keys, 0, __ATOMIC_RELEASE);
             lastFrameObservedNs = 0;
             lastLoopStartNs = 0;
             lastWaitUs = 0;
+            suppressKeys = 1;
             WaitForFrameSignal(shared, expectedFrame);
             continue;
+        }
+
+        if (__atomic_exchange_n(&sLifecycleResumeRequested, 0,
+                                __ATOMIC_ACQ_REL))
+        {
+            DiscardQueuedAudio(shared);
+            UpdateLinkServerSetting(shared);
+            resumeAudio = 1;
+            lastFrameObservedNs = 0;
+            lastLoopStartNs = 0;
+            lastWaitUs = 0;
+            CallActivityMethod("configureGameSurface", NULL);
+            UpdateRequestedFrameSize(shared, renderer);
+            lifecyclePauseHandled = 0;
+            suppressKeys = 1;
+            redraw = 1;
         }
 
         if (resumeAudio)
@@ -1370,8 +1531,6 @@ int main(int argc, char **argv)
         {
             int width;
             int height;
-            int gameWidth;
-            int gameHeight;
             SDL_Rect source;
             SDL_Rect destination;
             uint64_t presentStartNs = GetMonotonicNs();
@@ -1380,21 +1539,14 @@ int main(int argc, char **argv)
             uint32_t presentCpuUs;
 
             SDL_GetRendererOutputSize(renderer, &width, &height);
-            gameHeight = height;
-            gameWidth = gameHeight * (int)frameWidth / (int)frameHeight;
-            if (gameWidth > width)
-            {
-                gameWidth = width;
-                gameHeight = width * (int)frameHeight / (int)frameWidth;
-            }
+            destination = GetGameDestination(width,
+                                             height,
+                                             frameWidth,
+                                             frameHeight);
             source.x = 0;
             source.y = 0;
             source.w = frameWidth;
             source.h = frameHeight;
-            destination.x = (width - gameWidth) / 2;
-            destination.y = (height - gameHeight) / 2;
-            destination.w = gameWidth;
-            destination.h = gameHeight;
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL_RenderClear(renderer);
             SDL_RenderCopy(renderer,
