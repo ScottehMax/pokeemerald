@@ -4,6 +4,7 @@
 #include "palette.h"
 #if PLATFORM_PC
 #include "pc_diagnostics.h"
+#include "pc_platform.h"
 #endif
 
 #define MAX_SPRITE_COPY_REQUESTS MAX_SPRITES
@@ -293,6 +294,43 @@ EWRAM_DATA s16 gSpriteCoordOffsetX = 0;
 EWRAM_DATA s16 gSpriteCoordOffsetY = 0;
 EWRAM_DATA struct OamMatrix gOamMatrices[OAM_MATRIX_COUNT] = {0};
 EWRAM_DATA bool8 gAffineAnimsDisabled = FALSE;
+#if PLATFORM_PC
+static s16 sPcOamScreenX[128];
+static s16 sPcOamScreenY[128];
+static bool8 sPcOamScreenCoordsValid[128];
+#endif
+
+#if PLATFORM_PC
+static void PcSetOamScreenCoords(u8 oamIndex, s16 x, s16 y)
+{
+    if (oamIndex >= ARRAY_COUNT(sPcOamScreenCoordsValid))
+        return;
+    sPcOamScreenX[oamIndex] = x;
+    sPcOamScreenY[oamIndex] = y;
+    sPcOamScreenCoordsValid[oamIndex] = TRUE;
+}
+
+bool32 PcGetOamScreenCoords(u8 oamIndex, s16 *x, s16 *y)
+{
+    if (oamIndex >= ARRAY_COUNT(sPcOamScreenCoordsValid)
+     || !sPcOamScreenCoordsValid[oamIndex])
+        return FALSE;
+    *x = sPcOamScreenX[oamIndex];
+    *y = sPcOamScreenY[oamIndex];
+    return TRUE;
+}
+
+static void PcGetSpriteScreenCoords(const struct Sprite *sprite, s16 *x, s16 *y)
+{
+    *x = sprite->x + sprite->x2 + sprite->centerToCornerVecX;
+    *y = sprite->y + sprite->y2 + sprite->centerToCornerVecY;
+    if (sprite->coordOffsetEnabled)
+    {
+        *x += gSpriteCoordOffsetX;
+        *y += gSpriteCoordOffsetY;
+    }
+}
+#endif
 
 void ResetSpriteData(void)
 {
@@ -386,6 +424,33 @@ void BuildSpritePriorities(void)
     }
 }
 
+static s16 GetSpriteSortY(const struct Sprite *sprite)
+{
+    s16 y;
+
+#if PLATFORM_PC
+    s16 x;
+
+    if (PcPlatformIsOverworldViewportActive()
+     && PcPlatformGetOverworldViewportHeight() > DISPLAY_HEIGHT)
+    {
+        PcGetSpriteScreenCoords(sprite, &x, &y);
+        (void)x;
+        return y;
+    }
+#endif
+    y = sprite->oam.y;
+    if (y >= DISPLAY_HEIGHT)
+        y -= 256;
+    if (sprite->oam.affineMode == ST_OAM_AFFINE_DOUBLE
+     && sprite->oam.size == ST_OAM_SIZE_3
+     && (sprite->oam.shape == ST_OAM_SQUARE
+      || sprite->oam.shape == ST_OAM_V_RECTANGLE)
+     && y > 128)
+        y -= 256;
+    return y;
+}
+
 void SortSprites(void)
 {
     u8 i;
@@ -396,36 +461,8 @@ void SortSprites(void)
         struct Sprite *sprite2 = &gSprites[sSpriteOrder[i]];
         u16 sprite1Priority = sSpritePriorities[sSpriteOrder[i - 1]];
         u16 sprite2Priority = sSpritePriorities[sSpriteOrder[i]];
-        s16 sprite1Y = sprite1->oam.y;
-        s16 sprite2Y = sprite2->oam.y;
-
-        if (sprite1Y >= DISPLAY_HEIGHT)
-            sprite1Y = sprite1Y - 256;
-
-        if (sprite2Y >= DISPLAY_HEIGHT)
-            sprite2Y = sprite2Y - 256;
-
-        if (sprite1->oam.affineMode == ST_OAM_AFFINE_DOUBLE
-         && sprite1->oam.size == ST_OAM_SIZE_3)
-        {
-            u32 shape = sprite1->oam.shape;
-            if (shape == ST_OAM_SQUARE || shape == ST_OAM_V_RECTANGLE)
-            {
-                if (sprite1Y > 128)
-                    sprite1Y = sprite1Y - 256;
-            }
-        }
-
-        if (sprite2->oam.affineMode == ST_OAM_AFFINE_DOUBLE
-         && sprite2->oam.size == ST_OAM_SIZE_3)
-        {
-            u32 shape = sprite2->oam.shape;
-            if (shape == ST_OAM_SQUARE || shape == ST_OAM_V_RECTANGLE)
-            {
-                if (sprite2Y > 128)
-                    sprite2Y = sprite2Y - 256;
-            }
-        }
+        s16 sprite1Y = GetSpriteSortY(sprite1);
+        s16 sprite2Y = GetSpriteSortY(sprite2);
 
         while (j > 0
             && ((sprite1Priority > sprite2Priority)
@@ -449,36 +486,8 @@ void SortSprites(void)
             sprite2 = &gSprites[sSpriteOrder[j]];
             sprite1Priority = sSpritePriorities[sSpriteOrder[j - 1]];
             sprite2Priority = sSpritePriorities[sSpriteOrder[j]];
-            sprite1Y = sprite1->oam.y;
-            sprite2Y = sprite2->oam.y;
-
-            if (sprite1Y >= DISPLAY_HEIGHT)
-                sprite1Y = sprite1Y - 256;
-
-            if (sprite2Y >= DISPLAY_HEIGHT)
-                sprite2Y = sprite2Y - 256;
-
-            if (sprite1->oam.affineMode == ST_OAM_AFFINE_DOUBLE
-             && sprite1->oam.size == ST_OAM_SIZE_3)
-            {
-                u32 shape = sprite1->oam.shape;
-                if (shape == ST_OAM_SQUARE || shape == ST_OAM_V_RECTANGLE)
-                {
-                    if (sprite1Y > 128)
-                        sprite1Y = sprite1Y - 256;
-                }
-            }
-
-            if (sprite2->oam.affineMode == ST_OAM_AFFINE_DOUBLE
-             && sprite2->oam.size == ST_OAM_SIZE_3)
-            {
-                u32 shape = sprite2->oam.shape;
-                if (shape == ST_OAM_SQUARE || shape == ST_OAM_V_RECTANGLE)
-                {
-                    if (sprite2Y > 128)
-                        sprite2Y = sprite2Y - 256;
-                }
-            }
+            sprite1Y = GetSpriteSortY(sprite1);
+            sprite2Y = GetSpriteSortY(sprite2);
         }
     }
 }
@@ -500,6 +509,10 @@ void AddSpritesToOamBuffer(void)
 {
     u8 i = 0;
     u8 oamIndex = 0;
+
+#if PLATFORM_PC
+    memset(sPcOamScreenCoordsValid, 0, sizeof(sPcOamScreenCoordsValid));
+#endif
 
     while (i < MAX_SPRITES)
     {
@@ -1696,6 +1709,15 @@ bool8 AddSpriteToOamBuffer(struct Sprite *sprite, u8 *oamIndex)
     if (!sprite->subspriteTables || sprite->subspriteMode == SUBSPRITES_OFF)
     {
         gMain.oamBuffer[*oamIndex] = sprite->oam;
+#if PLATFORM_PC
+        {
+            s16 x;
+            s16 y;
+
+            PcGetSpriteScreenCoords(sprite, &x, &y);
+            PcSetOamScreenCoords(*oamIndex, x, y);
+        }
+#endif
         (*oamIndex)++;
         return FALSE;
     }
@@ -1719,6 +1741,15 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
     if (!subspriteTable || !subspriteTable->subsprites)
     {
         *destOam = *oam;
+#if PLATFORM_PC
+        {
+            s16 x;
+            s16 y;
+
+            PcGetSpriteScreenCoords(sprite, &x, &y);
+            PcSetOamScreenCoords(*oamIndex, x, y);
+        }
+#endif
         (*oamIndex)++;
         return FALSE;
     }
@@ -1731,6 +1762,12 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
         u8 hFlip;
         u8 vFlip;
         u8 i;
+#if PLATFORM_PC
+        s16 nativeX;
+        s16 nativeY;
+        s16 nativeBaseX;
+        s16 nativeBaseY;
+#endif
 
         tileNum = oam->tileNum;
         subspriteCount = subspriteTable->subspriteCount;
@@ -1738,6 +1775,11 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
         vFlip = ((s32)oam->matrixNum >> 4) & 1;
         baseX = oam->x - sprite->centerToCornerVecX;
         baseY = oam->y - sprite->centerToCornerVecY;
+#if PLATFORM_PC
+        PcGetSpriteScreenCoords(sprite, &nativeX, &nativeY);
+        nativeBaseX = nativeX - sprite->centerToCornerVecX;
+        nativeBaseY = nativeY - sprite->centerToCornerVecY;
+#endif
 
         for (i = 0; i < subspriteCount; i++, (*oamIndex)++)
         {
@@ -1774,6 +1816,11 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
             destOam[i].x = (s16)baseX + (s16)x;
             destOam[i].y = baseY + y;
             destOam[i].tileNum = tileNum + subspriteTable->subsprites[i].tileOffset;
+#if PLATFORM_PC
+            PcSetOamScreenCoords(*oamIndex,
+                                 nativeBaseX + (s16)x,
+                                 nativeBaseY + (s16)y);
+#endif
 
             if (sprite->subspriteMode != SUBSPRITES_IGNORE_PRIORITY)
                 destOam[i].priority = subspriteTable->subsprites[i].priority;

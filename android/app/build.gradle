@@ -95,12 +95,48 @@ dependencies {
     testImplementation "junit:junit:4.13.2"
 }
 
+def verifyDebugApks = tasks.register("verifyDebugApks") {
+    doLast {
+        def apks = fileTree(layout.buildDirectory.dir("outputs/apk/debug")) {
+            include "*.apk"
+        }.files
+        if (apks.isEmpty()) {
+            throw new GradleException("No debug APKs were produced")
+        }
+
+        apks.each { apk ->
+            def archive = new java.util.zip.ZipFile(apk)
+            try {
+                ["AndroidManifest.xml", "classes.dex", "resources.arsc"].each { entry ->
+                    if (archive.getEntry(entry) == null) {
+                        throw new GradleException("${apk.name} is incomplete: missing ${entry}")
+                    }
+                }
+            } finally {
+                archive.close()
+            }
+        }
+    }
+}
+
 tasks.configureEach { task ->
     if (task.name == "packageDebug") {
+        // AGP appends changed unstripped native libraries to split APKs, leaving
+        // the previous compressed entry as dead space. Recreate only the APK
+        // packaging state; native compilation and resource processing stay
+        // incremental.
+        task.outputs.upToDateWhen { false }
         task.doFirst {
             delete(fileTree(layout.buildDirectory.dir("outputs/apk/debug")) {
                 include "*.apk"
             })
+            delete(layout.buildDirectory.dir("intermediates/incremental/packageDebug"))
         }
+    }
+}
+
+afterEvaluate {
+    tasks.named("assembleDebug").configure {
+        finalizedBy verifyDebugApks
     }
 }

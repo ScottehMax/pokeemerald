@@ -247,7 +247,8 @@ static int WriteFrame(const char *path,
         return -1;
     if (width < PC_FRAME_WIDTH
      || width > PC_FRAME_MAX_WIDTH
-     || height != PC_FRAME_HEIGHT)
+     || height < PC_FRAME_HEIGHT
+     || height > PC_FRAME_MAX_HEIGHT)
     {
         width = PC_FRAME_WIDTH;
         height = PC_FRAME_HEIGHT;

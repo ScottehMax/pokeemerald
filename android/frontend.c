@@ -111,7 +111,7 @@ static void InitTextureUploader(struct TextureUploader *uploader)
     {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, uploader->buffers[buffer]);
         glBufferData(GL_PIXEL_UNPACK_BUFFER,
-                     PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT * (int)sizeof(uint32_t),
+                     PC_FRAME_MAX_WIDTH * PC_FRAME_MAX_HEIGHT * (int)sizeof(uint32_t),
                      NULL,
                      GL_STREAM_DRAW);
     }
@@ -146,7 +146,7 @@ static int UploadTextureFrame(struct TextureUploader *uploader,
     uploader->nextBuffer =
         (uploader->nextBuffer + 1) % FRONTEND_UPLOAD_BUFFER_COUNT;
     glBufferData(GL_PIXEL_UNPACK_BUFFER,
-                 PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT * (int)sizeof(uint32_t),
+                 width * height * (int)sizeof(uint32_t),
                  pixels,
                  GL_STREAM_DRAW);
     if (SDL_GL_BindTexture(texture, NULL, NULL) != 0)
@@ -736,6 +736,7 @@ static void ResetSharedState(struct PcSharedState *shared,
     shared->magic = PC_SHARED_MAGIC;
     shared->version = PC_SHARED_VERSION;
     shared->requestedFrameWidth = PC_FRAME_WIDTH;
+    shared->requestedFrameHeight = PC_FRAME_HEIGHT;
     shared->frameWidth = PC_FRAME_WIDTH;
     shared->frameHeight = PC_FRAME_HEIGHT;
     shared->resumeMainMenu = (uint32_t)resumeMainMenu;
@@ -785,26 +786,38 @@ static uint32_t ReadKeyboard(void)
     return keys;
 }
 
-static void UpdateRequestedFrameWidth(struct PcSharedState *shared,
-                                      SDL_Renderer *renderer)
+static void UpdateRequestedFrameSize(struct PcSharedState *shared,
+                                     SDL_Renderer *renderer)
 {
     int outputWidth;
     int outputHeight;
     uint32_t width = PC_FRAME_WIDTH;
+    uint32_t height = PC_FRAME_HEIGHT;
 
     if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0
      && outputWidth > 0
      && outputHeight > 0)
     {
-        width = (uint32_t)((uint64_t)outputWidth * PC_FRAME_HEIGHT
-                         / (uint32_t)outputHeight);
-        if (width < PC_FRAME_WIDTH)
-            width = PC_FRAME_WIDTH;
-        if (width > PC_FRAME_MAX_WIDTH)
-            width = PC_FRAME_MAX_WIDTH;
-        width -= (width - PC_FRAME_WIDTH) & 1;
+        if ((uint64_t)outputWidth * PC_FRAME_HEIGHT
+         >= (uint64_t)outputHeight * PC_FRAME_WIDTH)
+        {
+            width = (uint32_t)((uint64_t)outputWidth * PC_FRAME_HEIGHT
+                             / (uint32_t)outputHeight);
+            if (width > PC_FRAME_MAX_WIDTH)
+                width = PC_FRAME_MAX_WIDTH;
+            width -= (width - PC_FRAME_WIDTH) & 1;
+        }
+        else
+        {
+            height = (uint32_t)((uint64_t)outputHeight * PC_FRAME_WIDTH
+                              / (uint32_t)outputWidth);
+            if (height > PC_FRAME_MAX_HEIGHT)
+                height = PC_FRAME_MAX_HEIGHT;
+            height -= (height - PC_FRAME_HEIGHT) & 1;
+        }
     }
     __atomic_store_n(&shared->requestedFrameWidth, width, __ATOMIC_RELEASE);
+    __atomic_store_n(&shared->requestedFrameHeight, height, __ATOMIC_RELEASE);
 }
 
 static uint32_t ReadController(SDL_GameController *controller)
@@ -939,7 +952,8 @@ static int CopyStableFrame(const struct PcSharedState *shared,
         *height = __atomic_load_n(&shared->frameHeight, __ATOMIC_RELAXED);
         if (*width < PC_FRAME_WIDTH
          || *width > PC_FRAME_MAX_WIDTH
-         || *height != PC_FRAME_HEIGHT)
+         || *height < PC_FRAME_HEIGHT
+         || *height > PC_FRAME_MAX_HEIGHT)
             return -1;
         memcpy(pixels,
                shared->pixels[buffer],
@@ -960,7 +974,8 @@ int main(int argc, char **argv)
     char sharedPath[PC_PATH_MAX];
     char performancePath[PC_PATH_MAX];
     struct PcSharedState *shared = MAP_FAILED;
-    uint32_t pixels[PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT] = {0};
+    uint32_t *pixels = calloc(PC_FRAME_MAX_WIDTH * PC_FRAME_MAX_HEIGHT,
+                              sizeof(*pixels));
     uint32_t lastFrame = UINT32_MAX;
     uint32_t frameWidth = PC_FRAME_WIDTH;
     uint32_t frameHeight = PC_FRAME_HEIGHT;
@@ -1030,7 +1045,8 @@ int main(int argc, char **argv)
                                       720,
                                       SDL_WINDOW_FULLSCREEN_DESKTOP
                                     | SDL_WINDOW_ALLOW_HIGHDPI
-                                    | SDL_WINDOW_OPENGL);
+                                    | SDL_WINDOW_OPENGL
+                                    | SDL_WINDOW_RESIZABLE);
             if (window == NULL)
                 continue;
             renderer = SDL_CreateRenderer(window,
@@ -1046,7 +1062,9 @@ int main(int argc, char **argv)
     if (renderer == NULL)
         goto cleanup;
     CallActivityMethod("configureGameSurface", NULL);
-    UpdateRequestedFrameWidth(shared, renderer);
+    if (pixels == NULL)
+        goto cleanup;
+    UpdateRequestedFrameSize(shared, renderer);
     InitTextureUploader(&textureUploader);
     {
         int texture;
@@ -1057,13 +1075,13 @@ int main(int argc, char **argv)
                                                   SDL_PIXELFORMAT_ARGB8888,
                                                   SDL_TEXTUREACCESS_STATIC,
                                                   PC_FRAME_MAX_WIDTH,
-                                                  PC_FRAME_HEIGHT);
+                                                  PC_FRAME_MAX_HEIGHT);
             if (textures[texture] == NULL)
                 goto cleanup;
             if (UploadTextureFrame(&textureUploader,
                                    textures[texture],
                                    pixels,
-                                   PC_FRAME_MAX_WIDTH,
+                                   PC_FRAME_WIDTH,
                                    PC_FRAME_HEIGHT) != 0)
                 goto cleanup;
         }
@@ -1164,14 +1182,14 @@ int main(int argc, char **argv)
                 lastLoopStartNs = 0;
                 lastWaitUs = 0;
                 CallActivityMethod("configureGameSurface", NULL);
-                UpdateRequestedFrameWidth(shared, renderer);
+                UpdateRequestedFrameSize(shared, renderer);
                 redraw = 1;
             }
             else if (event.type == SDL_WINDOWEVENT
                   && (event.window.event == SDL_WINDOWEVENT_EXPOSED
                    || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED))
             {
-                UpdateRequestedFrameWidth(shared, renderer);
+                UpdateRequestedFrameSize(shared, renderer);
                 redraw = 1;
             }
             else if (event.type == SDL_FINGERDOWN
@@ -1464,7 +1482,7 @@ int main(int argc, char **argv)
             }
             ResetSharedState(shared, defaultSavePath, savePath, storagePath, resumeMainMenu, audioDevice);
             UpdateLinkServerSetting(shared);
-            UpdateRequestedFrameWidth(shared, renderer);
+            UpdateRequestedFrameSize(shared, renderer);
             suppressKeys = 1;
             lastFrame = UINT32_MAX;
             lastFrameObservedNs = 0;
@@ -1516,6 +1534,7 @@ cleanup:
     SDL_Quit();
     if (shared != MAP_FAILED) munmap(shared, sizeof(*shared));
     if (sharedFd >= 0) close(sharedFd);
+    free(pixels);
     SDL_free(preferencePath);
     return 0;
 }

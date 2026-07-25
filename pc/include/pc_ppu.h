@@ -6,6 +6,7 @@
 
 void PcPpuRender(uint32_t *pixels,
                  uint32_t width,
+                 uint32_t height,
                  PcInterruptCallback hblankCallback);
 
 #endif

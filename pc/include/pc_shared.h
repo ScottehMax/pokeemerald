@@ -4,10 +4,11 @@
 #include <stdint.h>
 
 #define PC_SHARED_MAGIC 0x50454D45u
-#define PC_SHARED_VERSION 10u
+#define PC_SHARED_VERSION 11u
 #define PC_FRAME_WIDTH 240
 #define PC_FRAME_MAX_WIDTH 400
 #define PC_FRAME_HEIGHT 160
+#define PC_FRAME_MAX_HEIGHT 640
 #define PC_FRAME_BUFFER_COUNT 3
 #define PC_PATH_MAX 1024
 #define PC_LINK_SERVER_MAX 256
@@ -247,6 +248,7 @@ struct PcSharedState
     uint32_t frameSequence;
     uint32_t frameBufferIndex;
     uint32_t requestedFrameWidth;
+    uint32_t requestedFrameHeight;
     uint32_t frameWidth;
     uint32_t frameHeight;
     uint32_t coreReady;
@@ -274,7 +276,7 @@ struct PcSharedState
     struct PcDiagnosticState diagnostics;
     struct PcCrashRecord crash;
     int16_t audio[PC_AUDIO_BUFFER_FRAMES * 2];
-    uint32_t pixels[PC_FRAME_BUFFER_COUNT][PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT];
+    uint32_t pixels[PC_FRAME_BUFFER_COUNT][PC_FRAME_MAX_WIDTH * PC_FRAME_MAX_HEIGHT];
 };
 
 #endif

@@ -991,6 +991,7 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback)
     u32 buffer = (__atomic_load_n(&sShared->frameBufferIndex, __ATOMIC_RELAXED) + 1)
                % PC_FRAME_BUFFER_COUNT;
     u32 frameWidth = DISPLAY_WIDTH;
+    u32 frameHeight = DISPLAY_HEIGHT;
 #if PLATFORM_ANDROID
     u64 ppuStartNs = GetMonotonicNs();
     u64 ppuCpuStartNs = GetThreadCpuNs();
@@ -1000,10 +1001,12 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback)
                  : (u32)((ppuStartNs - sAndroidFrameStartNs) / 1000);
 #endif
 
-    if (gMain.callback2 == CB2_Overworld
-     || gMain.callback2 == CB2_OverworldBasic)
+    if (PcPlatformIsOverworldViewportActive())
+    {
         frameWidth = PcPlatformGetOverworldViewportWidth();
-    PcPpuRender(sShared->pixels[buffer], frameWidth, hblankCallback);
+        frameHeight = PcPlatformGetOverworldViewportHeight();
+    }
+    PcPpuRender(sShared->pixels[buffer], frameWidth, frameHeight, hblankCallback);
 #if PLATFORM_ANDROID
     now = GetMonotonicNs();
     {
@@ -1062,7 +1065,7 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback)
     sAndroidLastPresentNs = now;
 #endif
     __atomic_store_n(&sShared->frameWidth, frameWidth, __ATOMIC_RELAXED);
-    __atomic_store_n(&sShared->frameHeight, DISPLAY_HEIGHT, __ATOMIC_RELAXED);
+    __atomic_store_n(&sShared->frameHeight, frameHeight, __ATOMIC_RELAXED);
     __atomic_store_n(&sShared->frameBufferIndex, buffer, __ATOMIC_RELEASE);
     __atomic_add_fetch(&sShared->frameSequence, 1, __ATOMIC_RELEASE);
 #if PLATFORM_ANDROID
@@ -1088,6 +1091,26 @@ u32 PcPlatformGetOverworldViewportWidth(void)
     if (width > PC_FRAME_MAX_WIDTH)
         width = PC_FRAME_MAX_WIDTH;
     return width;
+}
+
+u32 PcPlatformGetOverworldViewportHeight(void)
+{
+    u32 height;
+
+    if (sShared == NULL)
+        return DISPLAY_HEIGHT;
+    height = __atomic_load_n(&sShared->requestedFrameHeight, __ATOMIC_ACQUIRE);
+    if (height < DISPLAY_HEIGHT)
+        height = DISPLAY_HEIGHT;
+    if (height > PC_FRAME_MAX_HEIGHT)
+        height = PC_FRAME_MAX_HEIGHT;
+    return height;
+}
+
+bool32 PcPlatformIsOverworldViewportActive(void)
+{
+    return gMain.callback2 == CB2_Overworld
+        || gMain.callback2 == CB2_OverworldBasic;
 }
 
 void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)

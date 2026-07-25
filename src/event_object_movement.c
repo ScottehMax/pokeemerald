@@ -51,6 +51,20 @@ static s16 GetOverworldHorizontalMarginTiles(void)
     return (GetOverworldHorizontalMarginPixels() + 15) / 16;
 }
 
+static s16 GetOverworldVerticalMarginPixels(void)
+{
+#if PLATFORM_PC
+    return (PcPlatformGetOverworldViewportHeight() - DISPLAY_HEIGHT) / 2;
+#else
+    return 0;
+#endif
+}
+
+static s16 GetOverworldVerticalMarginTiles(void)
+{
+    return (GetOverworldVerticalMarginPixels() + 15) / 16;
+}
+
 #if PLATFORM_PC
 static void GetConnectedObjectCoords(const struct MapConnection *connection,
                                      const struct MapLayout *connectedMapLayout,
@@ -1698,7 +1712,8 @@ static void TrySpawnConnectedObjectEvents(s16 cameraX,
     const struct MapConnection *connection;
     s32 connectionIndex;
 
-    if (GetOverworldHorizontalMarginPixels() == 0
+    if ((GetOverworldHorizontalMarginPixels() == 0
+      && GetOverworldVerticalMarginPixels() == 0)
      || gMapHeader.mapLayout == NULL
      || gMapHeader.connections == NULL)
         return;
@@ -1755,10 +1770,11 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
     u8 i;
     u8 objectCount;
     s16 horizontalMargin = GetOverworldHorizontalMarginTiles();
+    s16 verticalMargin = GetOverworldVerticalMarginTiles();
     s16 left = gSaveBlock1Ptr->pos.x - 2 - horizontalMargin;
     s16 right = gSaveBlock1Ptr->pos.x + MAP_OFFSET_W + 2 + horizontalMargin;
-    s16 top = gSaveBlock1Ptr->pos.y;
-    s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
+    s16 top = gSaveBlock1Ptr->pos.y - verticalMargin;
+    s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2 + verticalMargin;
 
     if (gMapHeader.events != NULL)
     {
@@ -1810,10 +1826,11 @@ void RemoveObjectEventsOutsideView(void)
 static void RemoveObjectEventIfOutsideView(struct ObjectEvent *objectEvent)
 {
     s16 horizontalMargin = GetOverworldHorizontalMarginTiles();
+    s16 verticalMargin = GetOverworldVerticalMarginTiles();
     s16 left =   gSaveBlock1Ptr->pos.x - 2 - horizontalMargin;
     s16 right =  gSaveBlock1Ptr->pos.x + 17 + horizontalMargin;
-    s16 top =    gSaveBlock1Ptr->pos.y;
-    s16 bottom = gSaveBlock1Ptr->pos.y + 16;
+    s16 top =    gSaveBlock1Ptr->pos.y - verticalMargin;
+    s16 bottom = gSaveBlock1Ptr->pos.y + 16 + verticalMargin;
 
     if (objectEvent->currentCoords.x >= left && objectEvent->currentCoords.x <= right
      && objectEvent->currentCoords.y >= top && objectEvent->currentCoords.y <= bottom)
@@ -7467,6 +7484,7 @@ static void UpdateObjectEventVisibility(struct ObjectEvent *objectEvent, struct 
 static void UpdateObjectEventOffscreen(struct ObjectEvent *objectEvent, struct Sprite *sprite)
 {
     s16 horizontalMargin = GetOverworldHorizontalMarginPixels();
+    s16 verticalMargin = GetOverworldVerticalMarginPixels();
     u16 x, y;
     u16 x2, y2;
     const struct ObjectEventGraphicsInfo *graphicsInfo;
@@ -7493,7 +7511,8 @@ static void UpdateObjectEventOffscreen(struct ObjectEvent *objectEvent, struct S
      || (s16)x2 < -horizontalMargin - 16)
         objectEvent->offScreen = TRUE;
 
-    if ((s16)y >= DISPLAY_HEIGHT + 16 || (s16)y2 < -16)
+    if ((s16)y >= DISPLAY_HEIGHT + verticalMargin + 16
+     || (s16)y2 < -verticalMargin - 16)
         objectEvent->offScreen = TRUE;
 }
 
@@ -8678,6 +8697,7 @@ bool8 SpriteAnimEnded(struct Sprite *sprite)
 void UpdateObjectEventSpriteInvisibility(struct Sprite *sprite, bool8 invisible)
 {
     s16 horizontalMargin = GetOverworldHorizontalMarginPixels();
+    s16 verticalMargin = GetOverworldVerticalMarginPixels();
     u16 x, y;
     s16 x2, y2;
 
@@ -8700,7 +8720,8 @@ void UpdateObjectEventSpriteInvisibility(struct Sprite *sprite, bool8 invisible)
     if ((s16)x >= DISPLAY_WIDTH + horizontalMargin + 16
      || x2 < -horizontalMargin - 16)
         sprite->invisible = TRUE;
-    if ((s16)y >= DISPLAY_HEIGHT + 16 || y2 < -16)
+    if ((s16)y >= DISPLAY_HEIGHT + verticalMargin + 16
+     || y2 < -verticalMargin - 16)
         sprite->invisible = TRUE;
 }
 

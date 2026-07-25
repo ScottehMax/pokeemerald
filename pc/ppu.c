@@ -6,6 +6,7 @@
 #include "pc_platform.h"
 #include "pc_ppu.h"
 #include "pc_shared.h"
+#include "sprite.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -254,8 +255,9 @@ static u16 GetNativeFieldColor(const struct NativeFieldTile *fieldTile,
          | (TransformNativeColorComponent((color >> 10) & 0x1F, 10, paletteNum) << 10);
 }
 
-// The original 240-pixel region still uses the GBA tilemap ring. Only pixels
-// outside it resolve metatiles from the map, so native width cannot consume VRAM.
+// The original 240x160 region still uses the GBA tilemap ring. Only pixels
+// outside it resolve metatiles from the map, so native viewports do not consume
+// additional VRAM.
 static struct NativeFieldTile GetNativeFieldTileEntry(u8 bg,
                                                        s32 mapX,
                                                        s32 mapY,
@@ -329,6 +331,7 @@ static void DrawTextBgScanline(struct PixelStack *line,
                                s32 screenY,
                                s32 outputWidth,
                                s32 outputOffsetX,
+                               s32 outputHeight,
                                bool8 clipToGbaDisplay)
 {
     const u8 *vram = (const u8 *)VRAM;
@@ -359,7 +362,7 @@ static void DrawTextBgScanline(struct PixelStack *line,
         screenY = ApplyMosaic(screenY, mosaicHeight);
     sourceY = (screenY + state->vofs) & (height - 1);
     tileY = sourceY >> 3;
-    if (outputWidth > DISPLAY_WIDTH && bg != 0)
+    if ((outputWidth > DISPLAY_WIDTH || outputHeight > DISPLAY_HEIGHT) && bg != 0)
     {
         GetFieldCameraBgTileOffset(&fieldTileOffsetX, &fieldTileOffsetY);
         fieldPhaseX = GetNativeFieldPhase(state->hofs, fieldTileOffsetX);
@@ -383,13 +386,14 @@ static void DrawTextBgScanline(struct PixelStack *line,
         bool8 nativeField = FALSE;
 
         if (clipToGbaDisplay
-         && (screenX < 0 || screenX >= DISPLAY_WIDTH))
+         && (screenX < 0 || screenX >= DISPLAY_WIDTH
+          || screenY < 0 || screenY >= DISPLAY_HEIGHT))
             continue;
         if (!(windowMasks[outputX] & layer))
             continue;
 
         effectiveX = mosaicEnabled ? ApplyMosaic(screenX, mosaicWidth) : screenX;
-        if (outputWidth > DISPLAY_WIDTH && bg != 0)
+        if ((outputWidth > DISPLAY_WIDTH || outputHeight > DISPLAY_HEIGHT) && bg != 0)
         {
             mapPixelX = effectiveX + fieldPhaseX;
             mapPixelY = screenY + fieldPhaseY;
@@ -399,6 +403,8 @@ static void DrawTextBgScanline(struct PixelStack *line,
                  + FloorDivideByPowerOfTwo(mapPixelY, 4);
             nativeField = screenX < 0
                        || screenX >= DISPLAY_WIDTH
+                       || screenY < 0
+                       || screenY >= DISPLAY_HEIGHT
                        || mapX - MAP_OFFSET < 0
                        || mapX - MAP_OFFSET >= gMapHeader.mapLayout->width
                        || mapY - MAP_OFFSET < 0
@@ -615,13 +621,14 @@ static void BuildWindowMasks(u8 *masks,
     for (outputX = 0; outputX < outputWidth; outputX++)
     {
         s32 screenX = outputX - outputOffsetX;
-        bool8 inGbaDisplay = screenX >= 0 && screenX < DISPLAY_WIDTH;
+        bool8 inGbaDisplay = screenX >= 0 && screenX < DISPLAY_WIDTH
+                          && y >= 0 && y < DISPLAY_HEIGHT;
 
         if (!inGbaDisplay)
         {
             // The overworld's full-screen WIN0 exposes BG1-BG3 and objects,
             // while WINOUT intentionally exposes only the BG0 text layer.
-            // Extended columns are part of the field view, not GBA WINOUT.
+            // Extended pixels are part of the field view, not GBA WINOUT.
             masks[outputX] = (windowIn & 0x3F) & ~(1 << 0);
             continue;
         }
@@ -658,7 +665,9 @@ static void DrawSpritesForPriority(struct PixelStack *line,
                                    u16 mosaic,
                                    bool8 objectWindowPass,
                                    s32 outputWidth,
-                                   s32 outputOffsetX)
+                                   s32 outputOffsetX,
+                                   s32 outputHeight,
+                                   s32 outputOffsetY)
 {
     const u16 *oam = (const u16 *)OAM;
     const u8 *vram = (const u8 *)VRAM;
@@ -688,6 +697,8 @@ static void DrawSpritesForPriority(struct PixelStack *line,
         s32 objectX;
         s32 objectY = attr0 & 0xFF;
         s32 screenX;
+        bool8 hasUnwrappedX = FALSE;
+        bool8 hasUnwrappedY = FALSE;
 
         if (shape >= 3 || objectMode == 3)
             continue;
@@ -706,13 +717,34 @@ static void DrawSpritesForPriority(struct PixelStack *line,
         GetSpriteDimensions(shape, size, &width, &height);
         drawWidth = doubleSize ? width * 2 : width;
         drawHeight = doubleSize ? height * 2 : height;
-        if (outputWidth == DISPLAY_WIDTH)
+#if PLATFORM_PC
+        if (outputWidth > DISPLAY_WIDTH || outputHeight > DISPLAY_HEIGHT)
+        {
+            s16 unwrappedX;
+            s16 unwrappedY;
+
+            if (PcGetOamScreenCoords((u8)sprite, &unwrappedX, &unwrappedY))
+            {
+                if (outputWidth > DISPLAY_WIDTH)
+                {
+                    objectX = unwrappedX;
+                    hasUnwrappedX = TRUE;
+                }
+                if (outputHeight > DISPLAY_HEIGHT)
+                {
+                    objectY = unwrappedY;
+                    hasUnwrappedY = TRUE;
+                }
+            }
+        }
+#endif
+        if (!hasUnwrappedX && outputWidth == DISPLAY_WIDTH)
         {
             objectX = rawObjectX;
             if (objectX >= 256)
                 objectX -= 512;
         }
-        else
+        else if (!hasUnwrappedX)
         {
             s32 positiveX = rawObjectX;
             s32 negativeX = rawObjectX - 512;
@@ -728,8 +760,27 @@ static void DrawSpritesForPriority(struct PixelStack *line,
             else
                 objectX = positiveX;
         }
-        if (objectY >= 160)
-            objectY -= 256;
+        if (!hasUnwrappedY && outputHeight == DISPLAY_HEIGHT)
+        {
+            if (objectY >= DISPLAY_HEIGHT)
+                objectY -= 256;
+        }
+        else if (!hasUnwrappedY)
+        {
+            s32 positiveY = objectY;
+            s32 negativeY = objectY - 256;
+            s32 viewportTop = -outputOffsetY;
+            s32 viewportBottom = DISPLAY_HEIGHT + outputOffsetY;
+            bool8 positiveVisible = positiveY < viewportBottom
+                                 && positiveY + drawHeight > viewportTop;
+            bool8 negativeVisible = negativeY < viewportBottom
+                                 && negativeY + drawHeight > viewportTop;
+
+            if (!positiveVisible && negativeVisible)
+                objectY = negativeY;
+            else
+                objectY = positiveY;
+        }
         if (y < objectY || y >= objectY + drawHeight)
             continue;
 
@@ -878,29 +929,36 @@ static u16 ApplyColorEffects(const struct PixelStack *stack,
 
 void PcPpuRender(u32 *pixels,
                  u32 width,
+                 u32 height,
                  PcInterruptCallback hblankCallback)
 {
     const u16 *palette = (const u16 *)PLTT;
     u8 mode = REG_DISPCNT & 7;
     s32 outputOffsetX;
-    s32 y;
+    s32 outputOffsetY;
+    s32 outputY;
 
     if (width < DISPLAY_WIDTH)
         width = DISPLAY_WIDTH;
     if (width > PC_FRAME_MAX_WIDTH)
         width = PC_FRAME_MAX_WIDTH;
+    if (height < DISPLAY_HEIGHT)
+        height = DISPLAY_HEIGHT;
+    if (height > PC_FRAME_MAX_HEIGHT)
+        height = PC_FRAME_MAX_HEIGHT;
     outputOffsetX = (width - DISPLAY_WIDTH) / 2;
+    outputOffsetY = (height - DISPLAY_HEIGHT) / 2;
 
     if (REG_DISPCNT & (1 << 7))
     {
         PcDiagnosticsSetRenderProgress(UINT32_MAX, PC_DIAGNOSTIC_RENDER_CLEAR);
-        for (y = 0; y < (s32)(width * DISPLAY_HEIGHT); y++)
-            pixels[y] = 0xFFFFFFFFu;
+        for (outputY = 0; outputY < (s32)(width * height); outputY++)
+            pixels[outputY] = 0xFFFFFFFFu;
         REG_VCOUNT = 161;
         return;
     }
 
-    for (y = 0; y < DISPLAY_HEIGHT; y++)
+    for (outputY = 0; outputY < (s32)height; outputY++)
     {
         struct PixelStack line[PC_FRAME_MAX_WIDTH];
         bool8 objectWindow[PC_FRAME_MAX_WIDTH] = {FALSE};
@@ -912,9 +970,11 @@ void PcPpuRender(u32 *pixels,
         s32 x;
         s32 priority;
         s32 bg;
+        s32 screenY = outputY - outputOffsetY;
 
-        PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_CLEAR);
-        REG_VCOUNT = (u16)y;
+        PcDiagnosticsSetRenderProgress((u32)outputY, PC_DIAGNOSTIC_RENDER_CLEAR);
+        if (screenY >= 0 && screenY < DISPLAY_HEIGHT)
+            REG_VCOUNT = (u16)screenY;
         for (bg = 0; bg < 4; bg++)
         {
             u32 registerBase;
@@ -945,21 +1005,27 @@ void PcPpuRender(u32 *pixels,
 
         if (displayControl & DISPCNT_OBJWIN_ON)
         {
-            PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_OBJECT_WINDOW);
+            PcDiagnosticsSetRenderProgress((u32)outputY, PC_DIAGNOSTIC_RENDER_OBJECT_WINDOW);
             DrawSpritesForPriority(NULL,
                                    NULL,
                                    objectWindow,
-                                   y,
+                                   screenY,
                                    0,
                                    mode,
                                    displayControl,
                                    mosaic,
                                    TRUE,
                                    width,
-                                   outputOffsetX);
+                                   outputOffsetX,
+                                   height,
+                                   outputOffsetY);
         }
-        PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_WINDOWS);
-        BuildWindowMasks(windowMasks, objectWindow, y, width, outputOffsetX);
+        PcDiagnosticsSetRenderProgress((u32)outputY, PC_DIAGNOSTIC_RENDER_WINDOWS);
+        BuildWindowMasks(windowMasks,
+                         objectWindow,
+                         screenY,
+                         width,
+                         outputOffsetX);
         for (x = 0; x < (s32)width; x++)
         {
             line[x].top.color = palette[0];
@@ -970,7 +1036,7 @@ void PcPpuRender(u32 *pixels,
 
         for (priority = 3; priority >= 0; priority--)
         {
-            PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_BACKGROUNDS);
+            PcDiagnosticsSetRenderProgress((u32)outputY, PC_DIAGNOSTIC_RENDER_BACKGROUNDS);
             for (bg = 3; bg >= 0; bg--)
             {
                 u16 control = bgStates[bg].control;
@@ -988,9 +1054,10 @@ void PcPpuRender(u32 *pixels,
                                        mosaic,
                                        bg,
                                        (u8)(1 << bg),
-                                       y,
+                                       screenY,
                                        width,
                                        outputOffsetX,
+                                       height,
                                        bg == 0);
                     continue;
                 }
@@ -1004,16 +1071,16 @@ void PcPpuRender(u32 *pixels,
                     if (!(windowMasks[x] & (1 << bg)))
                         continue;
                     if (mode == 1 && bg == 2)
-                        opaque = ReadAffineBgPixel(&bgStates[bg], mosaic, screenX, y, &color);
+                        opaque = ReadAffineBgPixel(&bgStates[bg], mosaic, screenX, screenY, &color);
                     else if (mode == 2 && bg >= 2)
-                        opaque = ReadAffineBgPixel(&bgStates[bg], mosaic, screenX, y, &color);
+                        opaque = ReadAffineBgPixel(&bgStates[bg], mosaic, screenX, screenY, &color);
                     else if (mode >= 3 && mode <= 5 && bg == 2)
                         opaque = ReadBitmapPixel(mode,
                                                  displayControl,
                                                  control,
                                                  mosaic,
                                                  screenX,
-                                                 y,
+                                                 screenY,
                                                  &color);
 
                     if (opaque)
@@ -1023,37 +1090,42 @@ void PcPpuRender(u32 *pixels,
 
             if (displayControl & (1 << 12))
             {
-                PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_SPRITES);
+                PcDiagnosticsSetRenderProgress((u32)outputY, PC_DIAGNOSTIC_RENDER_SPRITES);
                 DrawSpritesForPriority(line,
                                        windowMasks,
                                        objectWindow,
-                                       y,
+                                       screenY,
                                        (u8)priority,
                                        mode,
                                        displayControl,
                                        mosaic,
                                        FALSE,
                                        width,
-                                       outputOffsetX);
+                                       outputOffsetX,
+                                       height,
+                                       outputOffsetY);
             }
         }
 
-        PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_OUTPUT);
+        PcDiagnosticsSetRenderProgress((u32)outputY, PC_DIAGNOSTIC_RENDER_OUTPUT);
         for (x = 0; x < (s32)width; x++)
         {
             bool8 effectsEnabled = (windowMasks[x] & (1 << 5)) != 0;
 
-            pixels[y * width + x] = ColorToArgb(ApplyColorEffects(&line[x],
+            pixels[outputY * width + x] = ColorToArgb(ApplyColorEffects(&line[x],
                                                                    &effects,
                                                                    effectsEnabled));
         }
 
-        PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_HBLANK_DMA);
-        PcDmaRunHBlank();
-        if ((REG_IE & INTR_FLAG_HBLANK) && hblankCallback != NULL)
+        if (screenY >= 0 && screenY < DISPLAY_HEIGHT)
         {
-            PcDiagnosticsSetRenderProgress((u32)y, PC_DIAGNOSTIC_RENDER_HBLANK_CALLBACK);
-            hblankCallback();
+            PcDiagnosticsSetRenderProgress((u32)outputY, PC_DIAGNOSTIC_RENDER_HBLANK_DMA);
+            PcDmaRunHBlank();
+            if ((REG_IE & INTR_FLAG_HBLANK) && hblankCallback != NULL)
+            {
+                PcDiagnosticsSetRenderProgress((u32)outputY, PC_DIAGNOSTIC_RENDER_HBLANK_CALLBACK);
+                hblankCallback();
+            }
         }
     }
 

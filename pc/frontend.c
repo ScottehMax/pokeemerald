@@ -211,6 +211,7 @@ static void ResetSharedState(struct PcSharedState *shared,
     shared->magic = PC_SHARED_MAGIC;
     shared->version = PC_SHARED_VERSION;
     shared->requestedFrameWidth = PC_FRAME_WIDTH;
+    shared->requestedFrameHeight = PC_FRAME_HEIGHT;
     shared->frameWidth = PC_FRAME_WIDTH;
     shared->frameHeight = PC_FRAME_HEIGHT;
     shared->resumeMainMenu = (uint32_t)resumeMainMenu;
@@ -282,26 +283,38 @@ static int WriteFrame(const char *path,
     return fclose(file);
 }
 
-static void UpdateRequestedFrameWidth(struct PcSharedState *shared,
-                                      SDL_Renderer *renderer)
+static void UpdateRequestedFrameSize(struct PcSharedState *shared,
+                                     SDL_Renderer *renderer)
 {
     int outputWidth;
     int outputHeight;
     uint32_t width = PC_FRAME_WIDTH;
+    uint32_t height = PC_FRAME_HEIGHT;
 
     if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0
      && outputWidth > 0
      && outputHeight > 0)
     {
-        width = (uint32_t)((uint64_t)outputWidth * PC_FRAME_HEIGHT
-                         / (uint32_t)outputHeight);
-        if (width < PC_FRAME_WIDTH)
-            width = PC_FRAME_WIDTH;
-        if (width > PC_FRAME_MAX_WIDTH)
-            width = PC_FRAME_MAX_WIDTH;
-        width -= (width - PC_FRAME_WIDTH) & 1;
+        if ((uint64_t)outputWidth * PC_FRAME_HEIGHT
+         >= (uint64_t)outputHeight * PC_FRAME_WIDTH)
+        {
+            width = (uint32_t)((uint64_t)outputWidth * PC_FRAME_HEIGHT
+                             / (uint32_t)outputHeight);
+            if (width > PC_FRAME_MAX_WIDTH)
+                width = PC_FRAME_MAX_WIDTH;
+            width -= (width - PC_FRAME_WIDTH) & 1;
+        }
+        else
+        {
+            height = (uint32_t)((uint64_t)outputHeight * PC_FRAME_WIDTH
+                              / (uint32_t)outputWidth);
+            if (height > PC_FRAME_MAX_HEIGHT)
+                height = PC_FRAME_MAX_HEIGHT;
+            height -= (height - PC_FRAME_HEIGHT) & 1;
+        }
     }
     __atomic_store_n(&shared->requestedFrameWidth, width, __ATOMIC_RELEASE);
+    __atomic_store_n(&shared->requestedFrameHeight, height, __ATOMIC_RELEASE);
 }
 
 static int CopyStableFrame(struct PcSharedState *shared,
@@ -324,7 +337,8 @@ static int CopyStableFrame(struct PcSharedState *shared,
         *height = __atomic_load_n(&shared->frameHeight, __ATOMIC_RELAXED);
         if (*width < PC_FRAME_WIDTH
          || *width > PC_FRAME_MAX_WIDTH
-         || *height != PC_FRAME_HEIGHT)
+         || *height < PC_FRAME_HEIGHT
+         || *height > PC_FRAME_MAX_HEIGHT)
             return -1;
         memcpy(pixels,
                shared->pixels[buffer],
@@ -360,7 +374,8 @@ int main(int argc, char **argv)
     int running = 1;
     uint32_t frameLimit = 0;
     const char *dumpPath = NULL;
-    uint32_t framePixels[PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT];
+    uint32_t *framePixels = calloc(PC_FRAME_MAX_WIDTH * PC_FRAME_MAX_HEIGHT,
+                                   sizeof(*framePixels));
     int printStats = 0;
     int explicitSave = 0;
     const char *profileName = NULL;
@@ -492,7 +507,8 @@ int main(int argc, char **argv)
     }
 #endif
     ResetSharedState(shared, defaultSavePath, savePath, storagePath, 0, 0);
-    memset(framePixels, 0, sizeof(framePixels));
+    if (framePixels == NULL)
+        goto cleanup;
 
     if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {
@@ -538,13 +554,13 @@ int main(int argc, char **argv)
         goto sdl_cleanup;
     }
 
-    UpdateRequestedFrameWidth(shared, renderer);
+    UpdateRequestedFrameSize(shared, renderer);
 
     texture = SDL_CreateTexture(renderer,
                                 SDL_PIXELFORMAT_ARGB8888,
                                 SDL_TEXTUREACCESS_STREAMING,
                                 PC_FRAME_MAX_WIDTH,
-                                PC_FRAME_HEIGHT);
+                                PC_FRAME_MAX_HEIGHT);
     if (texture == NULL)
     {
         fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
@@ -576,7 +592,7 @@ int main(int argc, char **argv)
                 running = 0;
             else if (event.type == SDL_WINDOWEVENT
                   && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
-                UpdateRequestedFrameWidth(shared, renderer);
+                UpdateRequestedFrameSize(shared, renderer);
         }
 
         keyboard = SDL_GetKeyboardState(&keyCount);
@@ -684,7 +700,7 @@ int main(int argc, char **argv)
                                      storagePath,
                                      resumeMainMenu,
                                      audioDevice);
-                    UpdateRequestedFrameWidth(shared, renderer);
+                    UpdateRequestedFrameSize(shared, renderer);
                     core = LaunchCore(corePath, sharedPath);
                     if (core == PC_PROCESS_INVALID)
                     {
@@ -798,6 +814,7 @@ unmap:
     munmap(shared, sizeof(*shared));
 #endif
 cleanup:
+    free(framePixels);
 #ifdef _WIN32
     if (sharedMapping != NULL)
         CloseHandle(sharedMapping);

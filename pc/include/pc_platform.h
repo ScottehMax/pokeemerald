@@ -16,6 +16,8 @@ void PcPlatformSwitchProfile(const char *savePath, const char *storagePath) __at
 void PcPlatformWaitForFrame(void);
 void PcPlatformPresentFrame(PcInterruptCallback hblankCallback);
 u32 PcPlatformGetOverworldViewportWidth(void);
+u32 PcPlatformGetOverworldViewportHeight(void);
+bool32 PcPlatformIsOverworldViewportActive(void);
 void PcPlatformSoftReset(void) __attribute__((noreturn));
 void PcPlatformQueueAudio(const s16 *samples, u32 frameCount);
 void PcPlatformRunTestHooks(void);
