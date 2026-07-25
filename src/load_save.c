@@ -181,16 +181,35 @@ void SaveObjectEvents(void)
 {
     int i;
 
-    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+#if PLATFORM_PC
+    int saved = 0;
+
+    for (i = 0; i < OBJECT_EVENTS_COUNT && saved < SAVED_OBJECT_EVENTS_COUNT; i++)
+    {
+        if (gObjectEvents[i].active
+         && (gObjectEvents[i].isPlayer
+          || (gObjectEvents[i].mapNum == gSaveBlock1Ptr->location.mapNum
+           && gObjectEvents[i].mapGroup == gSaveBlock1Ptr->location.mapGroup)))
+        {
+            gSaveBlock1Ptr->objectEvents[saved++] = gObjectEvents[i];
+        }
+    }
+    for (; saved < SAVED_OBJECT_EVENTS_COUNT; saved++)
+        gSaveBlock1Ptr->objectEvents[saved] = (struct ObjectEvent){0};
+#else
+    for (i = 0; i < SAVED_OBJECT_EVENTS_COUNT; i++)
         gSaveBlock1Ptr->objectEvents[i] = gObjectEvents[i];
+#endif
 }
 
 void LoadObjectEvents(void)
 {
     int i;
 
-    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+    for (i = 0; i < SAVED_OBJECT_EVENTS_COUNT; i++)
         gObjectEvents[i] = gSaveBlock1Ptr->objectEvents[i];
+    for (; i < OBJECT_EVENTS_COUNT; i++)
+        gObjectEvents[i] = (struct ObjectEvent){0};
 }
 
 void CopyPartyAndObjectsToSave(void)

@@ -23,6 +23,15 @@
 
 extern struct BackupMapLayout gBackupMapLayout;
 
+#if PLATFORM_PC
+struct MapRenderMetatile
+{
+    u16 metatileId;
+    const struct Tileset *primaryTileset;
+    const struct Tileset *secondaryTileset;
+};
+#endif
+
 s32 MapGridGetMetatileIdAt(s32 x, s32 y);
 s32 MapGridGetMetatileBehaviorAt(s32 x, s32 y);
 void MapGridSetMetatileIdAt(s32 x, s32 y, u16 metatile);
@@ -35,6 +44,9 @@ u16 GetMetatileAttributesById(u16 metatile);
 void GetCameraFocusCoords(u16 *x, u16 *y);
 u8 MapGridGetMetatileLayerTypeAt(s32 x, s32 y);
 u8 MapGridGetElevationAt(s32 x, s32 y);
+#if PLATFORM_PC
+void MapGridGetMetatileAtForRender(s32 x, s32 y, struct MapRenderMetatile *metatile);
+#endif
 bool8 CameraMove(s32 x, s32 y);
 void SaveMapView(void);
 void SetCameraFocusCoords(u16 x, u16 y);

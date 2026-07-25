@@ -234,7 +234,10 @@ static int BuildReportPaths(const char *savePath,
     return 0;
 }
 
-static int WriteFrame(const char *path, const uint32_t *pixels)
+static int WriteFrame(const char *path,
+                      const uint32_t *pixels,
+                      uint32_t width,
+                      uint32_t height)
 {
     FILE *file = fopen(path, "wb");
     int x;
@@ -242,12 +245,19 @@ static int WriteFrame(const char *path, const uint32_t *pixels)
 
     if (file == NULL)
         return -1;
-    fprintf(file, "P6\n%d %d\n255\n", PC_FRAME_WIDTH, PC_FRAME_HEIGHT);
-    for (y = 0; y < PC_FRAME_HEIGHT; y++)
+    if (width < PC_FRAME_WIDTH
+     || width > PC_FRAME_MAX_WIDTH
+     || height != PC_FRAME_HEIGHT)
     {
-        for (x = 0; x < PC_FRAME_WIDTH; x++)
+        width = PC_FRAME_WIDTH;
+        height = PC_FRAME_HEIGHT;
+    }
+    fprintf(file, "P6\n%u %u\n255\n", width, height);
+    for (y = 0; y < (int)height; y++)
+    {
+        for (x = 0; x < (int)width; x++)
         {
-            uint32_t pixel = pixels[y * PC_FRAME_WIDTH + x];
+            uint32_t pixel = pixels[y * width + x];
             unsigned char rgb[3] = {
                 (unsigned char)(pixel >> 16),
                 (unsigned char)(pixel >> 8),
@@ -611,6 +621,9 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
     if (shared->coreErrorMessage[0] != '\0')
         fprintf(file, "core_error: %s\n", shared->coreErrorMessage);
     fprintf(file, "frame: %" PRIu32 "\n", state->frame);
+    fprintf(file, "frame_size: %" PRIu32 "x%" PRIu32 "\n",
+            shared->frameWidth,
+            shared->frameHeight);
     if (crash->magic == PC_CRASH_MAGIC
      && crash->version == PC_CRASH_VERSION
      && __atomic_load_n(&crash->complete, __ATOMIC_ACQUIRE) != 0)
@@ -811,7 +824,11 @@ int PcWriteCrashReport(const struct PcSharedState *shared,
     CloseSymbolizer(&symbolizer);
     if (fclose(file) != 0)
         return -1;
-    if (pixels != NULL && WriteFrame(imagePath, pixels) != 0)
+    if (pixels != NULL
+     && WriteFrame(imagePath,
+                   pixels,
+                   shared->frameWidth,
+                   shared->frameHeight) != 0)
         fprintf(stderr, "could not write crash frame %s: %s\n", imagePath, strerror(errno));
     if (crash->magic == PC_CRASH_MAGIC
      && crash->version == PC_CRASH_VERSION

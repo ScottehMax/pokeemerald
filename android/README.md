@@ -34,6 +34,10 @@ expanded `.ek3` storage, and the remembered-profile preference live in the
 app's private files directory. Uninstalling the app removes those files unless
 Android backup restores them.
 
+The overworld viewport follows the device aspect ratio, up to 400x160, so wider
+screens reveal more of the map instead of adding side bars. Battles, menus, and
+other fixed-layout scenes remain at their original 240x160 composition.
+
 If the game core crashes or cannot start, the frontend writes the same
 diagnostic text report and last-frame PPM used by the desktop port under the
 active profile's `crash-reports` directory. Android's share sheet opens with

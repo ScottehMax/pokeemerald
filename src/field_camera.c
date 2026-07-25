@@ -91,6 +91,14 @@ void GetCameraOffsetWithPan(s16 *x, s16 *y)
     *y = sFieldCameraOffset.yPixelOffset + sVerticalCameraPan + 8;
 }
 
+#if PLATFORM_PC
+void GetFieldCameraBgTileOffset(u8 *x, u8 *y)
+{
+    *x = sFieldCameraOffset.xTileOffset;
+    *y = sFieldCameraOffset.yTileOffset;
+}
+#endif
+
 void DrawWholeMapView(void)
 {
     DrawWholeMapViewInternal(gSaveBlock1Ptr->pos.x, gSaveBlock1Ptr->pos.y, gMapHeader.mapLayout);

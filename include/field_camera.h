@@ -28,5 +28,8 @@ void SetCameraPanning(s16 horizontal, s16 vertical);
 void InstallCameraPanAheadCallback(void);
 void UpdateCameraPanning(void);
 void FieldUpdateBgTilemapScroll(void);
+#if PLATFORM_PC
+void GetFieldCameraBgTileOffset(u8 *x, u8 *y);
+#endif
 
 #endif //GUARD_FIELD_CAMERA_H

@@ -33,6 +33,24 @@ EWRAM_DATA static u32 UNUSED sFiller = 0; // without this, the next file won't a
 
 COMMON_DATA struct BackupMapLayout gBackupMapLayout = {0};
 
+#if PLATFORM_PC
+#define MAX_RENDER_MAP_CONNECTIONS 8
+
+struct RenderMapConnection
+{
+    const u16 *map;
+    const struct Tileset *primaryTileset;
+    const struct Tileset *secondaryTileset;
+    s32 offset;
+    u16 width;
+    u16 height;
+    u8 direction;
+};
+
+static struct RenderMapConnection sRenderMapConnections[MAX_RENDER_MAP_CONNECTIONS];
+static u8 sRenderMapConnectionCount;
+#endif
+
 static const struct ConnectionFlags sDummyConnectionFlags = {0};
 
 static void InitMapLayoutData(const struct MapHeader *mapHeader);
@@ -124,6 +142,9 @@ static void InitBackupMapLayoutConnections(const struct MapHeader *mapHeader)
     const struct MapConnection *connection;
     const struct MapHeader *cMap;
 
+#if PLATFORM_PC
+    sRenderMapConnectionCount = 0;
+#endif
     if (!mapHeader->connections)
         return;
 
@@ -134,6 +155,23 @@ static void InitBackupMapLayoutConnections(const struct MapHeader *mapHeader)
     {
         cMap = GetMapHeaderFromConnection(connection);
         offset = connection->offset;
+#if PLATFORM_PC
+        if (cMap != NULL
+         && cMap->mapLayout != NULL
+         && sRenderMapConnectionCount < MAX_RENDER_MAP_CONNECTIONS)
+        {
+            struct RenderMapConnection *renderConnection =
+                &sRenderMapConnections[sRenderMapConnectionCount++];
+
+            renderConnection->map = cMap->mapLayout->map;
+            renderConnection->primaryTileset = cMap->mapLayout->primaryTileset;
+            renderConnection->secondaryTileset = cMap->mapLayout->secondaryTileset;
+            renderConnection->offset = offset;
+            renderConnection->width = cMap->mapLayout->width;
+            renderConnection->height = cMap->mapLayout->height;
+            renderConnection->direction = connection->direction;
+        }
+#endif
         switch (connection->direction)
         {
         case CONNECTION_SOUTH:
@@ -343,6 +381,95 @@ s32 MapGridGetMetatileIdAt(s32 x, s32 y)
 
     return UNPACK_METATILE(block);
 }
+
+#if PLATFORM_PC
+static bool32 GetConnectionMapCoords(const struct RenderMapConnection *connection,
+                                     s32 x,
+                                     s32 y,
+                                     s32 *connectedX,
+                                     s32 *connectedY)
+{
+    s32 localX = x - MAP_OFFSET;
+    s32 localY = y - MAP_OFFSET;
+
+    switch (connection->direction)
+    {
+    case CONNECTION_SOUTH:
+        *connectedX = localX - connection->offset;
+        *connectedY = localY - gMapHeader.mapLayout->height;
+        break;
+    case CONNECTION_NORTH:
+        *connectedX = localX - connection->offset;
+        *connectedY = localY + connection->height;
+        break;
+    case CONNECTION_WEST:
+        *connectedX = localX + connection->width;
+        *connectedY = localY - connection->offset;
+        break;
+    case CONNECTION_EAST:
+        *connectedX = localX - gMapHeader.mapLayout->width;
+        *connectedY = localY - connection->offset;
+        break;
+    default:
+        return FALSE;
+    }
+
+    return *connectedX >= 0
+        && *connectedX < connection->width
+        && *connectedY >= 0
+        && *connectedY < connection->height;
+}
+
+void MapGridGetMetatileAtForRender(s32 x, s32 y, struct MapRenderMetatile *metatile)
+{
+    s32 block;
+    s32 i;
+
+    metatile->metatileId = 0;
+    metatile->primaryTileset = NULL;
+    metatile->secondaryTileset = NULL;
+    if (gMapHeader.mapLayout == NULL)
+        return;
+
+    metatile->primaryTileset = gMapHeader.mapLayout->primaryTileset;
+    metatile->secondaryTileset = gMapHeader.mapLayout->secondaryTileset;
+
+    if (x - MAP_OFFSET < 0
+     || x - MAP_OFFSET >= gMapHeader.mapLayout->width
+     || y - MAP_OFFSET < 0
+     || y - MAP_OFFSET >= gMapHeader.mapLayout->height)
+    {
+        const struct RenderMapConnection *connection = sRenderMapConnections;
+
+        for (i = 0; i < sRenderMapConnectionCount; i++, connection++)
+        {
+            s32 connectedX;
+            s32 connectedY;
+
+            if (!GetConnectionMapCoords(connection, x, y, &connectedX, &connectedY))
+                continue;
+
+            metatile->primaryTileset = connection->primaryTileset;
+            metatile->secondaryTileset = connection->secondaryTileset;
+            block = connection->map[connectedX + connection->width * connectedY];
+            metatile->metatileId = UNPACK_METATILE(block);
+            return;
+        }
+    }
+
+    if (AreCoordsWithinMapGridBounds(x, y))
+    {
+        block = gBackupMapLayout.map[x + gBackupMapLayout.width * y];
+        if (block != MAPGRID_UNDEFINED)
+        {
+            metatile->metatileId = UNPACK_METATILE(block);
+            return;
+        }
+    }
+
+    metatile->metatileId = UNPACK_METATILE(GetBorderBlockAt(x, y));
+}
+#endif
 
 s32 MapGridGetMetatileBehaviorAt(s32 x, s32 y)
 {

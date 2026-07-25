@@ -35,6 +35,7 @@
 #define DPAD_DOWN 0x0080u
 #define R_BUTTON 0x0100u
 #define L_BUTTON 0x0200u
+#define PC_DEFAULT_VIEWPORT_WIDTH 320
 
 #ifdef _WIN32
 typedef HANDLE PcProcess;
@@ -209,6 +210,9 @@ static void ResetSharedState(struct PcSharedState *shared,
     memset(shared, 0, sizeof(*shared));
     shared->magic = PC_SHARED_MAGIC;
     shared->version = PC_SHARED_VERSION;
+    shared->requestedFrameWidth = PC_FRAME_WIDTH;
+    shared->frameWidth = PC_FRAME_WIDTH;
+    shared->frameHeight = PC_FRAME_HEIGHT;
     shared->resumeMainMenu = (uint32_t)resumeMainMenu;
     memcpy(shared->defaultSavePath, defaultSavePath, strlen(defaultSavePath) + 1);
     memcpy(shared->savePath, savePath, strlen(savePath) + 1);
@@ -253,7 +257,10 @@ static int PollCore(PcProcess *core, int *exitStatus)
     return 1;
 }
 
-static int WriteFrame(const char *path, const uint32_t *pixels)
+static int WriteFrame(const char *path,
+                      const uint32_t *pixels,
+                      uint32_t width,
+                      uint32_t height)
 {
     FILE *file = fopen(path, "wb");
     int x;
@@ -261,12 +268,12 @@ static int WriteFrame(const char *path, const uint32_t *pixels)
 
     if (file == NULL)
         return -1;
-    fprintf(file, "P6\n%d %d\n255\n", PC_FRAME_WIDTH, PC_FRAME_HEIGHT);
-    for (y = 0; y < PC_FRAME_HEIGHT; y++)
+    fprintf(file, "P6\n%u %u\n255\n", width, height);
+    for (y = 0; y < (int)height; y++)
     {
-        for (x = 0; x < PC_FRAME_WIDTH; x++)
+        for (x = 0; x < (int)width; x++)
         {
-            uint32_t pixel = pixels[y * PC_FRAME_WIDTH + x];
+            uint32_t pixel = pixels[y * width + x];
             Uint8 rgb[3] = {(Uint8)(pixel >> 16), (Uint8)(pixel >> 8), (Uint8)pixel};
 
             fwrite(rgb, sizeof(rgb), 1, file);
@@ -275,7 +282,33 @@ static int WriteFrame(const char *path, const uint32_t *pixels)
     return fclose(file);
 }
 
-static int CopyStableFrame(struct PcSharedState *shared, uint32_t *pixels, uint32_t *frame)
+static void UpdateRequestedFrameWidth(struct PcSharedState *shared,
+                                      SDL_Renderer *renderer)
+{
+    int outputWidth;
+    int outputHeight;
+    uint32_t width = PC_FRAME_WIDTH;
+
+    if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0
+     && outputWidth > 0
+     && outputHeight > 0)
+    {
+        width = (uint32_t)((uint64_t)outputWidth * PC_FRAME_HEIGHT
+                         / (uint32_t)outputHeight);
+        if (width < PC_FRAME_WIDTH)
+            width = PC_FRAME_WIDTH;
+        if (width > PC_FRAME_MAX_WIDTH)
+            width = PC_FRAME_MAX_WIDTH;
+        width -= (width - PC_FRAME_WIDTH) & 1;
+    }
+    __atomic_store_n(&shared->requestedFrameWidth, width, __ATOMIC_RELEASE);
+}
+
+static int CopyStableFrame(struct PcSharedState *shared,
+                           uint32_t *pixels,
+                           uint32_t *frame,
+                           uint32_t *width,
+                           uint32_t *height)
 {
     uint32_t before;
     uint32_t after;
@@ -287,7 +320,15 @@ static int CopyStableFrame(struct PcSharedState *shared, uint32_t *pixels, uint3
         buffer = __atomic_load_n(&shared->frameBufferIndex, __ATOMIC_ACQUIRE);
         if (buffer >= PC_FRAME_BUFFER_COUNT)
             return -1;
-        memcpy(pixels, shared->pixels[buffer], sizeof(shared->pixels[buffer]));
+        *width = __atomic_load_n(&shared->frameWidth, __ATOMIC_RELAXED);
+        *height = __atomic_load_n(&shared->frameHeight, __ATOMIC_RELAXED);
+        if (*width < PC_FRAME_WIDTH
+         || *width > PC_FRAME_MAX_WIDTH
+         || *height != PC_FRAME_HEIGHT)
+            return -1;
+        memcpy(pixels,
+               shared->pixels[buffer],
+               *width * *height * sizeof(*pixels));
         after = __atomic_load_n(&shared->frameSequence, __ATOMIC_ACQUIRE);
     } while (before != after);
 
@@ -319,12 +360,15 @@ int main(int argc, char **argv)
     int running = 1;
     uint32_t frameLimit = 0;
     const char *dumpPath = NULL;
-    uint32_t framePixels[PC_FRAME_WIDTH * PC_FRAME_HEIGHT];
+    uint32_t framePixels[PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT];
     int printStats = 0;
     int explicitSave = 0;
     const char *profileName = NULL;
     int suppressKeysUntilRelease = 0;
     uint32_t coreRestarts = 0;
+    uint32_t frameWidth = PC_FRAME_WIDTH;
+    uint32_t frameHeight = PC_FRAME_HEIGHT;
+    uint32_t maxFrameWidth = PC_FRAME_WIDTH;
     int argIndex;
 
     if (GetDefaultPaths(argv[0], corePath, sizeof(corePath), savePath, sizeof(savePath)) != 0)
@@ -459,7 +503,7 @@ int main(int argc, char **argv)
     window = SDL_CreateWindow("Pokemon Emerald",
                               SDL_WINDOWPOS_CENTERED,
                               SDL_WINDOWPOS_CENTERED,
-                              PC_FRAME_WIDTH * 3,
+                              PC_DEFAULT_VIEWPORT_WIDTH * 3,
                               PC_FRAME_HEIGHT * 3,
                               SDL_WINDOW_RESIZABLE);
     if (window == NULL)
@@ -494,12 +538,12 @@ int main(int argc, char **argv)
         goto sdl_cleanup;
     }
 
-    SDL_RenderSetLogicalSize(renderer, PC_FRAME_WIDTH, PC_FRAME_HEIGHT);
+    UpdateRequestedFrameWidth(shared, renderer);
 
     texture = SDL_CreateTexture(renderer,
                                 SDL_PIXELFORMAT_ARGB8888,
                                 SDL_TEXTUREACCESS_STREAMING,
-                                PC_FRAME_WIDTH,
+                                PC_FRAME_MAX_WIDTH,
                                 PC_FRAME_HEIGHT);
     if (texture == NULL)
     {
@@ -530,6 +574,9 @@ int main(int argc, char **argv)
         {
             if (event.type == SDL_QUIT)
                 running = 0;
+            else if (event.type == SDL_WINDOWEVENT
+                  && event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
+                UpdateRequestedFrameWidth(shared, renderer);
         }
 
         keyboard = SDL_GetKeyboardState(&keyCount);
@@ -548,16 +595,50 @@ int main(int argc, char **argv)
         }
 
         frame = __atomic_load_n(&shared->frameSequence, __ATOMIC_ACQUIRE);
-        if (frame != lastFrame && CopyStableFrame(shared, framePixels, &frame) == 0)
+        if (frame != lastFrame
+         && CopyStableFrame(shared,
+                            framePixels,
+                            &frame,
+                            &frameWidth,
+                            &frameHeight) == 0)
         {
-            SDL_UpdateTexture(texture, NULL, framePixels, PC_FRAME_WIDTH * sizeof(uint32_t));
+            if (frameWidth > maxFrameWidth)
+                maxFrameWidth = frameWidth;
+            int outputWidth;
+            int outputHeight;
+            int gameWidth;
+            int gameHeight;
+            SDL_Rect source = {0, 0, (int)frameWidth, (int)frameHeight};
+            SDL_Rect destination;
+
+            SDL_UpdateTexture(texture,
+                              &source,
+                              framePixels,
+                              frameWidth * sizeof(uint32_t));
+            SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight);
+            gameHeight = outputHeight;
+            gameWidth = gameHeight * (int)frameWidth / (int)frameHeight;
+            if (gameWidth > outputWidth)
+            {
+                gameWidth = outputWidth;
+                gameHeight = outputWidth * (int)frameHeight / (int)frameWidth;
+            }
+            destination.x = (outputWidth - gameWidth) / 2;
+            destination.y = (outputHeight - gameHeight) / 2;
+            destination.w = gameWidth;
+            destination.h = gameHeight;
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL_RenderClear(renderer);
-            SDL_RenderCopy(renderer, texture, NULL, NULL);
+            SDL_RenderCopy(renderer, texture, &source, &destination);
             SDL_RenderPresent(renderer);
             lastFrame = frame;
             if (frameLimit != 0 && frame >= frameLimit)
             {
-                if (dumpPath != NULL && WriteFrame(dumpPath, framePixels) != 0)
+                if (dumpPath != NULL
+                 && WriteFrame(dumpPath,
+                               framePixels,
+                               frameWidth,
+                               frameHeight) != 0)
                 {
                     fprintf(stderr, "could not write frame dump %s: %s\n", dumpPath, strerror(errno));
                     result = 1;
@@ -603,6 +684,7 @@ int main(int argc, char **argv)
                                      storagePath,
                                      resumeMainMenu,
                                      audioDevice);
+                    UpdateRequestedFrameWidth(shared, renderer);
                     core = LaunchCore(corePath, sharedPath);
                     if (core == PC_PROCESS_INVALID)
                     {
@@ -654,7 +736,8 @@ int main(int argc, char **argv)
     {
         fprintf(stderr,
                 "frames=%u audio_frames=%u audio_peak=%u audio_nonzero=%u audio_clipped=%u "
-                "battle_state=%u battle_outcome=%u core_restarts=%u\n",
+                "battle_state=%u battle_outcome=%u core_restarts=%u "
+                "requested_width=%u frame_width=%u max_frame_width=%u\n",
                 __atomic_load_n(&shared->frameSequence, __ATOMIC_ACQUIRE),
                 __atomic_load_n(&shared->audioFramesGenerated, __ATOMIC_ACQUIRE),
                 __atomic_load_n(&shared->audioPeak, __ATOMIC_ACQUIRE),
@@ -662,7 +745,10 @@ int main(int argc, char **argv)
                 __atomic_load_n(&shared->audioSamplesClipped, __ATOMIC_ACQUIRE),
                 __atomic_load_n(&shared->testBattleState, __ATOMIC_ACQUIRE),
                 __atomic_load_n(&shared->testBattleOutcome, __ATOMIC_ACQUIRE),
-                coreRestarts);
+                coreRestarts,
+                __atomic_load_n(&shared->requestedFrameWidth, __ATOMIC_ACQUIRE),
+                frameWidth,
+                maxFrameWidth);
     }
 
     __atomic_store_n(&shared->quit, 1, __ATOMIC_RELEASE);

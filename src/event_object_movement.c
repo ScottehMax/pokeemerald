@@ -22,6 +22,9 @@
 #include "trainer_see.h"
 #include "trainer_hill.h"
 #include "util.h"
+#if PLATFORM_PC
+#include "pc_platform.h"
+#endif
 #include "constants/event_object_movement.h"
 #include "constants/event_objects.h"
 #include "constants/field_effects.h"
@@ -33,6 +36,48 @@
 #define SPECIAL_LOCALIDS_START (min(LOCALID_CAMERA, \
                                 min(LOCALID_PLAYER, \
                                     LOCALID_BERRY_BLENDER_PLAYER_END - MAX_RFU_PLAYERS + 1)))
+
+static s16 GetOverworldHorizontalMarginPixels(void)
+{
+#if PLATFORM_PC
+    return (PcPlatformGetOverworldViewportWidth() - DISPLAY_WIDTH) / 2;
+#else
+    return 0;
+#endif
+}
+
+static s16 GetOverworldHorizontalMarginTiles(void)
+{
+    return (GetOverworldHorizontalMarginPixels() + 15) / 16;
+}
+
+#if PLATFORM_PC
+static void GetConnectedObjectCoords(const struct MapConnection *connection,
+                                     const struct MapLayout *connectedMapLayout,
+                                     s16 *x,
+                                     s16 *y)
+{
+    switch (connection->direction)
+    {
+    case CONNECTION_SOUTH:
+        *x += connection->offset;
+        *y += gMapHeader.mapLayout->height;
+        break;
+    case CONNECTION_NORTH:
+        *x += connection->offset;
+        *y -= connectedMapLayout->height;
+        break;
+    case CONNECTION_WEST:
+        *x -= connectedMapLayout->width;
+        *y += connection->offset;
+        break;
+    case CONNECTION_EAST:
+        *x += gMapHeader.mapLayout->width;
+        *y += connection->offset;
+        break;
+    }
+}
+#endif
 
 // The object event templates on a map cannot use the special IDs listed above or they can behave unexpectedly.
 // For more details on these special IDs see their definitions in 'include/constants/event_objects.h'.
@@ -1642,18 +1687,81 @@ u8 CreateVirtualObject(u8 graphicsId, u8 virtualObjId, s16 x, s16 y, u8 elevatio
     return spriteId;
 }
 
+#if PLATFORM_PC
+static void TrySpawnConnectedObjectEvents(s16 cameraX,
+                                          s16 cameraY,
+                                          s16 left,
+                                          s16 right,
+                                          s16 top,
+                                          s16 bottom)
+{
+    const struct MapConnection *connection;
+    s32 connectionIndex;
+
+    if (GetOverworldHorizontalMarginPixels() == 0
+     || gMapHeader.mapLayout == NULL
+     || gMapHeader.connections == NULL)
+        return;
+
+    connection = gMapHeader.connections->connections;
+    for (connectionIndex = 0;
+         connectionIndex < gMapHeader.connections->count;
+         connectionIndex++, connection++)
+    {
+        const struct MapHeader *connectedMapHeader;
+        const struct MapEvents *events;
+        u8 objectIndex;
+
+        if (connection->direction < CONNECTION_SOUTH
+         || connection->direction > CONNECTION_EAST)
+            continue;
+
+        connectedMapHeader = GetMapHeaderFromConnection(connection);
+        if (connectedMapHeader == NULL
+         || connectedMapHeader->mapLayout == NULL
+         || connectedMapHeader->events == NULL)
+            continue;
+        events = connectedMapHeader->events;
+
+        for (objectIndex = 0; objectIndex < events->objectEventCount; objectIndex++)
+        {
+            struct ObjectEventTemplate template = events->objectEvents[objectIndex];
+            s16 npcX;
+            s16 npcY;
+
+            GetConnectedObjectCoords(connection,
+                                     connectedMapHeader->mapLayout,
+                                     &template.x,
+                                     &template.y);
+            npcX = template.x + MAP_OFFSET;
+            npcY = template.y + MAP_OFFSET;
+            if (top <= npcY && bottom >= npcY
+             && left <= npcX && right >= npcX
+             && !FlagGet(template.flagId))
+            {
+                TrySpawnObjectEventTemplate(&template,
+                                            connection->mapNum,
+                                            connection->mapGroup,
+                                            cameraX,
+                                            cameraY);
+            }
+        }
+    }
+}
+#endif
+
 void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
 {
     u8 i;
     u8 objectCount;
+    s16 horizontalMargin = GetOverworldHorizontalMarginTiles();
+    s16 left = gSaveBlock1Ptr->pos.x - 2 - horizontalMargin;
+    s16 right = gSaveBlock1Ptr->pos.x + MAP_OFFSET_W + 2 + horizontalMargin;
+    s16 top = gSaveBlock1Ptr->pos.y;
+    s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
 
     if (gMapHeader.events != NULL)
     {
-        s16 left = gSaveBlock1Ptr->pos.x - 2;
-        s16 right = gSaveBlock1Ptr->pos.x + MAP_OFFSET_W + 2;
-        s16 top = gSaveBlock1Ptr->pos.y;
-        s16 bottom = gSaveBlock1Ptr->pos.y + MAP_OFFSET_H + 2;
-
         if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE)
             objectCount = GetNumBattlePyramidObjectEvents();
         else if (InTrainerHill())
@@ -1672,6 +1780,9 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
                 TrySpawnObjectEventTemplate(template, gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup, cameraX, cameraY);
         }
     }
+#if PLATFORM_PC
+    TrySpawnConnectedObjectEvents(cameraX, cameraY, left, right, top, bottom);
+#endif
 }
 
 void RemoveObjectEventsOutsideView(void)
@@ -1698,8 +1809,9 @@ void RemoveObjectEventsOutsideView(void)
 
 static void RemoveObjectEventIfOutsideView(struct ObjectEvent *objectEvent)
 {
-    s16 left =   gSaveBlock1Ptr->pos.x - 2;
-    s16 right =  gSaveBlock1Ptr->pos.x + 17;
+    s16 horizontalMargin = GetOverworldHorizontalMarginTiles();
+    s16 left =   gSaveBlock1Ptr->pos.x - 2 - horizontalMargin;
+    s16 right =  gSaveBlock1Ptr->pos.x + 17 + horizontalMargin;
     s16 top =    gSaveBlock1Ptr->pos.y;
     s16 bottom = gSaveBlock1Ptr->pos.y + 16;
 
@@ -7354,6 +7466,7 @@ static void UpdateObjectEventVisibility(struct ObjectEvent *objectEvent, struct 
 
 static void UpdateObjectEventOffscreen(struct ObjectEvent *objectEvent, struct Sprite *sprite)
 {
+    s16 horizontalMargin = GetOverworldHorizontalMarginPixels();
     u16 x, y;
     u16 x2, y2;
     const struct ObjectEventGraphicsInfo *graphicsInfo;
@@ -7376,7 +7489,8 @@ static void UpdateObjectEventOffscreen(struct ObjectEvent *objectEvent, struct S
     y2 = y;
     y2 += graphicsInfo->height;
 
-    if ((s16)x >= DISPLAY_WIDTH + 16 || (s16)x2 < -16)
+    if ((s16)x >= DISPLAY_WIDTH + horizontalMargin + 16
+     || (s16)x2 < -horizontalMargin - 16)
         objectEvent->offScreen = TRUE;
 
     if ((s16)y >= DISPLAY_HEIGHT + 16 || (s16)y2 < -16)
@@ -8563,6 +8677,7 @@ bool8 SpriteAnimEnded(struct Sprite *sprite)
 
 void UpdateObjectEventSpriteInvisibility(struct Sprite *sprite, bool8 invisible)
 {
+    s16 horizontalMargin = GetOverworldHorizontalMarginPixels();
     u16 x, y;
     s16 x2, y2;
 
@@ -8582,7 +8697,8 @@ void UpdateObjectEventSpriteInvisibility(struct Sprite *sprite, bool8 invisible)
     x2 = x - (sprite->centerToCornerVecX >> 1);
     y2 = y - (sprite->centerToCornerVecY >> 1);
 
-    if ((s16)x >= DISPLAY_WIDTH + 16 || x2 < -16)
+    if ((s16)x >= DISPLAY_WIDTH + horizontalMargin + 16
+     || x2 < -horizontalMargin - 16)
         sprite->invisible = TRUE;
     if ((s16)y >= DISPLAY_HEIGHT + 16 || y2 < -16)
         sprite->invisible = TRUE;

@@ -983,6 +983,7 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback)
 {
     u32 buffer = (__atomic_load_n(&sShared->frameBufferIndex, __ATOMIC_RELAXED) + 1)
                % PC_FRAME_BUFFER_COUNT;
+    u32 frameWidth = DISPLAY_WIDTH;
 #if PLATFORM_ANDROID
     u64 ppuStartNs = GetMonotonicNs();
     u64 ppuCpuStartNs = GetThreadCpuNs();
@@ -992,7 +993,10 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback)
                  : (u32)((ppuStartNs - sAndroidFrameStartNs) / 1000);
 #endif
 
-    PcPpuRender(sShared->pixels[buffer], hblankCallback);
+    if (gMain.callback2 == CB2_Overworld
+     || gMain.callback2 == CB2_OverworldBasic)
+        frameWidth = PcPlatformGetOverworldViewportWidth();
+    PcPpuRender(sShared->pixels[buffer], frameWidth, hblankCallback);
 #if PLATFORM_ANDROID
     now = GetMonotonicNs();
     {
@@ -1050,6 +1054,8 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback)
     }
     sAndroidLastPresentNs = now;
 #endif
+    __atomic_store_n(&sShared->frameWidth, frameWidth, __ATOMIC_RELAXED);
+    __atomic_store_n(&sShared->frameHeight, DISPLAY_HEIGHT, __ATOMIC_RELAXED);
     __atomic_store_n(&sShared->frameBufferIndex, buffer, __ATOMIC_RELEASE);
     __atomic_add_fetch(&sShared->frameSequence, 1, __ATOMIC_RELEASE);
 #if PLATFORM_ANDROID
@@ -1061,6 +1067,20 @@ void PcPlatformPresentFrame(PcInterruptCallback hblankCallback)
             NULL,
             0);
 #endif
+}
+
+u32 PcPlatformGetOverworldViewportWidth(void)
+{
+    u32 width;
+
+    if (sShared == NULL)
+        return DISPLAY_WIDTH;
+    width = __atomic_load_n(&sShared->requestedFrameWidth, __ATOMIC_ACQUIRE);
+    if (width < DISPLAY_WIDTH)
+        width = DISPLAY_WIDTH;
+    if (width > PC_FRAME_MAX_WIDTH)
+        width = PC_FRAME_MAX_WIDTH;
+    return width;
 }
 
 void PcPlatformQueueAudio(const s16 *samples, u32 frameCount)

@@ -144,7 +144,7 @@ target_compile_definitions(pokeemerald_core PRIVATE
     PLATFORM_PC=1 PLATFORM_ANDROID=1 PLATFORM_RELATIVE_POINTERS=1 MODERN=1
 )
 target_compile_options(pokeemerald_core PRIVATE
-    -O2 -g -fcommon -fno-omit-frame-pointer
+    -O2 -g0 -fcommon -fno-omit-frame-pointer
     -Wno-address-of-packed-member -Wno-constant-logical-operand
     -Wno-gnu-alignof-expression -Wno-ignored-attributes
     -Wno-implicit-function-declaration -Wno-incompatible-pointer-types-discards-qualifiers

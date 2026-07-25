@@ -28,9 +28,31 @@ typedef struct SDL_Window SDL_Window;
 typedef struct SDL_Renderer SDL_Renderer;
 typedef struct SDL_Texture SDL_Texture;
 
+typedef struct SDL_Rect
+{
+    int x;
+    int y;
+    int w;
+    int h;
+} SDL_Rect;
+
+typedef struct SDL_WindowEvent
+{
+    Uint32 type;
+    Uint32 timestamp;
+    Uint32 windowID;
+    Uint8 event;
+    Uint8 padding1;
+    Uint8 padding2;
+    Uint8 padding3;
+    Sint32 data1;
+    Sint32 data2;
+} SDL_WindowEvent;
+
 typedef union SDL_Event
 {
     Uint32 type;
+    SDL_WindowEvent window;
     Uint8 padding[56];
 } SDL_Event;
 
@@ -45,6 +67,8 @@ typedef union SDL_Event
 #define SDL_TEXTUREACCESS_STREAMING 1
 #define SDL_PIXELFORMAT_ARGB8888 372645892u
 #define SDL_QUIT 0x100u
+#define SDL_WINDOWEVENT 0x200u
+#define SDL_WINDOWEVENT_SIZE_CHANGED 0x06u
 #define AUDIO_S16LSB 0x8010u
 #define AUDIO_S16SYS AUDIO_S16LSB
 
@@ -76,6 +100,8 @@ int SDL_UpdateTexture(SDL_Texture *texture, const void *rect, const void *pixels
 int SDL_RenderClear(SDL_Renderer *renderer);
 int SDL_RenderCopy(SDL_Renderer *renderer, SDL_Texture *texture, const void *src, const void *dst);
 void SDL_RenderPresent(SDL_Renderer *renderer);
+int SDL_GetRendererOutputSize(SDL_Renderer *renderer, int *w, int *h);
+int SDL_SetRenderDrawColor(SDL_Renderer *renderer, Uint8 r, Uint8 g, Uint8 b, Uint8 a);
 int SDL_RenderSetLogicalSize(SDL_Renderer *renderer, int w, int h);
 int SDL_PollEvent(SDL_Event *event);
 const Uint8 *SDL_GetKeyboardState(int *numkeys);

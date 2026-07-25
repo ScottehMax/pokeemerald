@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "pc_platform.h"
 
-void PcPpuRender(uint32_t *pixels, PcInterruptCallback hblankCallback);
+void PcPpuRender(uint32_t *pixels,
+                 uint32_t width,
+                 PcInterruptCallback hblankCallback);
 
 #endif

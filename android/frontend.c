@@ -34,6 +34,8 @@
 #define CORE_START_RETRY_MS 100u
 #define AUDIO_CALLBACK_FRAMES 512u
 #define AUDIO_TARGET_FRAMES 1024u
+#define AUDIO_CATCHUP_TARGET_FRAMES (AUDIO_TARGET_FRAMES + AUDIO_CALLBACK_FRAMES)
+#define AUDIO_MAX_CATCHUP_FRAMES 4u
 #define AUDIO_PREBUFFER_TIMEOUT_MS 250u
 #define PERFORMANCE_REPORT_HOLD_MS 1500u
 #define MAX_EVENTS_PER_ITERATION 64
@@ -46,10 +48,11 @@
 #define FRONTEND_UPLOAD_BUFFER_COUNT 6
 #define ANDROID_OPENSL_BUFFER_COUNT 3
 #define ANDROID_FRAME_WAIT "futex"
-#define ANDROID_BUILD_REVISION "0.2"
+#define ANDROID_BUILD_REVISION "0.3.1"
 
 static uint64_t sLastAudioCallbackNs;
 static uint64_t sLastAudioUnderrunEventNs;
+static uint32_t sAudioCatchupActive;
 static const char *sTextureUploadBackend = "sdl-subimage";
 static struct PcSharedState *sFrontendSharedState;
 static uint32_t sLifecyclePaused;
@@ -108,7 +111,7 @@ static void InitTextureUploader(struct TextureUploader *uploader)
     {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, uploader->buffers[buffer]);
         glBufferData(GL_PIXEL_UNPACK_BUFFER,
-                     PC_FRAME_WIDTH * PC_FRAME_HEIGHT * (int)sizeof(uint32_t),
+                     PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT * (int)sizeof(uint32_t),
                      NULL,
                      GL_STREAM_DRAW);
     }
@@ -125,22 +128,25 @@ static void InitTextureUploader(struct TextureUploader *uploader)
 
 static int UploadTextureFrame(struct TextureUploader *uploader,
                               SDL_Texture *texture,
-                              const uint32_t *pixels)
+                              const uint32_t *pixels,
+                              uint32_t width,
+                              uint32_t height)
 {
     int result;
+    SDL_Rect area = {0, 0, (int)width, (int)height};
 
     if (!uploader->usePixelBuffers)
         return SDL_UpdateTexture(texture,
-                                 NULL,
+                                 &area,
                                  pixels,
-                                 PC_FRAME_WIDTH * (int)sizeof(uint32_t));
+                                 width * (int)sizeof(uint32_t));
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER,
                  uploader->buffers[uploader->nextBuffer]);
     uploader->nextBuffer =
         (uploader->nextBuffer + 1) % FRONTEND_UPLOAD_BUFFER_COUNT;
     glBufferData(GL_PIXEL_UNPACK_BUFFER,
-                 PC_FRAME_WIDTH * PC_FRAME_HEIGHT * (int)sizeof(uint32_t),
+                 PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT * (int)sizeof(uint32_t),
                  pixels,
                  GL_STREAM_DRAW);
     if (SDL_GL_BindTexture(texture, NULL, NULL) != 0)
@@ -152,8 +158,8 @@ static int UploadTextureFrame(struct TextureUploader *uploader,
                     0,
                     0,
                     0,
-                    PC_FRAME_WIDTH,
-                    PC_FRAME_HEIGHT,
+                    width,
+                    height,
                     GL_RGBA,
                     GL_UNSIGNED_BYTE,
                     NULL);
@@ -235,9 +241,8 @@ static void AudioCallback(void *userdata, Uint8 *stream, int length)
     uint32_t read = __atomic_load_n(&shared->audioRead, __ATOMIC_RELAXED);
     uint32_t write = __atomic_load_n(&shared->audioWrite, __ATOMIC_ACQUIRE);
     uint32_t available = write - read;
+    uint32_t catchup = 0;
     uint32_t count;
-    uint32_t offset;
-    uint32_t first;
 
     __atomic_add_fetch(&performance->audioCallbackCount, 1, __ATOMIC_RELAXED);
     StoreMaximum(&performance->audioMaxQueueFrames, available);
@@ -253,17 +258,77 @@ static void AudioCallback(void *userdata, Uint8 *stream, int length)
     }
     sLastAudioCallbackNs = callbackStartNs;
 
-    count = requested < available ? requested : available;
-    offset = read & (PC_AUDIO_BUFFER_FRAMES - 1);
-    first = count < PC_AUDIO_BUFFER_FRAMES - offset
-          ? count
-          : PC_AUDIO_BUFFER_FRAMES - offset;
+    if (available > AUDIO_CATCHUP_TARGET_FRAMES)
+    {
+        catchup = 1
+                + (available - AUDIO_CATCHUP_TARGET_FRAMES - 1)
+                / AUDIO_CALLBACK_FRAMES;
+        if (catchup > AUDIO_MAX_CATCHUP_FRAMES)
+            catchup = AUDIO_MAX_CATCHUP_FRAMES;
+        if (requested + catchup > available)
+            catchup = available - requested;
+    }
+    count = requested + catchup;
+    if (count > available)
+        count = available;
 
-    memcpy(stream, &shared->audio[offset * 2], first * 2 * sizeof(int16_t));
-    if (count > first)
-        memcpy(stream + first * 2 * sizeof(int16_t),
-               shared->audio,
-               (count - first) * 2 * sizeof(int16_t));
+    if (catchup != 0)
+    {
+        uint32_t outputFrame;
+
+        // Compress a few queued frames across this callback. This keeps the
+        // waveform continuous while the device and game clocks reconverge.
+        for (outputFrame = 0; outputFrame < requested; outputFrame++)
+        {
+            uint64_t position = requested > 1
+                              ? (uint64_t)outputFrame * (count - 1) * 0x10000
+                              / (requested - 1)
+                              : 0;
+            uint32_t sourceFrame = (uint32_t)(position >> 16);
+            uint32_t nextFrame = sourceFrame + 1 < count
+                               ? sourceFrame + 1
+                               : sourceFrame;
+            uint32_t fraction = (uint32_t)position & 0xFFFF;
+            uint32_t channel;
+
+            for (channel = 0; channel < 2; channel++)
+            {
+                int32_t firstSample =
+                    shared->audio[((read + sourceFrame) & (PC_AUDIO_BUFFER_FRAMES - 1)) * 2 + channel];
+                int32_t secondSample =
+                    shared->audio[((read + nextFrame) & (PC_AUDIO_BUFFER_FRAMES - 1)) * 2 + channel];
+                int64_t value = (int64_t)firstSample * (0x10000 - fraction)
+                              + (int64_t)secondSample * fraction;
+
+                ((int16_t *)stream)[outputFrame * 2 + channel] =
+                    (int16_t)(value / 0x10000);
+            }
+        }
+        __atomic_add_fetch(&performance->audioCatchupCallbacks, 1, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&performance->audioCatchupSourceFrames,
+                           catchup,
+                           __ATOMIC_RELAXED);
+        if (!sAudioCatchupActive)
+            RecordPerformanceStall(shared,
+                                   PC_PERFORMANCE_STALL_AUDIO_CATCHUP,
+                                   0,
+                                   available);
+        sAudioCatchupActive = 1;
+    }
+    else
+    {
+        uint32_t offset = read & (PC_AUDIO_BUFFER_FRAMES - 1);
+        uint32_t first = count < PC_AUDIO_BUFFER_FRAMES - offset
+                       ? count
+                       : PC_AUDIO_BUFFER_FRAMES - offset;
+
+        memcpy(stream, &shared->audio[offset * 2], first * 2 * sizeof(int16_t));
+        if (count > first)
+            memcpy(stream + first * 2 * sizeof(int16_t),
+                   shared->audio,
+                   (count - first) * 2 * sizeof(int16_t));
+        sAudioCatchupActive = 0;
+    }
     if (count < requested)
     {
         uint32_t missing = requested - count;
@@ -298,6 +363,7 @@ static void DiscardQueuedAudio(struct PcSharedState *shared)
     __atomic_store_n(&shared->audioRead, write, __ATOMIC_RELEASE);
     sLastAudioCallbackNs = 0;
     sLastAudioUnderrunEventNs = 0;
+    sAudioCatchupActive = 0;
 }
 
 static void ResumeAudioWhenBuffered(struct PcSharedState *shared, SDL_AudioDeviceID audioDevice)
@@ -424,7 +490,7 @@ static int WritePerformanceReport(const char *path,
         return -1;
     fprintf(file,
             "pokeemerald-pc performance report\n"
-            "format: 18\n"
+            "format: 19\n"
             "build: " ANDROID_BUILD_REVISION "\n"
             "shared_abi: %u\n"
             "audio_driver: %s\n"
@@ -463,7 +529,7 @@ static int WritePerformanceReport(const char *path,
             "audio_callbacks: %u\n"
             "audio_queue_frames: %u (max %u)\n"
             "audio_underruns: %u callbacks, %u frames\n"
-            "audio_backlog_drops: %u callbacks, %u frames\n"
+            "audio_catchups: %u callbacks, %u source frames\n"
             "map: %d.%d position=%d,%d\n"
             "main_callback_2: 0x%08x\n"
             "frame_phase: %u render_scanline=%u render_stage=%u\n",
@@ -535,8 +601,8 @@ static int WritePerformanceReport(const char *path,
             __atomic_load_n(&performance->audioMaxQueueFrames, __ATOMIC_RELAXED),
             __atomic_load_n(&performance->audioUnderrunCallbacks, __ATOMIC_RELAXED),
             __atomic_load_n(&performance->audioUnderrunFrames, __ATOMIC_RELAXED),
-            __atomic_load_n(&performance->audioBacklogDrops, __ATOMIC_RELAXED),
-            __atomic_load_n(&performance->audioBacklogFramesDropped, __ATOMIC_RELAXED),
+            __atomic_load_n(&performance->audioCatchupCallbacks, __ATOMIC_RELAXED),
+            __atomic_load_n(&performance->audioCatchupSourceFrames, __ATOMIC_RELAXED),
             shared->diagnostics.mapGroup,
             shared->diagnostics.mapNum,
             shared->diagnostics.mapX,
@@ -577,8 +643,8 @@ static int WritePerformanceReport(const char *path,
         case PC_PERFORMANCE_STALL_AUDIO_UNDERRUN:
             name = "audio_underrun";
             break;
-        case PC_PERFORMANCE_STALL_AUDIO_BACKLOG_DROP:
-            name = "audio_backlog_drop";
+        case PC_PERFORMANCE_STALL_AUDIO_CATCHUP:
+            name = "audio_catchup";
             break;
         case PC_PERFORMANCE_STALL_FRONTEND_LOOP_GAP:
             name = "frontend_loop_gap";
@@ -669,6 +735,9 @@ static void ResetSharedState(struct PcSharedState *shared,
     memset(shared, 0, sizeof(*shared));
     shared->magic = PC_SHARED_MAGIC;
     shared->version = PC_SHARED_VERSION;
+    shared->requestedFrameWidth = PC_FRAME_WIDTH;
+    shared->frameWidth = PC_FRAME_WIDTH;
+    shared->frameHeight = PC_FRAME_HEIGHT;
     shared->resumeMainMenu = (uint32_t)resumeMainMenu;
     snprintf(shared->defaultSavePath, sizeof(shared->defaultSavePath), "%s", defaultSavePath);
     snprintf(shared->savePath, sizeof(shared->savePath), "%s", savePath);
@@ -706,6 +775,28 @@ static uint32_t ReadKeyboard(void)
     if (keyboard[SDL_SCANCODE_S]) keys |= R_BUTTON;
     if (keyboard[SDL_SCANCODE_A]) keys |= L_BUTTON;
     return keys;
+}
+
+static void UpdateRequestedFrameWidth(struct PcSharedState *shared,
+                                      SDL_Renderer *renderer)
+{
+    int outputWidth;
+    int outputHeight;
+    uint32_t width = PC_FRAME_WIDTH;
+
+    if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0
+     && outputWidth > 0
+     && outputHeight > 0)
+    {
+        width = (uint32_t)((uint64_t)outputWidth * PC_FRAME_HEIGHT
+                         / (uint32_t)outputHeight);
+        if (width < PC_FRAME_WIDTH)
+            width = PC_FRAME_WIDTH;
+        if (width > PC_FRAME_MAX_WIDTH)
+            width = PC_FRAME_MAX_WIDTH;
+        width -= (width - PC_FRAME_WIDTH) & 1;
+    }
+    __atomic_store_n(&shared->requestedFrameWidth, width, __ATOMIC_RELEASE);
 }
 
 static uint32_t ReadController(SDL_GameController *controller)
@@ -820,7 +911,11 @@ static void DrawControls(SDL_Renderer *renderer, int width, int height, uint32_t
              keys & R_BUTTON ? pressed : idle);
 }
 
-static int CopyStableFrame(const struct PcSharedState *shared, uint32_t *pixels, uint32_t *frame)
+static int CopyStableFrame(const struct PcSharedState *shared,
+                           uint32_t *pixels,
+                           uint32_t *frame,
+                           uint32_t *width,
+                           uint32_t *height)
 {
     uint32_t before;
     uint32_t after;
@@ -832,7 +927,15 @@ static int CopyStableFrame(const struct PcSharedState *shared, uint32_t *pixels,
         buffer = __atomic_load_n(&shared->frameBufferIndex, __ATOMIC_ACQUIRE);
         if (buffer >= PC_FRAME_BUFFER_COUNT)
             return -1;
-        memcpy(pixels, shared->pixels[buffer], sizeof(shared->pixels[buffer]));
+        *width = __atomic_load_n(&shared->frameWidth, __ATOMIC_RELAXED);
+        *height = __atomic_load_n(&shared->frameHeight, __ATOMIC_RELAXED);
+        if (*width < PC_FRAME_WIDTH
+         || *width > PC_FRAME_MAX_WIDTH
+         || *height != PC_FRAME_HEIGHT)
+            return -1;
+        memcpy(pixels,
+               shared->pixels[buffer],
+               *width * *height * sizeof(*pixels));
         after = __atomic_load_n(&shared->frameSequence, __ATOMIC_ACQUIRE);
     } while (before != after);
     *frame = after;
@@ -849,8 +952,10 @@ int main(int argc, char **argv)
     char sharedPath[PC_PATH_MAX];
     char performancePath[PC_PATH_MAX];
     struct PcSharedState *shared = MAP_FAILED;
-    uint32_t pixels[PC_FRAME_WIDTH * PC_FRAME_HEIGHT] = {0};
+    uint32_t pixels[PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT] = {0};
     uint32_t lastFrame = UINT32_MAX;
+    uint32_t frameWidth = PC_FRAME_WIDTH;
+    uint32_t frameHeight = PC_FRAME_HEIGHT;
     uint32_t touchKeys = 0;
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
@@ -933,6 +1038,7 @@ int main(int argc, char **argv)
     if (renderer == NULL)
         goto cleanup;
     CallActivityMethod("configureGameSurface", NULL);
+    UpdateRequestedFrameWidth(shared, renderer);
     InitTextureUploader(&textureUploader);
     {
         int texture;
@@ -942,13 +1048,15 @@ int main(int argc, char **argv)
             textures[texture] = SDL_CreateTexture(renderer,
                                                   SDL_PIXELFORMAT_ARGB8888,
                                                   SDL_TEXTUREACCESS_STATIC,
-                                                  PC_FRAME_WIDTH,
+                                                  PC_FRAME_MAX_WIDTH,
                                                   PC_FRAME_HEIGHT);
             if (textures[texture] == NULL)
                 goto cleanup;
             if (UploadTextureFrame(&textureUploader,
                                    textures[texture],
-                                   pixels) != 0)
+                                   pixels,
+                                   PC_FRAME_MAX_WIDTH,
+                                   PC_FRAME_HEIGHT) != 0)
                 goto cleanup;
         }
         if (textureUploader.usePixelBuffers
@@ -1046,12 +1154,16 @@ int main(int argc, char **argv)
                 lastLoopStartNs = 0;
                 lastWaitUs = 0;
                 CallActivityMethod("configureGameSurface", NULL);
+                UpdateRequestedFrameWidth(shared, renderer);
                 redraw = 1;
             }
             else if (event.type == SDL_WINDOWEVENT
                   && (event.window.event == SDL_WINDOWEVENT_EXPOSED
                    || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED))
+            {
+                UpdateRequestedFrameWidth(shared, renderer);
                 redraw = 1;
+            }
             else if (event.type == SDL_FINGERDOWN
                   || event.type == SDL_FINGERMOTION
                   || event.type == SDL_FINGERUP)
@@ -1115,7 +1227,11 @@ int main(int argc, char **argv)
         {
             uint64_t copyStartNs = GetMonotonicNs();
 
-            if (CopyStableFrame(shared, pixels, &frame) == 0)
+            if (CopyStableFrame(shared,
+                                pixels,
+                                &frame,
+                                &frameWidth,
+                                &frameHeight) == 0)
             {
                 uint32_t copyUs;
 
@@ -1192,7 +1308,9 @@ int main(int argc, char **argv)
 
                     if (UploadTextureFrame(&textureUploader,
                                            textures[nextTexture],
-                                           pixels) != 0)
+                                           pixels,
+                                           frameWidth,
+                                           frameHeight) != 0)
                     {
                         running = 0;
                         continue;
@@ -1226,6 +1344,7 @@ int main(int argc, char **argv)
             int height;
             int gameWidth;
             int gameHeight;
+            SDL_Rect source;
             SDL_Rect destination;
             uint64_t presentStartNs = GetMonotonicNs();
             uint64_t presentCpuStartNs = GetThreadCpuNs();
@@ -1234,19 +1353,26 @@ int main(int argc, char **argv)
 
             SDL_GetRendererOutputSize(renderer, &width, &height);
             gameHeight = height;
-            gameWidth = gameHeight * PC_FRAME_WIDTH / PC_FRAME_HEIGHT;
+            gameWidth = gameHeight * (int)frameWidth / (int)frameHeight;
             if (gameWidth > width)
             {
                 gameWidth = width;
-                gameHeight = width * PC_FRAME_HEIGHT / PC_FRAME_WIDTH;
+                gameHeight = width * (int)frameHeight / (int)frameWidth;
             }
+            source.x = 0;
+            source.y = 0;
+            source.w = frameWidth;
+            source.h = frameHeight;
             destination.x = (width - gameWidth) / 2;
             destination.y = (height - gameHeight) / 2;
             destination.w = gameWidth;
             destination.h = gameHeight;
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL_RenderClear(renderer);
-            SDL_RenderCopy(renderer, textures[textureIndex], NULL, &destination);
+            SDL_RenderCopy(renderer,
+                           textures[textureIndex],
+                           &source,
+                           &destination);
             DrawControls(renderer, width, height, keys);
             SDL_RenderPresent(renderer);
             presentUs = (uint32_t)((GetMonotonicNs() - presentStartNs) / 1000);
@@ -1327,6 +1453,7 @@ int main(int argc, char **argv)
                 PcProfileRememberBySavePath(defaultSavePath, savePath);
             }
             ResetSharedState(shared, defaultSavePath, savePath, storagePath, resumeMainMenu, audioDevice);
+            UpdateRequestedFrameWidth(shared, renderer);
             suppressKeys = 1;
             lastFrame = UINT32_MAX;
             lastFrameObservedNs = 0;

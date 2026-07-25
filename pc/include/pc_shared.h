@@ -4,8 +4,9 @@
 #include <stdint.h>
 
 #define PC_SHARED_MAGIC 0x50454D45u
-#define PC_SHARED_VERSION 8u
+#define PC_SHARED_VERSION 9u
 #define PC_FRAME_WIDTH 240
+#define PC_FRAME_MAX_WIDTH 400
 #define PC_FRAME_HEIGHT 160
 #define PC_FRAME_BUFFER_COUNT 3
 #define PC_PATH_MAX 1024
@@ -123,7 +124,7 @@ enum PcPerformanceStallKind
     PC_PERFORMANCE_STALL_NONE,
     PC_PERFORMANCE_STALL_AUDIO_CALLBACK_GAP,
     PC_PERFORMANCE_STALL_AUDIO_UNDERRUN,
-    PC_PERFORMANCE_STALL_AUDIO_BACKLOG_DROP,
+    PC_PERFORMANCE_STALL_AUDIO_CATCHUP,
     PC_PERFORMANCE_STALL_FRONTEND_LOOP_GAP,
     PC_PERFORMANCE_STALL_FRONTEND_EVENTS,
     PC_PERFORMANCE_STALL_FRONTEND_TOUCH,
@@ -178,8 +179,8 @@ struct PcPerformanceState
     uint32_t audioMaxQueueFrames;
     uint32_t audioUnderrunCallbacks;
     uint32_t audioUnderrunFrames;
-    uint32_t audioBacklogDrops;
-    uint32_t audioBacklogFramesDropped;
+    uint32_t audioCatchupCallbacks;
+    uint32_t audioCatchupSourceFrames;
     uint32_t frontendLoopGapUs;
     uint32_t frontendMaxLoopGapUs;
     uint32_t frontendEventUs;
@@ -244,6 +245,9 @@ struct PcSharedState
     uint32_t keys;
     uint32_t frameSequence;
     uint32_t frameBufferIndex;
+    uint32_t requestedFrameWidth;
+    uint32_t frameWidth;
+    uint32_t frameHeight;
     uint32_t coreReady;
     uint32_t coreError;
     uint32_t coreExited;
@@ -268,7 +272,7 @@ struct PcSharedState
     struct PcDiagnosticState diagnostics;
     struct PcCrashRecord crash;
     int16_t audio[PC_AUDIO_BUFFER_FRAMES * 2];
-    uint32_t pixels[PC_FRAME_BUFFER_COUNT][PC_FRAME_WIDTH * PC_FRAME_HEIGHT];
+    uint32_t pixels[PC_FRAME_BUFFER_COUNT][PC_FRAME_MAX_WIDTH * PC_FRAME_HEIGHT];
 };
 
 #endif

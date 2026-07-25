@@ -2,7 +2,11 @@
 #define GUARD_SPRITE_H
 
 #define OAM_MATRIX_COUNT 32
+#if PLATFORM_PC
+#define MAX_SPRITES 96
+#else
 #define MAX_SPRITES 64
+#endif
 #define SPRITE_NONE 0xFF
 #define TAG_NONE 0xFFFF
 
