@@ -4,6 +4,7 @@
 #include "constants/rgb.h"
 #if PLATFORM_PC
 #include "pc_profile_menu.h"
+#include "pc_touch.h"
 #endif
 #include "constants/songs.h"
 #include "constants/trainers.h"
@@ -189,6 +190,9 @@ static void Task_WaitForBatteryDryErrorWindow(u8);
 static void MainMenu_FormatSavegameText(void);
 static void HighlightSelectedMainMenuItem(u8, u8, s16);
 static void Task_HandleMainMenuInput(u8);
+#if PLATFORM_PC
+static s16 GetTouchedMainMenuItem(u8 menuType, u8 itemCount);
+#endif
 static void Task_HandleMainMenuAPressed(u8);
 static void Task_HandleMainMenuBPressed(u8);
 static void Task_NewGameBirchSpeech_Init(u8);
@@ -1006,6 +1010,18 @@ static bool8 HandleMainMenuInput(u8 taskId)
 {
     s16 *data = gTasks[taskId].data;
 
+#if PLATFORM_PC
+    {
+        s16 touchedItem = GetTouchedMainMenuItem(tMenuType, tItemCount);
+
+        if (touchedItem >= 0)
+        {
+            tCurrItem = touchedItem;
+            sCurrItemAndOptionMenuCheck = touchedItem;
+            gMain.newKeys |= A_BUTTON;
+        }
+    }
+#endif
     if (JOY_NEW(A_BUTTON))
     {
         PlaySE(SE_SELECT);
@@ -1071,6 +1087,44 @@ static bool8 HandleMainMenuInput(u8 taskId)
     }
     return FALSE;
 }
+
+#if PLATFORM_PC
+static s16 GetTouchedMainMenuItem(u8 menuType, u8 itemCount)
+{
+    s32 x;
+    s32 y;
+    s32 bgY;
+    u8 item;
+
+    if (!PcTouchConsumeTap(&x, &y))
+        return -1;
+    bgY = GetBgY(0) >> 8;
+    for (item = 0; item < itemCount; item++)
+    {
+        const struct WindowTemplate *window;
+        u8 windowId;
+        s32 left;
+        s32 top;
+        s32 right;
+        s32 bottom;
+
+        if (menuType == HAS_NO_SAVED_GAME)
+            windowId = item == 2 ? 3 : item;
+        else if (menuType == HAS_MYSTERY_EVENTS && item == 5)
+            windowId = 8;
+        else
+            windowId = item + 2;
+        window = &sWindowTemplates_MainMenu[windowId];
+        left = (window->tilemapLeft - 1) * 8;
+        top = (window->tilemapTop - 1) * 8 - bgY;
+        right = (window->tilemapLeft + window->width + 1) * 8;
+        bottom = (window->tilemapTop + window->height + 1) * 8 - bgY;
+        if (x >= left && x < right && y >= top && y < bottom)
+            return item;
+    }
+    return -1;
+}
+#endif
 
 static void Task_HandleMainMenuInput(u8 taskId)
 {

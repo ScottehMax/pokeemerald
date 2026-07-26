@@ -12,6 +12,9 @@
 #include "strings.h"
 #include "sound.h"
 #include "constants/songs.h"
+#if PLATFORM_PC
+#include "pc_touch.h"
+#endif
 
 // GF cast Task data to ListMenu in many places, which effectively puts
 // an upper bound on sizeof(struct ListMenu).
@@ -60,6 +63,7 @@ static u8 ListMenuInitInternal(struct ListMenuTemplate *listMenuTemplate, u16 sc
 static bool8 ListMenuChangeSelection(struct ListMenu *list, bool8 updateCursorAndCallCallback, u8 count, bool8 movingDown);
 static void ListMenuPrintEntries(struct ListMenu *list, u16 startIndex, u16 yOffset, u16 count);
 static void ListMenuDrawCursor(struct ListMenu *list);
+static void ListMenuErasePrintedCursor(struct ListMenu *list, u16 selectedRow);
 static void ListMenuCallSelectionChangedCallback(struct ListMenu *list, u8 onInit);
 static u8 ListMenuAddCursorObject(struct ListMenu *list, u32 cursorObjId);
 static void Task_ScrollIndicatorArrowPair(u8 taskId);
@@ -74,6 +78,9 @@ static void ListMenuUpdateCursorObject(u8 taskId, u16 x, u16 y, u32 cursorObjId)
 static void ListMenuRemoveCursorObject(u8 taskId, u32 cursorObjId);
 static void SpriteCallback_ScrollIndicatorArrow(struct Sprite *sprite);
 static void SpriteCallback_RedArrowCursor(struct Sprite *sprite);
+#if PLATFORM_PC
+static s32 ListMenuProcessTouchInput(struct ListMenu *list);
+#endif
 
 // EWRAM vars
 static EWRAM_DATA struct {
@@ -401,6 +408,12 @@ s32 ListMenu_ProcessInput(u8 listTaskId)
 {
     struct ListMenu *list = GET_LIST_MENU(listTaskId);
 
+#if PLATFORM_PC
+    s32 touchResult = ListMenuProcessTouchInput(list);
+
+    if (touchResult != LIST_NOTHING_CHOSEN)
+        return touchResult;
+#endif
     if (JOY_NEW(A_BUTTON))
     {
         return list->template.items[list->scrollOffset + list->selectedRow].id;
@@ -457,6 +470,49 @@ s32 ListMenu_ProcessInput(u8 listTaskId)
         }
     }
 }
+
+#if PLATFORM_PC
+static s32 ListMenuProcessTouchInput(struct ListMenu *list)
+{
+    s32 x;
+    s32 y;
+    s32 windowLeft;
+    s32 windowTop;
+    s32 windowWidth;
+    s32 rowHeight;
+    s32 row;
+    s32 itemIndex;
+
+    if (!PcTouchConsumeTap(&x, &y))
+        return LIST_NOTHING_CHOSEN;
+    windowLeft = GetWindowAttribute(list->template.windowId,
+                                    WINDOW_TILEMAP_LEFT) * 8;
+    windowTop = GetWindowAttribute(list->template.windowId,
+                                   WINDOW_TILEMAP_TOP) * 8;
+    windowWidth = GetWindowAttribute(list->template.windowId, WINDOW_WIDTH) * 8;
+    rowHeight = GetFontAttribute(list->template.fontId,
+                                 FONTATTR_MAX_LETTER_HEIGHT)
+              + list->template.itemVerticalPadding;
+    if (x < windowLeft || x >= windowLeft + windowWidth
+     || y < windowTop + list->template.upText_Y)
+        return LIST_NOTHING_CHOSEN;
+    row = (y - windowTop - list->template.upText_Y) / rowHeight;
+    if (row < 0 || row >= list->template.maxShowed)
+        return LIST_NOTHING_CHOSEN;
+    itemIndex = list->scrollOffset + row;
+    if (itemIndex >= list->template.totalItems
+     || list->template.items[itemIndex].id == LIST_HEADER)
+        return LIST_NOTHING_CHOSEN;
+    if (row != list->selectedRow)
+    {
+        ListMenuErasePrintedCursor(list, list->selectedRow);
+        list->selectedRow = row;
+        ListMenuDrawCursor(list);
+        CopyWindowToVram(list->template.windowId, COPYWIN_GFX);
+    }
+    return list->template.items[itemIndex].id;
+}
+#endif
 
 void DestroyListMenuTask(u8 listTaskId, u16 *scrollOffset, u16 *selectedRow)
 {

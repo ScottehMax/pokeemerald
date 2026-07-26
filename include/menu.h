@@ -69,6 +69,9 @@ u8 InitMenuInUpperLeftCornerNormal(u8 windowId, u8 itemCount, u8 initialCursorPo
 u8 Menu_GetCursorPos(void);
 s8 Menu_ProcessInput(void);
 s8 Menu_ProcessInputNoWrap(void);
+#if PLATFORM_PC
+s8 Menu_ProcessTouchInput(void);
+#endif
 void BlitMenuInfoIcon(u8 windowId, u8 iconId, u16 x, u16 y);
 void ResetTempTileDataBuffers(void);
 void *DecompressAndCopyTileDataToVram(u8 bgId, const void *src, u32 size, u16 offset, u8 mode);

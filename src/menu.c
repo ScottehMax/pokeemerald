@@ -19,6 +19,9 @@
 #include "text_window.h"
 #include "window.h"
 #include "constants/songs.h"
+#if PLATFORM_PC
+#include "pc_touch.h"
+#endif
 
 #define DLG_WINDOW_PALETTE_NUM 15
 #define DLG_WINDOW_BASE_TILE_NUM 0x200
@@ -59,6 +62,10 @@ static void WindowFunc_ClearDialogWindowAndFrameNullPalette(u8, u8, u8, u8, u8, 
 static void WindowFunc_DrawStdFrameWithCustomTileAndPalette(u8, u8, u8, u8, u8, u8);
 static void WindowFunc_ClearStdWindowAndFrameToTransparent(u8, u8, u8, u8, u8, u8);
 static void task_free_buf_after_copying_tile_data_to_vram(u8 taskId);
+#if PLATFORM_PC
+static s8 ProcessTouchMenuInput(bool32 isGrid);
+static void MoveMenuGridCursor(u8 oldCursorPos, u8 newCursorPos);
+#endif
 
 static EWRAM_DATA u8 sStartMenuWindowId = 0;
 static EWRAM_DATA u8 sMapNamePopupWindowId = 0;
@@ -982,8 +989,81 @@ u8 Menu_GetCursorPos(void)
     return sMenu.cursorPos;
 }
 
+#if PLATFORM_PC
+static s8 ProcessTouchMenuInput(bool32 isGrid)
+{
+    s32 x;
+    s32 y;
+    s32 windowLeft;
+    s32 windowTop;
+    s32 windowWidth;
+    s32 item;
+
+    if (!PcTouchConsumeTap(&x, &y))
+        return MENU_NOTHING_CHOSEN;
+    windowLeft = GetWindowAttribute(sMenu.windowId, WINDOW_TILEMAP_LEFT) * 8;
+    windowTop = GetWindowAttribute(sMenu.windowId, WINDOW_TILEMAP_TOP) * 8;
+    windowWidth = GetWindowAttribute(sMenu.windowId, WINDOW_WIDTH) * 8;
+    if (x < windowLeft || x >= windowLeft + windowWidth)
+        return MENU_NOTHING_CHOSEN;
+
+    if (isGrid)
+    {
+        s32 localX = x - windowLeft - sMenu.left;
+        s32 localY = y - windowTop - sMenu.top;
+        s32 column;
+        s32 row;
+
+        if (localX < 0 || localY < 0
+         || localX >= sMenu.optionWidth * sMenu.columns
+         || localY >= sMenu.optionHeight * sMenu.rows)
+            return MENU_NOTHING_CHOSEN;
+        column = localX / sMenu.optionWidth;
+        row = localY / sMenu.optionHeight;
+        item = row * sMenu.columns + column;
+    }
+    else
+    {
+        s32 localY = y - windowTop - sMenu.top;
+
+        if (localY < 0
+         || localY >= sMenu.optionHeight * (sMenu.maxCursorPos + 1))
+            return MENU_NOTHING_CHOSEN;
+        item = localY / sMenu.optionHeight;
+    }
+    if (item < sMenu.minCursorPos || item > sMenu.maxCursorPos)
+        return MENU_NOTHING_CHOSEN;
+    if (item != sMenu.cursorPos)
+    {
+        if (isGrid)
+        {
+            MoveMenuGridCursor(sMenu.cursorPos, item);
+            sMenu.cursorPos = item;
+        }
+        else
+        {
+            Menu_MoveCursorNoWrapAround(item - sMenu.cursorPos);
+        }
+    }
+    if (isGrid || !sMenu.APressMuted)
+        PlaySE(SE_SELECT);
+    return sMenu.cursorPos;
+}
+
+s8 Menu_ProcessTouchInput(void)
+{
+    return ProcessTouchMenuInput(FALSE);
+}
+#endif
+
 s8 Menu_ProcessInput(void)
 {
+#if PLATFORM_PC
+    s8 touchResult = ProcessTouchMenuInput(FALSE);
+
+    if (touchResult != MENU_NOTHING_CHOSEN)
+        return touchResult;
+#endif
     if (JOY_NEW(A_BUTTON))
     {
         if (!sMenu.APressMuted)
@@ -1014,6 +1094,12 @@ s8 Menu_ProcessInputNoWrap(void)
 {
     u8 oldPos = sMenu.cursorPos;
 
+#if PLATFORM_PC
+    s8 touchResult = ProcessTouchMenuInput(FALSE);
+
+    if (touchResult != MENU_NOTHING_CHOSEN)
+        return touchResult;
+#endif
     if (JOY_NEW(A_BUTTON))
     {
         if (!sMenu.APressMuted)
@@ -1042,6 +1128,12 @@ s8 Menu_ProcessInputNoWrap(void)
 
 s8 ProcessMenuInput_other(void)
 {
+#if PLATFORM_PC
+    s8 touchResult = ProcessTouchMenuInput(FALSE);
+
+    if (touchResult != MENU_NOTHING_CHOSEN)
+        return touchResult;
+#endif
     if (JOY_NEW(A_BUTTON))
     {
         if (!sMenu.APressMuted)
@@ -1072,6 +1164,12 @@ s8 Menu_ProcessInputNoWrapAround_other(void)
 {
     u8 oldPos = sMenu.cursorPos;
 
+#if PLATFORM_PC
+    s8 touchResult = ProcessTouchMenuInput(FALSE);
+
+    if (touchResult != MENU_NOTHING_CHOSEN)
+        return touchResult;
+#endif
     if (JOY_NEW(A_BUTTON))
     {
         if (!sMenu.APressMuted)
@@ -1437,6 +1535,12 @@ s8 Menu_ProcessGridInput(void)
 {
     u8 oldPos = sMenu.cursorPos;
 
+#if PLATFORM_PC
+    s8 touchResult = ProcessTouchMenuInput(TRUE);
+
+    if (touchResult != MENU_NOTHING_CHOSEN)
+        return touchResult;
+#endif
     if (JOY_NEW(A_BUTTON))
     {
         PlaySE(SE_SELECT);

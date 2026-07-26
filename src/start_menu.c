@@ -592,6 +592,17 @@ void ShowStartMenu(void)
 
 static bool8 HandleStartMenuInput(void)
 {
+#if PLATFORM_PC
+    bool8 touchActivated = FALSE;
+    s8 touchedItem = Menu_ProcessTouchInput();
+
+    if (touchedItem >= 0)
+    {
+        sStartMenuCursorPos = touchedItem;
+        touchActivated = TRUE;
+        gMain.newKeys |= A_BUTTON;
+    }
+#endif
     if (JOY_NEW(DPAD_UP))
     {
         PlaySE(SE_SELECT);
@@ -606,6 +617,9 @@ static bool8 HandleStartMenuInput(void)
 
     if (JOY_NEW(A_BUTTON))
     {
+#if PLATFORM_PC
+        if (!touchActivated)
+#endif
         PlaySE(SE_SELECT);
         if (sStartMenuItems[sCurrentStartMenuActions[sStartMenuCursorPos]].func.u8_void == StartMenuPokedexCallback)
         {

@@ -50,6 +50,8 @@ static s8 sTouchMapGroup;
 static s8 sTouchMapNum;
 static bool8 sTouchNavigationActive;
 static bool8 sTouchInteractionPending;
+static bool8 sTouchTapPending;
+static struct PcTouchEvent sTouchTap;
 
 static const s8 sTouchDirectionX[] = {0, 0, 0, -1, 1};
 static const s8 sTouchDirectionY[] = {0, 1, -1, 0, 0};
@@ -500,6 +502,7 @@ u16 PcTouchGetKeys(u16 physicalKeys)
     struct PcTouchEvent event;
     u16 keys = 0;
 
+    sTouchTapPending = FALSE;
     if (physicalKeys != 0)
         CancelNavigation();
     while (PcPlatformPopTouchEvent(&event))
@@ -514,7 +517,15 @@ u16 PcTouchGetKeys(u16 physicalKeys)
           && gMain.callback1 == CB1_Overworld
           && ArePlayerFieldControlsLocked()))
         {
+            sTouchTap = event;
+            sTouchTapPending = TRUE;
             CancelNavigation();
+            keys |= A_BUTTON;
+        }
+        else if (!PcPlatformIsOverworldViewportActive())
+        {
+            sTouchTap = event;
+            sTouchTapPending = TRUE;
             keys |= A_BUTTON;
         }
         else
@@ -525,4 +536,21 @@ u16 PcTouchGetKeys(u16 physicalKeys)
     if (physicalKeys == 0 && keys == 0)
         keys |= UpdateNavigation();
     return keys;
+}
+
+bool32 PcTouchConsumeTap(s32 *x, s32 *y)
+{
+    if (!sTouchTapPending || x == NULL || y == NULL)
+        return FALSE;
+    *x = sTouchTap.x - ((s32)sTouchTap.frameWidth - DISPLAY_WIDTH) / 2;
+    *y = sTouchTap.y - ((s32)sTouchTap.frameHeight - DISPLAY_HEIGHT) / 2;
+    sTouchTapPending = FALSE;
+    // A is the fallback for screens without semantic touch handling. Once a
+    // screen consumes the tap, only its hit-test result should activate UI.
+    gMain.heldKeysRaw &= ~A_BUTTON;
+    gMain.newKeysRaw &= ~A_BUTTON;
+    gMain.heldKeys &= ~A_BUTTON;
+    gMain.newKeys &= ~A_BUTTON;
+    gMain.newAndRepeatedKeys &= ~A_BUTTON;
+    return TRUE;
 }
