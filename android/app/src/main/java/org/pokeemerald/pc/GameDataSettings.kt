@@ -10,7 +10,8 @@ private const val ACTIVE_EXTERNAL_KEY = "active_external"
 private const val EXTERNAL_DIRECTORY_NAME = "Pokemon Emerald"
 
 object GameDataSettings {
-    private val gameDataEntries = arrayOf("pokeemerald.sav", "storage", "profiles")
+    private val gameDataEntries =
+        arrayOf("pokeemerald.sav", "storage", "profiles", ".last-profile")
 
     @JvmStatic
     fun prepare(context: Context): File {
@@ -23,8 +24,10 @@ object GameDataSettings {
         if (requestedDirectory == null || requestedExternal == activeExternal)
             return activeDirectory
         return try {
-            mirrorGameData(activeDirectory, requestedDirectory)
-            preferences.edit().putBoolean(ACTIVE_EXTERNAL_KEY, requestedExternal).commit()
+            replaceGameData(activeDirectory, requestedDirectory)
+            if (!preferences.edit().putBoolean(ACTIVE_EXTERNAL_KEY, requestedExternal).commit())
+                throw IOException("Could not save the active game-data location")
+            removeGameData(activeDirectory)
             requestedDirectory
         } catch (_: IOException) {
             activeDirectory
@@ -56,36 +59,13 @@ object GameDataSettings {
     }
 
     private fun activeDirectory(context: Context, external: Boolean): File {
-        if (!external)
-            return context.filesDir
-        val current = directory(context, true) ?: return context.filesDir
-        val legacy = legacyExternalDirectory(context)
+        val current = directory(context, external) ?: return context.filesDir
 
-        if (legacy != null && !containsGameData(current) && containsGameData(legacy)) {
-            return try {
-                mirrorGameData(legacy, current)
-                current
-            } catch (_: IOException) {
-                legacy
-            }
-        }
-        return if (current.isDirectory || current.mkdirs()) current else context.filesDir
+        return if (!external || current.isDirectory || current.mkdirs()) current else context.filesDir
     }
-
-    private fun legacyExternalDirectory(context: Context): File? {
-        val externalFiles = context.getExternalFilesDir(null) ?: return null
-        val androidDirectory = externalFiles.parentFile?.parentFile?.parentFile ?: return null
-
-        if (androidDirectory.name != "Android")
-            return null
-        return File(androidDirectory, "media/${context.packageName}/$EXTERNAL_DIRECTORY_NAME")
-    }
-
-    private fun containsGameData(root: File): Boolean =
-        gameDataEntries.any { File(root, it).exists() }
 
     @Throws(IOException::class)
-    internal fun mirrorGameData(sourceRoot: File, destinationRoot: File) {
+    internal fun replaceGameData(sourceRoot: File, destinationRoot: File) {
         if (sourceRoot.canonicalFile == destinationRoot.canonicalFile)
             return
         if (!destinationRoot.isDirectory && !destinationRoot.mkdirs())
@@ -95,7 +75,7 @@ object GameDataSettings {
         try {
             gameDataEntries.forEachIndexed { index, name ->
                 val source = File(sourceRoot, name)
-                val stage = File(destinationRoot, ".pokeemerald-migrate-$index")
+                val stage = File(destinationRoot, ".pokeemerald-stage-$index")
 
                 stage.deleteRecursively()
                 if (source.exists()) {
@@ -111,8 +91,13 @@ object GameDataSettings {
             }
         } finally {
             gameDataEntries.indices.forEach {
-                File(destinationRoot, ".pokeemerald-migrate-$it").deleteRecursively()
+                File(destinationRoot, ".pokeemerald-stage-$it").deleteRecursively()
             }
         }
+    }
+
+    internal fun removeGameData(sourceRoot: File) {
+        gameDataEntries.forEach { File(sourceRoot, it).deleteRecursively() }
+        sourceRoot.delete()
     }
 }

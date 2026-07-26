@@ -48,7 +48,7 @@
 #define FRONTEND_UPLOAD_BUFFER_COUNT 6
 #define ANDROID_OPENSL_BUFFER_COUNT 3
 #define ANDROID_FRAME_WAIT "futex"
-#define ANDROID_BUILD_REVISION "0.3.5"
+#define ANDROID_BUILD_REVISION "0.3.8"
 
 static uint64_t sLastAudioCallbackNs;
 static uint64_t sLastAudioUnderrunEventNs;
