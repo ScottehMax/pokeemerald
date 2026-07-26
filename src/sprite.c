@@ -298,6 +298,7 @@ EWRAM_DATA bool8 gAffineAnimsDisabled = FALSE;
 static s16 sPcOamScreenX[128];
 static s16 sPcOamScreenY[128];
 static bool8 sPcOamScreenCoordsValid[128];
+static const u16 *sPcOamPaletteOverrides[128];
 #endif
 
 #if PLATFORM_PC
@@ -318,6 +319,13 @@ bool32 PcGetOamScreenCoords(u8 oamIndex, s16 *x, s16 *y)
     *x = sPcOamScreenX[oamIndex];
     *y = sPcOamScreenY[oamIndex];
     return TRUE;
+}
+
+const u16 *PcGetOamPaletteOverride(u8 oamIndex)
+{
+    if (oamIndex >= ARRAY_COUNT(sPcOamPaletteOverrides))
+        return NULL;
+    return sPcOamPaletteOverrides[oamIndex];
 }
 
 static void PcGetSpriteScreenCoords(const struct Sprite *sprite, s16 *x, s16 *y)
@@ -512,6 +520,7 @@ void AddSpritesToOamBuffer(void)
 
 #if PLATFORM_PC
     memset(sPcOamScreenCoordsValid, 0, sizeof(sPcOamScreenCoordsValid));
+    memset(sPcOamPaletteOverrides, 0, sizeof(sPcOamPaletteOverrides));
 #endif
 
     while (i < MAX_SPRITES)
@@ -1716,6 +1725,7 @@ bool8 AddSpriteToOamBuffer(struct Sprite *sprite, u8 *oamIndex)
 
             PcGetSpriteScreenCoords(sprite, &x, &y);
             PcSetOamScreenCoords(*oamIndex, x, y);
+            sPcOamPaletteOverrides[*oamIndex] = sprite->pcPaletteOverride;
         }
 #endif
         (*oamIndex)++;
@@ -1748,6 +1758,7 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
 
             PcGetSpriteScreenCoords(sprite, &x, &y);
             PcSetOamScreenCoords(*oamIndex, x, y);
+            sPcOamPaletteOverrides[*oamIndex] = sprite->pcPaletteOverride;
         }
 #endif
         (*oamIndex)++;
@@ -1820,6 +1831,7 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
             PcSetOamScreenCoords(*oamIndex,
                                  nativeBaseX + (s16)x,
                                  nativeBaseY + (s16)y);
+            sPcOamPaletteOverrides[*oamIndex] = sprite->pcPaletteOverride;
 #endif
 
             if (sprite->subspriteMode != SUBSPRITES_IGNORE_PRIORITY)

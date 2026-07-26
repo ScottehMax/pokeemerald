@@ -148,6 +148,9 @@ static u8 setup##_callback(struct ObjectEvent *objectEvent, struct Sprite *sprit
 static EWRAM_DATA u8 sCurrentReflectionType = 0;
 static EWRAM_DATA u16 sCurrentSpecialObjectPaletteTag = 0;
 static EWRAM_DATA struct LockedAnimObjectEvents *sLockedAnimObjectEvents = {0};
+#if PLATFORM_PC
+static bool8 sSpawningConnectedObjectEvent;
+#endif
 
 static void MoveCoordsInDirection(u32, s16 *, s16 *, s16, s16);
 static bool8 ObjectEventExecSingleMovementAction(struct ObjectEvent *, struct Sprite *);
@@ -1482,6 +1485,9 @@ static u8 TrySetupObjectEventSprite(const struct ObjectEventTemplate *objectEven
     struct Sprite *sprite;
     struct ObjectEvent *objectEvent;
     const struct ObjectEventGraphicsInfo *graphicsInfo;
+#if PLATFORM_PC
+    const u16 *paletteOverride = NULL;
+#endif
 
     objectEventId = InitObjectEventStateFromTemplate(objectEventTemplate, mapNum, mapGroup);
     if (objectEventId == OBJECT_EVENTS_COUNT)
@@ -1496,6 +1502,18 @@ static u8 TrySetupObjectEventSprite(const struct ObjectEventTemplate *objectEven
     }
     else if (paletteSlot == PALSLOT_NPC_SPECIAL)
     {
+#if PLATFORM_PC
+        if (sSpawningConnectedObjectEvent)
+        {
+            u8 paletteIndex = FindObjectEventPaletteIndexByTag(graphicsInfo->paletteTag);
+
+            if (paletteIndex != 0xFF)
+                paletteOverride = sObjectEventSpritePalettes[paletteIndex].data;
+            else
+                LoadSpecialObjectReflectionPalette(graphicsInfo->paletteTag, paletteSlot);
+        }
+        else
+#endif
         LoadSpecialObjectReflectionPalette(graphicsInfo->paletteTag, paletteSlot);
     }
     else if (paletteSlot >= 16)
@@ -1516,6 +1534,9 @@ static u8 TrySetupObjectEventSprite(const struct ObjectEventTemplate *objectEven
     }
 
     sprite = &gSprites[spriteId];
+#if PLATFORM_PC
+    sprite->pcPaletteOverride = paletteOverride;
+#endif
     GetMapCoordsFromSpritePos(objectEvent->currentCoords.x + cameraX, objectEvent->currentCoords.y + cameraY, &sprite->x, &sprite->y);
     sprite->centerToCornerVecX = -(graphicsInfo->width >> 1);
     sprite->centerToCornerVecY = -(graphicsInfo->height >> 1);
@@ -1754,11 +1775,13 @@ static void TrySpawnConnectedObjectEvents(s16 cameraX,
              && left <= npcX && right >= npcX
              && !FlagGet(template.flagId))
             {
+                sSpawningConnectedObjectEvent = TRUE;
                 TrySpawnObjectEventTemplate(&template,
                                             connection->mapNum,
                                             connection->mapGroup,
                                             cameraX,
                                             cameraY);
+                sSpawningConnectedObjectEvent = FALSE;
             }
         }
     }

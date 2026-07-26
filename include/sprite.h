@@ -243,6 +243,9 @@ struct Sprite
              u8 subspriteMode:2;
 
     /*0x43*/ u8 subpriority;
+#if PLATFORM_PC
+    const u16 *pcPaletteOverride;
+#endif
 };
 
 struct OamMatrix
@@ -318,6 +321,7 @@ bool8 AddSpriteToOamBuffer(struct Sprite *sprite, u8 *oamIndex);
 bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u8 *oamIndex);
 #if PLATFORM_PC
 bool32 PcGetOamScreenCoords(u8 oamIndex, s16 *x, s16 *y);
+const u16 *PcGetOamPaletteOverride(u8 oamIndex);
 #endif
 void CopyToSprites(u8 *src);
 void CopyFromSprites(u8 *dest);

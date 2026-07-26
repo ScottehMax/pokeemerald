@@ -218,6 +218,13 @@ static u8 TransformNativeColorComponent(u8 component, u8 shift, u8 paletteNum)
     return transformed;
 }
 
+static u16 TransformNativeColor(u16 color, u8 paletteNum)
+{
+    return TransformNativeColorComponent(color & 0x1F, 0, paletteNum)
+         | (TransformNativeColorComponent((color >> 5) & 0x1F, 5, paletteNum) << 5)
+         | (TransformNativeColorComponent((color >> 10) & 0x1F, 10, paletteNum) << 10);
+}
+
 static u16 GetNativeFieldColor(const struct NativeFieldTile *fieldTile,
                                u8 paletteNum,
                                u8 paletteIndex,
@@ -241,9 +248,7 @@ static u16 GetNativeFieldColor(const struct NativeFieldTile *fieldTile,
         return palette[paletteNum * 16 + paletteIndex];
 
     color = tileset->palettes[paletteNum][paletteIndex];
-    return TransformNativeColorComponent(color & 0x1F, 0, paletteNum)
-         | (TransformNativeColorComponent((color >> 5) & 0x1F, 5, paletteNum) << 5)
-         | (TransformNativeColorComponent((color >> 10) & 0x1F, 10, paletteNum) << 10);
+    return TransformNativeColor(color, paletteNum);
 }
 
 // The original 240x160 region still uses the GBA tilemap ring. Only pixels
@@ -841,11 +846,22 @@ static void DrawSpritesForPriority(struct PixelStack *line,
             }
             else
             {
+                const u16 *paletteOverride = PcGetOamPaletteOverride((u8)sprite);
                 u8 packed = vram[tileOffset + (sourceY & 7) * 4 + ((sourceX & 7) >> 1)];
                 paletteIndex = (sourceX & 1) ? packed >> 4 : packed & 0xF;
                 if (paletteIndex == 0)
                     continue;
-                color = palette[((attr2 >> 12) & 0xF) * 16 + paletteIndex];
+                if (paletteOverride != NULL)
+                {
+                    u8 paletteNum = (attr2 >> 12) & 0xF;
+
+                    color = TransformNativeColor(paletteOverride[paletteIndex],
+                                                 16 + paletteNum);
+                }
+                else
+                {
+                    color = palette[((attr2 >> 12) & 0xF) * 16 + paletteIndex];
+                }
             }
 
             if (objectMode == 2)
