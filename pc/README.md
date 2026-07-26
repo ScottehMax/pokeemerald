@@ -90,12 +90,13 @@ so raw addresses can be matched to the correct binary later.
 
 ## Filesystem Storage
 
-The Pokémon Storage System has a PC-only `STORAGE` entry. It reads individual
-boxed Pokémon from its active storage directory. Each named save profile uses
-`profiles/PROFILE/storage/`. `Default` and `--save` continue to use the original
-`./storage/` relative to the directory where the game is started, preserving
-existing `.ek3` collections. There is no fixed Pokémon count limit; entries are
-allocated as the directory is scanned.
+The Pokémon Storage System has a PC-only `STORAGE` entry. It presents one shared
+collection containing `./storage/` and every active named profile's existing
+`profiles/PROFILE/storage/` directory. Pokémon stored from any save can therefore
+be withdrawn by any other save without relocating existing `.ek3` collections.
+There is no fixed Pokémon count limit; entries are allocated as the directories
+are scanned. Withdrawing a non-Egg also registers it as seen and caught in the
+active save, matching a traded Pokémon.
 
 Files use the standard 80-byte encrypted Gen III boxed Pokémon data and the
 `.ek3` extension.

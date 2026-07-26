@@ -457,6 +457,9 @@ static void DestroyStorageGrid(void)
 static bool32 ImportStorageMon(u32 index, u8 *boxId)
 {
     struct BoxPokemon mon;
+    struct Pokedex oldPokedex;
+    u8 oldSeen1[NUM_DEX_FLAG_BYTES];
+    u8 oldSeen2[NUM_DEX_FLAG_BYTES];
     s16 boxPosition;
     u8 firstBox = StorageGetCurrentBox();
     u8 i;
@@ -477,10 +480,17 @@ static bool32 ImportStorageMon(u32 index, u8 *boxId)
         return FALSE;
     }
 
+    oldPokedex = gSaveBlock2Ptr->pokedex;
+    memcpy(oldSeen1, gSaveBlock1Ptr->seen1, sizeof(oldSeen1));
+    memcpy(oldSeen2, gSaveBlock1Ptr->seen2, sizeof(oldSeen2));
     SetBoxMonAt(*boxId, boxPosition, &mon);
+    UpdatePokedexForReceivedBoxMon(&mon);
     if (TrySavingData(SAVE_NORMAL) != SAVE_STATUS_OK)
     {
         ZeroBoxMonAt(*boxId, boxPosition);
+        gSaveBlock2Ptr->pokedex = oldPokedex;
+        memcpy(gSaveBlock1Ptr->seen1, oldSeen1, sizeof(oldSeen1));
+        memcpy(gSaveBlock1Ptr->seen2, oldSeen2, sizeof(oldSeen2));
         *boxId = 0xFE;
         return FALSE;
     }

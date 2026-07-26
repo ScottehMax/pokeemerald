@@ -5,7 +5,7 @@
 
 struct BoxPokemon;
 
-bool32 PcServicesInit(const char *savePath, const char *storagePath);
+bool32 PcServicesInit(const char *defaultSavePath, const char *savePath, const char *storagePath);
 void PcServicesShutdown(void);
 
 bool32 PcStorageScan(void);

@@ -715,7 +715,7 @@ bool32 PcPlatformInit(const char *sharedPath)
     }
     PcDiagnosticsInit(sShared);
 
-    if (!PcServicesInit(sShared->savePath, sShared->storagePath))
+    if (!PcServicesInit(sShared->defaultSavePath, sShared->savePath, sShared->storagePath))
     {
         sShared->coreError = 2;
         return FALSE;

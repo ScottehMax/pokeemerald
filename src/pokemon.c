@@ -6971,6 +6971,18 @@ void HandleSetPokedexFlag(u16 nationalNum, u8 caseId, u32 personality)
     }
 }
 
+void UpdatePokedexForReceivedBoxMon(struct BoxPokemon *boxMon)
+{
+    if (!GetBoxMonData(boxMon, MON_DATA_IS_EGG))
+    {
+        u16 nationalNum = SpeciesToNationalPokedexNum(GetBoxMonData(boxMon, MON_DATA_SPECIES));
+        u32 personality = GetBoxMonData(boxMon, MON_DATA_PERSONALITY);
+
+        GetSetPokedexFlag(nationalNum, FLAG_SET_SEEN);
+        HandleSetPokedexFlag(nationalNum, FLAG_SET_CAUGHT, personality);
+    }
+}
+
 const u8 *GetTrainerClassNameFromId(u16 trainerId)
 {
     if (trainerId >= TRAINERS_COUNT)
