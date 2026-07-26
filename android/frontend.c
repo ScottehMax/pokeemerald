@@ -48,7 +48,7 @@
 #define FRONTEND_UPLOAD_BUFFER_COUNT 6
 #define ANDROID_OPENSL_BUFFER_COUNT 3
 #define ANDROID_FRAME_WAIT "futex"
-#define ANDROID_BUILD_REVISION "0.3.2"
+#define ANDROID_BUILD_REVISION "0.3.5"
 
 static uint64_t sLastAudioCallbackNs;
 static uint64_t sLastAudioUnderrunEventNs;
@@ -58,6 +58,18 @@ static struct PcSharedState *sFrontendSharedState;
 static uint32_t sLifecyclePaused;
 static uint32_t sLifecycleCallbackActive;
 static uint32_t sLifecycleResumeRequested;
+static uint32_t sTouchControlsEnabled = 1;
+
+JNIEXPORT void JNICALL
+Java_org_pokeemerald_pc_PokemonEmeraldActivity_nativeSetTouchControlsEnabled(
+    JNIEnv *env,
+    jclass activityClass,
+    jboolean enabled)
+{
+    (void)env;
+    (void)activityClass;
+    __atomic_store_n(&sTouchControlsEnabled, enabled != JNI_FALSE, __ATOMIC_RELEASE);
+}
 
 JNIEXPORT void JNICALL
 Java_org_pokeemerald_pc_PokemonEmeraldActivity_nativeNotifyPaused(
@@ -874,6 +886,8 @@ static uint32_t KeysAtPoint(float x, float y)
     float dx = x - 0.16f;
     float dy = y - 0.70f;
 
+    if (!__atomic_load_n(&sTouchControlsEnabled, __ATOMIC_ACQUIRE))
+        return 0;
     if (dx * dx + dy * dy < 0.030f)
     {
         if (dx > 0.035f) keys |= DPAD_RIGHT;
@@ -1028,6 +1042,8 @@ static void DrawControls(SDL_Renderer *renderer, int width, int height, uint32_t
     int bX = width * 73 / 100;
     int bY = height * 76 / 100;
 
+    if (!__atomic_load_n(&sTouchControlsEnabled, __ATOMIC_ACQUIRE))
+        return;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     DrawRect(renderer, cx - unit / 2, cy - unit * 2, unit, unit * 4,
              keys & (DPAD_UP | DPAD_DOWN) ? pressed : idle);
@@ -1082,6 +1098,7 @@ static int CopyStableFrame(const struct PcSharedState *shared,
 int main(int argc, char **argv)
 {
     char *preferencePath;
+    char gameDataPath[PC_PATH_MAX];
     char defaultSavePath[PC_PATH_MAX];
     char corePath[PC_PATH_MAX];
     char savePath[PC_PATH_MAX];
@@ -1118,7 +1135,8 @@ int main(int argc, char **argv)
     (void)argv;
     preferencePath = SDL_GetPrefPath("pokeemerald", "pokeemerald-pc");
     if (preferencePath == NULL
-     || snprintf(defaultSavePath, sizeof(defaultSavePath), "%spokeemerald.sav", preferencePath) >= (int)sizeof(defaultSavePath)
+     || GetActivityString("getGameDataPath", gameDataPath, sizeof(gameDataPath)) != 0
+     || snprintf(defaultSavePath, sizeof(defaultSavePath), "%s/pokeemerald.sav", gameDataPath) >= (int)sizeof(defaultSavePath)
      || snprintf(sharedPath, sizeof(sharedPath), "%score-shared", preferencePath) >= (int)sizeof(sharedPath)
      || snprintf(performancePath, sizeof(performancePath), "%sperformance-report.txt", preferencePath) >= (int)sizeof(performancePath))
         goto cleanup;

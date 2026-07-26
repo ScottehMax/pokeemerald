@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -57,6 +60,10 @@ object LinkServerSettings {
 class LinkSettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val requestedExternal = GameDataSettings.requestedExternal(this)
+        val activeExternal = GameDataSettings.activeExternal(this)
+        val externalDirectory = GameDataSettings.externalDirectory(this)
+
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
@@ -66,12 +73,20 @@ class LinkSettingsActivity : ComponentActivity() {
                     surface = Color(0xFF121614),
                 ),
             ) {
-                LinkSettingsScreen(
+                SettingsScreen(
                     initialServer = LinkServerSettings.get(this),
+                    initialExternal = requestedExternal,
+                    activeExternal = activeExternal,
+                    externalPath = externalDirectory?.path,
                     onCancel = ::finish,
-                    onSave = { server ->
+                    onSave = { server, external ->
                         LinkServerSettings.save(this, server)
-                        Toast.makeText(this, "Link server saved", Toast.LENGTH_SHORT).show()
+                        GameDataSettings.requestExternal(this, external)
+                        val message = if (external != activeExternal)
+                            "Settings saved. Restart the app to move game data."
+                        else
+                            "Settings saved"
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                         finish()
                     },
                 )
@@ -81,12 +96,16 @@ class LinkSettingsActivity : ComponentActivity() {
 }
 
 @Composable
-private fun LinkSettingsScreen(
+private fun SettingsScreen(
     initialServer: String,
+    initialExternal: Boolean,
+    activeExternal: Boolean,
+    externalPath: String?,
     onCancel: () -> Unit,
-    onSave: (String) -> Unit,
+    onSave: (String, Boolean) -> Unit,
 ) {
     var server by remember { mutableStateOf(initialServer) }
+    var useExternal by remember { mutableStateOf(initialExternal) }
     val normalized = server.trim()
     val error = validateLinkServer(normalized)
 
@@ -94,14 +113,45 @@ private fun LinkSettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 32.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Link server", style = MaterialTheme.typography.headlineMedium)
+            Text("Settings", style = MaterialTheme.typography.headlineMedium)
+            Text("Game data", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Use device folder", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        externalPath ?: "Device storage is unavailable",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (useExternal != activeExternal) {
+                        Text(
+                            "Pending restart",
+                            color = MaterialTheme.colorScheme.secondary,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
+                Switch(
+                    checked = useExternal,
+                    onCheckedChange = { useExternal = it },
+                    enabled = externalPath != null,
+                )
+            }
+            Text(
+                "Link server",
+                modifier = Modifier.padding(top = 12.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
             Text(
                 "Both players must use the same rendezvous server. " +
                     "Enter a host name or IP address, with an optional UDP port.",
-                modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -136,7 +186,7 @@ private fun LinkSettingsScreen(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
-                    onClick = { onSave(normalized) },
+                    onClick = { onSave(normalized, useExternal) },
                     enabled = error == null,
                 ) {
                     Text("Save")

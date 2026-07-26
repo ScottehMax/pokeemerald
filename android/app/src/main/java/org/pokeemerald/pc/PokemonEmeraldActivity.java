@@ -14,7 +14,9 @@ import android.os.Process;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.Surface;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -26,8 +28,10 @@ import org.libsdl.app.SDLActivity;
 public final class PokemonEmeraldActivity extends SDLActivity {
     private static native void nativeNotifyPaused();
     private static native void nativeNotifyResumed();
+    private static native void nativeSetTouchControlsEnabled(boolean enabled);
 
     private boolean coreBindingRequested;
+    private String gameDataPath;
     private final ServiceConnection coreConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -40,8 +44,9 @@ public final class PokemonEmeraldActivity extends SDLActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        gameDataPath = GameDataSettings.prepare(this).getAbsolutePath();
         super.onCreate(savedInstanceState);
-        addLinkSettingsButton();
+        addTopButtons();
     }
 
     @Override
@@ -55,6 +60,10 @@ public final class PokemonEmeraldActivity extends SDLActivity {
 
     public String getLinkServer() {
         return LinkServerSettings.get(this);
+    }
+
+    public String getGameDataPath() {
+        return gameDataPath;
     }
 
     public synchronized void startGameCore(String sharedPath) {
@@ -95,26 +104,60 @@ public final class PokemonEmeraldActivity extends SDLActivity {
         });
     }
 
-    private void addLinkSettingsButton() {
+    private void addTopButtons() {
         int size = dp(42);
+        boolean touchControlsEnabled = getSharedPreferences("controls", MODE_PRIVATE)
+            .getBoolean("touch_controls_enabled", true);
+        LinearLayout buttons = new LinearLayout(this);
+        ImageButton settingsButton = createTopButton(size, R.drawable.ic_link_settings);
+        ImageButton controlsButton = createTopButton(size, R.drawable.ic_touch_buttons);
+        FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            size,
+            Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        settingsButton.setContentDescription(getString(R.string.settings));
+        settingsButton.setOnClickListener(view ->
+            startActivity(new Intent(this, LinkSettingsActivity.class)));
+        buttons.addView(settingsButton);
+        android.view.View spacer = new android.view.View(this);
+        buttons.addView(spacer, new LinearLayout.LayoutParams(dp(32), size));
+        updateControlsButton(controlsButton, touchControlsEnabled);
+        nativeSetTouchControlsEnabled(touchControlsEnabled);
+        controlsButton.setOnClickListener(view -> {
+            boolean enabled = !getSharedPreferences("controls", MODE_PRIVATE)
+                .getBoolean("touch_controls_enabled", true);
+
+            getSharedPreferences("controls", MODE_PRIVATE)
+                .edit()
+                .putBoolean("touch_controls_enabled", enabled)
+                .apply();
+            nativeSetTouchControlsEnabled(enabled);
+            updateControlsButton(controlsButton, enabled);
+        });
+        buttons.addView(controlsButton);
+        layout.topMargin = dp(8);
+        addContentView(buttons, layout);
+    }
+
+    private ImageButton createTopButton(int size, int icon) {
         GradientDrawable background = new GradientDrawable();
         ImageButton button = new ImageButton(this);
-        android.widget.FrameLayout.LayoutParams layout =
-            new android.widget.FrameLayout.LayoutParams(
-                size,
-                size,
-                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
 
         background.setColor(Color.argb(145, 18, 22, 20));
         background.setShape(GradientDrawable.OVAL);
         button.setBackground(background);
-        button.setImageResource(R.drawable.ic_link_settings);
-        button.setContentDescription(getString(R.string.link_settings));
+        button.setImageResource(icon);
         button.setPadding(dp(10), dp(10), dp(10), dp(10));
-        button.setOnClickListener(view ->
-            startActivity(new Intent(this, LinkSettingsActivity.class)));
-        layout.topMargin = dp(8);
-        addContentView(button, layout);
+        button.setLayoutParams(new LinearLayout.LayoutParams(size, size));
+        return button;
+    }
+
+    private void updateControlsButton(ImageButton button, boolean enabled) {
+        button.setAlpha(enabled ? 1.0f : 0.55f);
+        button.setContentDescription(getString(
+            enabled ? R.string.hide_touch_controls : R.string.show_touch_controls));
     }
 
     private int dp(int value) {
