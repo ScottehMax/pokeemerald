@@ -166,7 +166,7 @@ def check_stream(stream: bytes) -> list[str]:
         elif kind in ("HIT", "STATUS_ANIM", "STAT_CHANGE", "ANIM", "FAINT", "SWITCH_OUT", "CRY"):
             if rom.out[side & 1] is None:
                 bad(off, msg, "no mon out (dropped)")
-            if kind == "STAT_CHANGE" and (not 1 <= data[1] <= 7 or data[2] == 0):
+            if kind == "STAT_CHANGE" and (not 0 <= data[1] <= 7 or data[2] == 0):
                 bad(off, msg, f"stat {data[1]} delta {data[2]}")
             if kind == "ANIM" and data[1] not in VIEWER_ANIMS:
                 bad(off, msg, f"anim {data[1]} isn't one the viewer plays")

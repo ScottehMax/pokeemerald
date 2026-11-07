@@ -55,7 +55,7 @@
 #define LVMSG_SWITCH_IN   0x0A // side, slot
 #define LVMSG_FAINT       0x0B // side
 #define LVMSG_STATUS      0x0C // side, status (LV_STATUS_*), playAnim
-#define LVMSG_STAT_CHANGE 0x0D // side, stat (STAT_ATK..STAT_EVASION), delta (signed)
+#define LVMSG_STAT_CHANGE 0x0D // side, stat (STAT_ATK..STAT_EVASION, or LV_STAT_MULTIPLE), delta (signed)
 #define LVMSG_ANIM        0x0E // side, animId (a B_ANIM_* general animation; see VIEWER_ANIMS in link_viewer.c), arg:16
 #define LVMSG_END         0x0F // winner side (2 = tie)
 #define LVMSG_WAIT        0x10 // frames:16 (up to LV_MAX_WAIT_FRAMES)
@@ -63,6 +63,9 @@
 #define LVMSG_SE          0x12 // songId:16
 #define LVMSG_STATUS_ANIM 0x13 // side, which (LV_VOLATILE_*): confusion/attract/curse/nightmare animation
 #define LVMSG_CRY         0x14 // side
+
+// LVMSG_STAT_CHANGE: several stats at once (Calm Mind, Tickle...): the gray animation
+#define LV_STAT_MULTIPLE 0
 
 // LVMSG_MON flags
 #define LV_MONFLAG_MALE   0x01

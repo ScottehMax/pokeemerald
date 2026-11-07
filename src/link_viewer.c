@@ -1169,7 +1169,7 @@ static bool8 Op_StatusAnim(void)
     return FALSE;
 }
 
-// side, stat, delta
+// side, stat (or LV_STAT_MULTIPLE), delta
 static bool8 Op_StatChange(void)
 {
     u8 side = sBattle.msg.data[0] & 1;
@@ -1179,8 +1179,22 @@ static bool8 Op_StatChange(void)
     s8 stage;
     u16 animArg;
 
-    if (sBattle.stage != 0 || !sBattle.monOut[side] || stat < STAT_ATK || stat > STAT_EVASION || delta == 0)
+    if (sBattle.stage != 0 || !sBattle.monOut[side] || stat > STAT_EVASION || delta == 0)
         return TRUE;
+
+    if (stat == LV_STAT_MULTIPLE)
+    {
+        // As Cmd_playstatchangeanimation does for more than one stat.
+        if (delta > 0)
+            animArg = (delta >= 2) ? STAT_ANIM_MULTIPLE_PLUS2 : STAT_ANIM_MULTIPLE_PLUS1;
+        else
+            animArg = (delta <= -2) ? STAT_ANIM_MULTIPLE_MINUS2 : STAT_ANIM_MULTIPLE_MINUS1;
+        gActiveBattler = battler;
+        BtlController_EmitBattleAnimation(B_COMM_TO_CONTROLLER, B_ANIM_STATS_CHANGE, animArg);
+        EmitDone(battler);
+        sBattle.stage++;
+        return FALSE;
+    }
 
     stage = gBattleMons[battler].statStages[stat] + delta;
     if (stage < MIN_STAT_STAGE)

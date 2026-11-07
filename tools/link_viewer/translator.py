@@ -63,6 +63,29 @@ PROBLEM_NAME = {"slp": "sleep", "psn": "poison", "tox": "poison", "brn": "burn",
 BERRY_CURE_TEXT = {"par": "cured paralysis!", "psn": "cured poison!", "tox": "cured poison!",
                    "brn": "healed its burn!", "frz": "defrosted it!", "slp": "woke it from its sleep!"}
 TRAP_MOVES = ("wrap", "bind", "firespin", "clamp", "whirlpool", "sandtomb")
+# Status a contact ability gives, as its text says it (sText_PkmnWasParalyzedBy...)
+ABILITY_STATUS_TEXT = {"par": "paralyzed ", "psn": "poisoned ", "tox": "poisoned ", "brn": "burned ", "frz": "froze "}
+# An ability's own line when a move doesn't affect its holder. {n}: the holder; {a}: the ability; {m}: the move.
+IMMUNE_ABILITY_TEXT = {
+    "levitate": ("{n}", " makes GROUND\nmoves miss with ", "{a}", "!"),
+    "voltabsorb": ("{n}", "'s ", "{a}", "\nmade ", "{m}", " useless!"),
+    "waterabsorb": ("{n}", "'s ", "{a}", "\nmade ", "{m}", " useless!"),
+    "flashfire": ("{n}", "'s ", "{a}", "\nmade ", "{m}", " ineffective!"),
+    "wonderguard": ("{n}", " avoided\ndamage with ", "{a}", "!"),
+    "soundproof": ("{n}", "'s ", "{a}", "\nblocks ", "{m}", "!"),
+    "immunity": ("{n}", "'s ", "{a}", "\nprevents poisoning!"),
+    "limber": ("{n}", "'s ", "{a}", "\nprevents paralysis!"),
+    "waterveil": ("{n}", "'s ", "{a}", "\nprevents burns!"),
+    "owntempo": ("{n}", "'s ", "{a}", "\nprevents confusion!"),
+    "oblivious": ("{n}", "'s ", "{a}", "\nprevents romance!"),
+    "insomnia": ("{n}", " stayed awake\nusing its ", "{a}", "!"),
+    "vitalspirit": ("{n}", " stayed awake\nusing its ", "{a}", "!"),
+    "sturdy": ("{n}", " was protected\nby ", "{a}", "!"),
+    "suctioncups": ("{n}", " anchors\nitself with ", "{a}", "!"),
+}
+# A move's "already" line (-fail|X|par: the target has that status already)
+ALREADY_TEXT = {"par": " is\nalready paralyzed!", "brn": " already\nhas a burn.", "psn": " is already\npoisoned.",
+                "tox": " is already\npoisoned.", "slp": " is\nalready asleep!"}
 SIDE_TEXT = {  # (start, end) after "<trainer>'s team"
     "reflect": (" became stronger against physical moves!", "'s REFLECT wore off!"),
     "lightscreen": (" became stronger against special moves!", "'s LIGHT SCREEN wore off!"),
@@ -173,6 +196,11 @@ class Translator:
         self.trapper: dict = {}     # trapped mon key -> ident of the mon that trapped it
         self.shed_skin: str | None = None  # mon key whose Shed Skin just activated
         self.hp_ref: dict = {}      # side -> its active mon's HP at the last switch-in (hpOnSwitchout)
+        self.held_boosts: list = []  # -boost/-unboost lines right after a held |move|
+        self.pending_boosts: list = []  # (ident, stat, delta) of one move, shown together
+        self.ability_boost: tuple | None = None  # (ident, ability) from "-ability|X|Speed Boost|boost"
+        self.sub_text: str | None = None  # ident whose "made a SUBSTITUTE!" waits for its HP cost
+        self.current_move_name = ""
 
     def bottom(self) -> str:
         if self.bottom_pref in ("p1", "p2"):
@@ -316,8 +344,10 @@ class Translator:
             return
         parts = line[1:].split("|")
         if self.held_move is not None:
-            held, self.held_move = self.held_move, None
-            self.handle(held, parts)
+            if parts[0] in ("-boost", "-unboost") and not any(p.startswith("[from]") for p in parts):
+                self.held_boosts.append(parts)  # the move's own stat changes: they decide its animation
+                return
+            self.release_held(parts)
         if parts[0] == "move" and self.phase == "battle":
             self.held_move = parts   # decide on its animation once the next line is known
             return
@@ -326,9 +356,16 @@ class Translator:
     def flush(self):
         """The source went quiet: finish a held |move| line and pending texts."""
         if self.held_move is not None:
-            held, self.held_move = self.held_move, None
-            self.handle(held, None)
+            self.release_held(None)
+        self.flush_boosts()
         self.flush_effectiveness()
+
+    def release_held(self, nxt):
+        held, boosts = self.held_move, self.held_boosts
+        self.held_move, self.held_boosts = None, []
+        self.handle(held, boosts[0] if boosts else nxt, boosts)
+        for b in boosts:
+            self.handle(b, None)
 
     def feed_silent(self, lines):
         """Take in a backlog without showing it (then resync() shows the result)."""
@@ -342,8 +379,16 @@ class Translator:
 
     DAMAGE_GROUP = {"-damage", "-crit", "-supereffective", "-resisted", "-activate"}
 
-    def handle(self, parts: list[str], nxt: list[str] | None):
+    def handle(self, parts: list[str], nxt: list[str] | None, boosts: list | None = None):
         cmd, args = parts[0], parts[1:]
+        if cmd not in ("-boost", "-unboost"):
+            self.flush_boosts()
+        if cmd not in ("-unboost", "-fail"):
+            self.intimidate = None  # Intimidate's own stat drop (or failure) comes right after it
+        if self.sub_text is not None and cmd != "-damage":
+            ident, self.sub_text = self.sub_text, None
+            if self.live:
+                self.text(self.nm(ident), " made\na SUBSTITUTE!")
         if cmd.startswith("-"):
             # Abilities and weather right after the leads come out (Drizzle,
             # Intimidate) belong to the battle: start it so they're shown.
@@ -356,7 +401,7 @@ class Translator:
             handler = getattr(self, "on_" + cmd, None) if cmd.isidentifier() else None
         try:
             if cmd == "move":
-                self.on_move(args, nxt)
+                self.on_move(args, nxt, boosts or [])
             elif handler is not None:
                 handler(args)
         except Exception as e:  # one bad line mustn't stop a live bridge
@@ -449,6 +494,10 @@ class Translator:
         self.current_move = None
         self.mark_switch_in()
 
+    @staticmethod
+    def other(sid: str) -> str:
+        return "p2" if sid == "p1" else "p1"
+
     def top(self) -> str:
         return "p2" if self.bottom() == "p1" else "p1"
 
@@ -506,7 +555,7 @@ class Translator:
 
     # --- moves -------------------------------------------------------------
 
-    def on_move(self, args, nxt):
+    def on_move(self, args, nxt, boosts=()):
         pos, tags = split_tags(args)
         ident, move = pos[0], pos[1]
         target = pos[2] if len(pos) > 2 and pos[2] else ""
@@ -517,6 +566,7 @@ class Translator:
         mid = P.move_id(move)
         tsid = target[:2] if target else ("p2" if sid == "p1" else "p1")
         self.current_move = (ident, mid, target)
+        self.current_move_name = move
         if not self.live:
             return
         if "still" in tags and nxt is not None and nxt[0] == "-prepare":
@@ -531,6 +581,10 @@ class Translator:
                 return
             if ncmd == "-activate" and ("Protect" in nargs or "Detect" in nargs):
                 return
+            if ncmd == "-heal" and ("ability: Volt Absorb" in nargs or "ability: Water Absorb" in nargs):
+                return  # BattleScript_MoveHPDrain: no animation
+        if boosts and all(len(b) > 3 and b[3] == "0" for b in boosts):
+            return  # every stat is at its limit: BattleScript_StatUp/Down skip the animation
         turn = 0
         if self.charging.get(m.key) == P.to_id(move):
             turn = 1
@@ -602,8 +656,12 @@ class Translator:
         wid = P.to_id(what)
         of = tags.get("of", "")
         hp_msg = (P.msg_hp(vs, m.hp), f"hp {m.hp}/{m.max_hp}")
-        if not source and self.current_move is not None and self.current_move[0][:2] == sid                 and self.current_move[0][4:] == ident[4:]:
+        if not source and self.current_move is not None and self.current_move[0][:2] == sid \
+                and self.current_move[0][4:] == ident[4:]:
             self.emit(*hp_msg)  # the user's own cost (Substitute)
+            if self.sub_text == ident:
+                self.sub_text = None
+                self.text(self.nm(ident), " made\na SUBSTITUTE!")
         elif not source:
             eff = self.direct_hit(ident)
             self.emit(*hp_msg)
@@ -693,15 +751,21 @@ class Translator:
         elif wid == "wish":
             self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_WISH_HEAL"]), "wish anim")
             wisher = tags.get("wisher", "")
-            self.text(f"{wisher[:10] if wisher else 'The'}'s WISH came true!" if wisher else "The WISH came true!")
+            wm = self.sides[ident[:2]].mons.get(wisher)
+            who = self.name(wm, ident[:2]) if wm is not None else Text(wisher[:10] or "The")
+            self.text(who, "'s WISH\ncame true!")  # BattleScript_WishComesTrue
             self.emit(*hp_msg)
+            self.text(self.nm(ident), " regained\nhealth!")
         elif wid == "ingrain":
             self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_INGRAIN_HEAL"]), "ingrain anim")
             self.text(self.nm(ident), " absorbed nutrients with its roots!")
             self.emit(*hp_msg)
+        elif kind == "ability" and wid in ("voltabsorb", "waterabsorb"):
+            self.emit(*hp_msg)  # BattleScript_MoveHPDrain
+            self.text(self.nm(ident), " restored HP\nusing its ", Text.ability(what), "!")
         elif kind == "ability":
             self.emit(*hp_msg)
-            self.text(self.nm(ident), "'s ", Text.ability(what), " restored its HP a little!")
+            self.text(self.nm(ident), "'s ", Text.ability(what), "\nrestored its HP a little!")
         else:
             self.emit(*hp_msg)
             self.text(self.nm(ident), " regained health!")
@@ -724,6 +788,25 @@ class Translator:
         if not self.live:
             return
         what = P.to_id(effect_name(pos[1])[1]) if len(pos) > 1 else ""
+        kind, ability = effect_name(tags.get("from", ""))
+        if what == "unboost" and kind == "ability":
+            holder = self.nm(pos[0])
+            aid = P.to_id(ability)
+            if self.intimidate is not None:  # BattleScript_IntimidatePrevented
+                by, self.intimidate = self.intimidate, None
+                self.text(holder, "'s ", Text.ability(ability), "\nprevented ", by, "'s INTIMIDATE from working!")
+            elif aid in ("hypercutter", "keeneye"):  # sText_PkmnsXPreventsYLoss
+                self.text(holder, "'s ", Text.ability(ability), "\nprevents ",
+                          "ATTACK" if aid == "hypercutter" else "accuracy", " loss!")
+            else:  # BattleScript_AbilityNoStatLoss
+                self.text(holder, "'s ", Text.ability(ability), "\nprevents stat loss!")
+            return
+        if what == "heal":
+            self.text(self.nm(pos[0]), "'s\nHP is full!")
+            return
+        if what in ALREADY_TEXT:
+            self.text(self.nm(pos[0]), ALREADY_TEXT[what])
+            return
         if what == "substitute" and "weak" in tags:
             self.text("It was too weak to make a SUBSTITUTE!")
         elif what == "substitute":
@@ -733,8 +816,15 @@ class Translator:
 
     def on__immune(self, args):
         pos, tags = split_tags(args)
-        if self.live:
+        if not self.live:
+            return
+        kind, ability = effect_name(tags.get("from", ""))
+        parts = IMMUNE_ABILITY_TEXT.get(P.to_id(ability)) if kind == "ability" else None
+        if parts is None:
             self.text("It doesn't affect ", self.nm(pos[0]), "…")
+            return
+        fill = {"{n}": self.nm(pos[0]), "{a}": Text.ability(ability), "{m}": Text.move(self.current_move_name or "it")}
+        self.text(*(fill.get(x, x) for x in parts))
 
     def on__notarget(self, args):
         if self.live:
@@ -747,7 +837,7 @@ class Translator:
     def on__hitcount(self, args):
         if self.live:
             n = int(args[1])
-            self.text(f"Hit {n} time{'s' if n != 1 else ''}!")
+            self.text(f"Hit {n} time(s)!")
 
     def on__nothing(self, args):
         if self.live:
@@ -778,7 +868,13 @@ class Translator:
             self.set_status(ident, status, False)
             return
         self.set_status(ident, status, True)
-        if self.live and "silent" not in tags:
+        if not self.live or "silent" in tags:
+            return
+        of = tags.get("of")
+        if kind == "ability" and of and status in ABILITY_STATUS_TEXT:
+            tail = " solid!" if status == "frz" else "!\nIt may be unable to move!" if status == "par" else "!"
+            self.text(self.nm(of), "'s ", Text.ability(what), "\n" + ABILITY_STATUS_TEXT[status], self.nm(ident), tail)
+        else:
             self.text(self.nm(ident), STATUS_TEXT.get(status, " got a status condition!"))
 
     def on__curestatus(self, args):
@@ -857,7 +953,7 @@ class Translator:
 
     # --- stats ---------------------------------------------------------------
 
-    def boost(self, ident: str, stat: str, delta: int, text: bool = True):
+    def boost(self, ident: str, stat: str, delta: int, text: bool = True, anim: bool = True):
         m = self.mon(ident)
         num, label = STATS.get(stat, (0, stat))
         cur = m.boosts.get(stat, 0)
@@ -866,20 +962,92 @@ class Translator:
         if not self.live:
             return
         vs = self.vside(ident[:2])
-        if delta != 0 and num:
+        if delta != 0 and num and anim:
             self.emit(P.msg_stat_change(vs, num, delta), f"{stat} {delta:+d}")
         if not text:
             return
         if delta == 0:
-            self.text(self.nm(ident), f"'s {label} won't go {'higher' if cur >= 0 else 'lower'}!")
+            self.text(self.nm(ident), f"'s {label}\nwon't go {'higher' if cur >= 0 else 'lower'}!")
         elif delta > 0:
-            self.text(self.nm(ident), f"'s {label} {'sharply ' if delta >= 2 else ''}rose!")
+            self.text(self.nm(ident), f"'s {label}\n{'sharply ' if delta >= 2 else ''}rose!")
         else:
-            self.text(self.nm(ident), f"'s {label} {'harshly ' if delta <= -2 else ''}fell!")
+            self.text(self.nm(ident), f"'s {label}\n{'harshly ' if delta <= -2 else ''}fell!")
 
     def on__boost(self, args):
+        self.stat_line(args, 1)
+
+    def stat_line(self, args, sign: int):
         pos, tags = split_tags(args)
-        self.boost(pos[0], pos[1], int(pos[2]))
+        ident, stat, delta = pos[0], pos[1], sign * int(pos[2])
+        kind, what = effect_name(tags.get("from", ""))
+        if kind == "item":  # BattleScript_BerryStatRaiseEnd2
+            num, label = STATS.get(stat, (0, stat))
+            self.boost(ident, stat, delta, text=False, anim=False)
+            if self.live:
+                vs = self.vside(ident[:2])
+                self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_HELD_ITEM_EFFECT"]), "item anim")
+                if delta and num:
+                    self.emit(P.msg_stat_change(vs, num, delta), f"{stat} {delta:+d}")
+                self.text("Using ", Text.item(what), f", the {label}\nof ", self.nm(ident),
+                          " sharply rose!" if delta >= 2 else " rose!")
+            return
+        if self.ability_boost is not None and self.ability_boost[0] == ident:
+            _, ability = self.ability_boost
+            self.ability_boost = None
+            self.boost(ident, stat, delta, text=False)
+            if self.live and P.to_id(ability) == "speedboost":
+                self.text(self.nm(ident), "'s ", Text.ability(ability), "\nraised its SPEED!")
+            return
+        if self.pending_boosts and (self.pending_boosts[0][0] != ident or self.pending_boosts[0][3] != sign):
+            self.flush_boosts()
+        self.pending_boosts.append((ident, stat, delta, sign))  # a failed change (0) keeps its direction
+
+    def curse_boost(self, ident: str) -> bool:
+        """Curse (non-Ghost) changes its user's stats with no stat animation."""
+        return (self.current_move is not None and self.current_move[1] == P.move_id("Curse")
+                and self.current_move[0][:2] == ident[:2])
+
+    def flush_boosts(self):
+        """Shows one move's stat changes. Several at once (Calm Mind, Tickle...)
+        play one animation, then a text per stat that changed
+        (Cmd_playstatchangeanimation and the multi-stat battle scripts)."""
+        group, self.pending_boosts = self.pending_boosts, []
+        if not group:
+            return
+        try:
+            self.show_boosts(group)
+        except Exception as e:  # lines from a mangled log mustn't stop a live bridge
+            self.log(f"[translator] couldn't handle stat changes {group!r}: {e!r}")
+
+    def show_boosts(self, group):
+        ident, sign = group[0][0], group[0][3]
+        anim = not self.curse_boost(ident)
+        if len(group) == 1:
+            _, stat, delta, _ = group[0]
+            self.boost(ident, stat, delta, anim=anim)
+            return
+        group.sort(key=lambda g: STATS.get(g[1], (9,))[0])  # the scripts go ATK, DEF, SPEED, SP. ATK, SP. DEF
+        changed = [g[:3] for g in group if g[2] != 0]
+        for _, stat, delta, _ in group:
+            self.boost(ident, stat, delta, text=False, anim=False)
+        if not self.live:
+            return
+        vs = self.vside(ident[:2])
+        if anim and len(changed) >= 2:
+            size = 2 if all(abs(d) >= 2 for _, _, d in changed) else 1
+            self.emit(P.msg_stat_change(vs, C["LV_STAT_MULTIPLE"], sign * size), f"{len(changed)} stats {sign * size:+d}")
+        elif anim and changed:
+            _, stat, delta = changed[0]
+            self.emit(P.msg_stat_change(vs, STATS[stat][0], delta), f"{stat} {delta:+d}")
+        if not changed:  # BattleScript_CantRaiseMultipleStats
+            self.text(self.nm(ident), "'s stats won't\ngo any higher!" if sign > 0 else "'s stats won't\ngo any lower!")
+            return
+        for _, stat, delta in changed:
+            label = STATS.get(stat, (0, stat))[1]
+            if delta > 0:
+                self.text(self.nm(ident), f"'s {label}\n{'sharply ' if delta >= 2 else ''}rose!")
+            else:
+                self.text(self.nm(ident), f"'s {label}\n{'harshly ' if delta <= -2 else ''}fell!")
 
     def on__unboost(self, args):
         pos, tags = split_tags(args)
@@ -887,9 +1055,9 @@ class Translator:
         if self.intimidate is not None and self.live:
             by, self.intimidate = self.intimidate, None
             self.boost(ident, stat, -amount, text=False)
-            self.text(by, "'s INTIMIDATE cuts ", self.nm(ident), "'s ATTACK!")
+            self.text(by, "'s INTIMIDATE\ncuts ", self.nm(ident), "'s ATTACK!")
             return
-        self.boost(ident, stat, -amount)
+        self.stat_line(args, -1)
 
     def on__setboost(self, args):
         pos, tags = split_tags(args)
@@ -987,7 +1155,9 @@ class Translator:
         vs = self.vside(ident[:2])
         n = self.nm(ident)
         if what == "substitute":
-            self.text(n, " made a SUBSTITUTE!")
+            self.sub_text = ident  # BattleScript_EffectSubstitute: animation, HP, then the text
+        elif what == "flashfire":
+            self.text(n, "'s ", Text.ability("Flash Fire"), "\nraised its FIRE power!")
         elif what == "confusion":
             self.emit(P.msg_status_anim(vs, C["LV_VOLATILE_CONFUSION"]), "confusion anim")
             self.text(n, " became confused due to fatigue!" if "fatigue" in tags else " became confused!")
@@ -1031,8 +1201,7 @@ class Translator:
             self.text(n, " caused an UPROAR!")
         elif what == "lockon" or what == "mindreader":
             pass
-        elif what == "flashfire":
-            self.text("The power of ", n, "'s FIRE-type moves rose!")
+
 
     def on__end(self, args):
         pos, tags = split_tags(args)
@@ -1104,8 +1273,9 @@ class Translator:
             self.text(n, " protected itself!")
         elif what == "endure":
             self.text(n, " endured the hit!")
-        elif what == "destinybond":
-            self.text(n, " took its attacker down with it!")
+        elif what == "destinybond":  # BattleScript_DestinyBondTakesLife
+            foe = self.sides[self.other(ident[:2])].active
+            self.text(n, " took\n", self.name(foe, self.other(ident[:2])) if foe else Text("its foe"), " with it!")
         elif what == "focusband":
             self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_FOCUS_BAND"]), "focus band anim")
             self.text(n, " hung on using its FOCUS BAND!")
@@ -1165,7 +1335,7 @@ class Translator:
         n = self.nm(pos[0])
         what = P.to_id(effect_name(pos[1])[1])
         if what == "destinybond":
-            self.text(n, " is trying to take its foe down with it!")
+            self.text(n, " is trying\nto take its foe with it!")
         elif what == "grudge":
             self.text(n, " wants the foe to bear a GRUDGE!")
 
@@ -1231,14 +1401,15 @@ class Translator:
         if aid == "intimidate":
             self.intimidate = self.nm(ident) if self.live else None
             return
+        if "boost" in pos[2:]:
+            self.ability_boost = (ident, ability)  # Speed Boost: its -boost line follows
+            return
         if not self.live or "silent" in tags:
             return
         kind, what = effect_name(tags.get("from", ""))
         if P.to_id(what) == "trace":
             of = tags.get("of")
             self.text(self.nm(ident), " TRACED ", self.nm(of) if of else Text("the foe"), "'s ", Text.ability(ability), "!")
-        elif aid == "pressure":
-            self.text(self.nm(ident), " is exerting its PRESSURE!")
 
     # --- misc -----------------------------------------------------------------
 

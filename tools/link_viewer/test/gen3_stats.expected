@@ -1,0 +1,147 @@
+RESET       reset
+START       start
+TEXT        Foe METAGROSS's CLEAR BODY\nprevented SALAMENCE's INTIMIDATE from working!
+TEXT        SALAMENCE used DRAGON DANCE!
+MOVE        anim Dragon Dance
+STAT_CHANGE 2 stats +1
+TEXT        SALAMENCE's ATTACK\nrose!
+TEXT        SALAMENCE's SPEED\nrose!
+TEXT        Foe METAGROSS used METEOR MASH!
+MOVE        anim Meteor Mash
+HIT         hit
+HP          hp 60/100
+STAT_CHANGE atk +1
+TEXT        Foe METAGROSS's ATTACK\nrose!
+TEXT        <trainer>\nwithdrew METAGROSS!
+SWITCH_OUT  switch out
+TEXT        <trainer> sent\nout SUICUNE!
+SWITCH_IN   switch in slot 1
+TEXT        SALAMENCE used SWORDS DANCE!
+MOVE        anim Swords Dance
+STAT_CHANGE atk +2
+TEXT        SALAMENCE's ATTACK\nsharply rose!
+TEXT        Foe SUICUNE used CALM MIND!
+MOVE        anim Calm Mind
+STAT_CHANGE 2 stats +1
+TEXT        Foe SUICUNE's SP. ATK\nrose!
+TEXT        Foe SUICUNE's SP. DEF\nrose!
+TEXT        SALAMENCE used DRAGON DANCE!
+MOVE        anim Dragon Dance
+STAT_CHANGE spe +1
+TEXT        SALAMENCE's SPEED\nrose!
+TEXT        SALAMENCE used SWORDS DANCE!
+TEXT        SALAMENCE's ATTACK\nwon't go higher!
+TEXT        Foe SUICUNE used CALM MIND!
+MOVE        anim Calm Mind
+STAT_CHANGE 2 stats +1
+TEXT        Foe SUICUNE's SP. ATK\nrose!
+TEXT        Foe SUICUNE's SP. DEF\nrose!
+TEXT        SALAMENCE, that's enough!\nCome back!
+SWITCH_OUT  switch out
+TEXT        Go! SNORLAX!
+SWITCH_IN   switch in slot 1
+TEXT        Foe SUICUNE used TICKLE!
+MOVE        anim Tickle
+STAT_CHANGE 2 stats -1
+TEXT        SNORLAX's ATTACK\nfell!
+TEXT        SNORLAX's DEFENSE\nfell!
+TEXT        SNORLAX used CURSE!
+MOVE        anim Curse
+TEXT        SNORLAX's SPEED\nfell!
+TEXT        SNORLAX's ATTACK\nrose!
+TEXT        SNORLAX's DEFENSE\nrose!
+TEXT        Foe SUICUNE used RECOVER!
+TEXT        Foe SUICUNE's\nHP is full!
+TEXT        Foe SUICUNE used CALM MIND!
+TEXT        Foe SUICUNE's stats won't\ngo any higher!
+TEXT        SNORLAX used SUBSTITUTE!
+MOVE        anim Substitute
+HP          hp 75/100
+TEXT        SNORLAX made\na SUBSTITUTE!
+TEXT        <trainer>\nwithdrew SUICUNE!
+SWITCH_OUT  switch out
+TEXT        <trainer> sent\nout JOLTEON!
+SWITCH_IN   switch in slot 2
+TEXT        SNORLAX used BODY SLAM!
+MOVE        anim Body Slam
+HIT         hit
+HP          hp 70/100
+STATUS      status par
+TEXT        Foe JOLTEON is paralyzed! It may be unable to move!
+TEXT        SNORLAX, OK!\nCome back!
+SWITCH_OUT  switch out
+TEXT        Go! SWAMPERT!
+SWITCH_IN   switch in slot 2
+TEXT        Foe JOLTEON used THUNDER WAVE!
+TEXT        It doesn't affect SWAMPERT…
+TEXT        SWAMPERT used BODY SLAM!
+TEXT        Foe JOLTEON is\nalready paralyzed!
+TEXT        SWAMPERT, that's enough!\nCome back!
+SWITCH_OUT  switch out
+TEXT        Go! ZAPDOS!
+SWITCH_IN   switch in slot 3
+TEXT        Foe JOLTEON used THUNDERBOLT!
+MOVE        anim Thunderbolt
+HIT         hit
+HP          hp 40/100
+TEXT        It's super effective!
+TEXT        ZAPDOS used THUNDERBOLT!
+HP          hp 95/100
+TEXT        Foe JOLTEON restored HP\nusing its VOLT ABSORB!
+TEXT        ZAPDOS used THUNDERBOLT!
+TEXT        Foe JOLTEON's VOLT ABSORB\nmade THUNDERBOLT useless!
+TEXT        <trainer>\nwithdrew JOLTEON!
+SWITCH_OUT  switch out
+TEXT        <trainer> sent\nout GENGAR!
+SWITCH_IN   switch in slot 3
+TEXT        ZAPDOS, that's enough!\nCome back!
+SWITCH_OUT  switch out
+TEXT        Go! SWAMPERT!
+SWITCH_IN   switch in slot 2
+TEXT        Foe GENGAR used DESTINY BOND!
+MOVE        anim Destiny Bond
+TEXT        Foe GENGAR is trying\nto take its foe with it!
+TEXT        SWAMPERT used EARTHQUAKE!
+TEXT        Foe GENGAR makes GROUND\nmoves miss with LEVITATE!
+TEXT        Foe GENGAR used WISH!
+MOVE        anim Wish
+TEXT        SWAMPERT used ROCK SLIDE!
+MOVE        anim Rock Slide
+HIT         hit
+HP          hp 0/100
+FAINT       faint
+TEXT        Foe GENGAR fainted!
+TEXT        Foe GENGAR took\nSWAMPERT with it!
+HP          hp 0
+FAINT       faint
+TEXT        SWAMPERT fainted!
+TEXT        <trainer> sent\nout NINJASK!
+SWITCH_IN   switch in slot 4
+TEXT        Go! SNORLAX!
+SWITCH_IN   switch in slot 1
+TEXT        Foe NINJASK used DOUBLE KICK!
+MOVE        anim Double Kick
+HIT         hit
+HP          hp 70/100
+MOVE        anim (next hit)
+HIT         hit
+HP          hp 65/100
+TEXT        Hit 2 time(s)!
+ANIM        item anim
+STAT_CHANGE spe +1
+TEXT        Using SALAC BERRY, the SPEED\nof Foe NINJASK rose!
+STAT_CHANGE spe +1
+TEXT        Foe NINJASK's SPEED BOOST\nraised its SPEED!
+TEXT        <trainer>\nwithdrew NINJASK!
+SWITCH_OUT  switch out
+TEXT        <trainer> sent\nout HOUNDOOM!
+SWITCH_IN   switch in slot 5
+TEXT        SNORLAX used REST!
+MOVE        anim Rest
+ANIM        wish anim
+TEXT        Gengar's WISH\ncame true!
+HP          hp 100/100
+TEXT        SNORLAX regained\nhealth!
+TEXT        Foe HOUNDOOM's FLASH FIRE\nraised its FIRE power!
+TEXT        Player defeated\n<trainer>!
+END         end
