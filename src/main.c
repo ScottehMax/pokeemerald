@@ -22,6 +22,7 @@
 #include "text.h"
 #include "intro.h"
 #include "main.h"
+#include "link_viewer.h"
 #include "trainer_hill.h"
 #include "constants/rgb.h"
 
@@ -180,7 +181,7 @@ static void InitMainCallbacks(void)
     gTrainerHillVBlankCounter = NULL;
     gMain.vblankCounter2 = 0;
     gMain.callback1 = NULL;
-    SetMainCallback2(CB2_InitCopyrightScreenAfterBootup);
+    SetMainCallback2(CB2_LinkViewer_Boot);
     gSaveBlock2Ptr = &gSaveblock2.block;
     gPokemonStoragePtr = &gPokemonStorage.block;
 }

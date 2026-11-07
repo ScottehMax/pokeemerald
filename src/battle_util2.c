@@ -11,6 +11,7 @@
 #include "random.h"
 #include "battle_scripts.h"
 #include "constants/battle_string_ids.h"
+#include "link_viewer.h"
 
 void AllocateBattleResources(void)
 {
@@ -42,8 +43,16 @@ void AllocateBattleResources(void)
 
     if (gBattleTypeFlags & BATTLE_TYPE_SECRET_BASE)
     {
-        u16 currSecretBaseId = VarGet(VAR_CURRENT_SECRET_BASE);
-        CreateSecretBaseEnemyParty(&gSaveBlock1Ptr->secretBases[currSecretBaseId]);
+        if (gLinkViewerActive)
+        {
+            // The viewer has already built gEnemyParty.
+            LinkViewer_SetUpOpponentTrainer();
+        }
+        else
+        {
+            u16 currSecretBaseId = VarGet(VAR_CURRENT_SECRET_BASE);
+            CreateSecretBaseEnemyParty(&gSaveBlock1Ptr->secretBases[currSecretBaseId]);
+        }
     }
 }
 

@@ -24,6 +24,7 @@
 #include "international_string_util.h"
 #include "item.h"
 #include "link.h"
+#include "link_viewer.h"
 #include "link_rfu.h"
 #include "load_save.h"
 #include "main.h"
@@ -669,9 +670,16 @@ static void CB2_InitBattleInternal(void)
     gBattle_BG3_X = 0;
     gBattle_BG3_Y = 0;
 
-    gBattleEnvironment = BattleSetup_GetEnvironmentId();
-    if (gBattleTypeFlags & BATTLE_TYPE_RECORDED)
-        gBattleEnvironment = BATTLE_ENVIRONMENT_BUILDING;
+    if (gLinkViewerActive)
+    {
+        gBattleEnvironment = LinkViewer_GetBattleEnvironment();
+    }
+    else
+    {
+        gBattleEnvironment = BattleSetup_GetEnvironmentId();
+        if (gBattleTypeFlags & BATTLE_TYPE_RECORDED)
+            gBattleEnvironment = BATTLE_ENVIRONMENT_BUILDING;
+    }
 
     InitBattleBgsVideo();
     LoadBattleTextboxAndBackground();
@@ -3770,7 +3778,10 @@ static void BattleIntroPlayer2SendsOutMonAnimation(void)
     gBattleStruct->switchInItemsCounter = 0;
     gBattleStruct->overworldWeatherDone = FALSE;
 
-    gBattleMainFunc = TryDoEventsBeforeFirstTurn;
+    if (gLinkViewerActive)
+        gBattleMainFunc = LinkViewer_BattleMainFunc;
+    else
+        gBattleMainFunc = TryDoEventsBeforeFirstTurn;
 }
 
 static void BattleIntroPlayer1SendsOutMonAnimation(void)
@@ -3814,7 +3825,10 @@ static void BattleIntroPlayer1SendsOutMonAnimation(void)
     gBattleStruct->switchInItemsCounter = 0;
     gBattleStruct->overworldWeatherDone = FALSE;
 
-    gBattleMainFunc = TryDoEventsBeforeFirstTurn;
+    if (gLinkViewerActive)
+        gBattleMainFunc = LinkViewer_BattleMainFunc;
+    else
+        gBattleMainFunc = TryDoEventsBeforeFirstTurn;
 }
 
 static void UNUSED BattleIntroSwitchInPlayerMons(void)

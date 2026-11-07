@@ -28,6 +28,7 @@
 #include "constants/trainers.h"
 #include "constants/trainer_hill.h"
 #include "constants/weather.h"
+#include "link_viewer.h"
 
 struct BattleWindowText
 {
@@ -2999,7 +3000,7 @@ void BattlePutTextOnWindow(const u8 *text, u8 windowId)
     else
         gTextFlags.useAlternateDownArrow = TRUE;
 
-    if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED))
+    if (gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_RECORDED) || gLinkViewerActive)
         gTextFlags.autoScroll = TRUE;
     else
         gTextFlags.autoScroll = FALSE;

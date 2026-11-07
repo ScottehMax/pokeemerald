@@ -24,6 +24,7 @@
 #include "constants/rgb.h"
 #include "constants/songs.h"
 #include "constants/trainers.h"
+#include "link_viewer.h"
 
 struct BattleBackground
 {
@@ -787,7 +788,7 @@ void DrawMainBattleBackground(void)
     {
         if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
         {
-            u8 trainerClass = gTrainers[gTrainerBattleOpponent_A].trainerClass;
+            u8 trainerClass = gLinkViewerActive ? TRAINER_CLASS_PKMN_TRAINER_1 : gTrainers[gTrainerBattleOpponent_A].trainerClass;
             if (trainerClass == TRAINER_CLASS_LEADER)
             {
                 LZDecompressVram(gBattleEnvironmentTiles_Building, (void *)(BG_CHAR_ADDR(2)));
@@ -1178,7 +1179,7 @@ void DrawBattleEntryBackground(void)
     {
         if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
         {
-            u8 trainerClass = gTrainers[gTrainerBattleOpponent_A].trainerClass;
+            u8 trainerClass = gLinkViewerActive ? TRAINER_CLASS_PKMN_TRAINER_1 : gTrainers[gTrainerBattleOpponent_A].trainerClass;
             if (trainerClass == TRAINER_CLASS_LEADER)
             {
                 LZDecompressVram(gBattleEnvironmentAnimTiles_Building, (void *)(BG_CHAR_ADDR(1)));
@@ -1235,7 +1236,7 @@ bool8 LoadChosenBattleElement(u8 caseId)
         {
             if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
             {
-                u8 trainerClass = gTrainers[gTrainerBattleOpponent_A].trainerClass;
+                u8 trainerClass = gLinkViewerActive ? TRAINER_CLASS_PKMN_TRAINER_1 : gTrainers[gTrainerBattleOpponent_A].trainerClass;
                 if (trainerClass == TRAINER_CLASS_LEADER)
                 {
                     LZDecompressVram(gBattleEnvironmentTiles_Building, (void *)(BG_CHAR_ADDR(2)));
@@ -1297,7 +1298,7 @@ bool8 LoadChosenBattleElement(u8 caseId)
         {
             if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
             {
-                u8 trainerClass = gTrainers[gTrainerBattleOpponent_A].trainerClass;
+                u8 trainerClass = gLinkViewerActive ? TRAINER_CLASS_PKMN_TRAINER_1 : gTrainers[gTrainerBattleOpponent_A].trainerClass;
                 if (trainerClass == TRAINER_CLASS_LEADER)
                 {
                     LZDecompressVram(gBattleEnvironmentTilemap_Building, (void *)(BG_SCREEN_ADDR(26)));
@@ -1359,7 +1360,7 @@ bool8 LoadChosenBattleElement(u8 caseId)
         {
             if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
             {
-                u8 trainerClass = gTrainers[gTrainerBattleOpponent_A].trainerClass;
+                u8 trainerClass = gLinkViewerActive ? TRAINER_CLASS_PKMN_TRAINER_1 : gTrainers[gTrainerBattleOpponent_A].trainerClass;
                 if (trainerClass == TRAINER_CLASS_LEADER)
                 {
                     LoadCompressedPalette(gBattleEnvironmentPalette_BuildingLeader, BG_PLTT_ID(2), 3 * PLTT_SIZE_4BPP);

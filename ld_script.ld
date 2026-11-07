@@ -272,6 +272,7 @@ SECTIONS {
         src/braille_puzzles.o(.text);
         src/pokeblock_feed.o(.text);
         src/clear_save_data_screen.o(.text);
+        src/link_viewer.o(.text);
         src/intro_credits_graphics.o(.text);
         src/evolution_graphics.o(.text);
         src/bard_music.o(.text);
@@ -634,6 +635,7 @@ SECTIONS {
         src/braille_puzzles.o(.rodata);
         src/pokeblock_feed.o(.rodata);
         src/clear_save_data_screen.o(.rodata);
+        src/link_viewer.o(.rodata);
         src/intro_credits_graphics.o(.rodata);
         src/evolution_graphics.o(.rodata);
         src/bard_music.o(.rodata);

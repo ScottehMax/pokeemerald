@@ -1,0 +1,75 @@
+|init|battle
+|title|ALICE vs. BOB
+|player|p1|ALICE|1|
+|player|p2|BOB|2|
+|teamsize|p1|3
+|teamsize|p2|2
+|gen|3
+|tier|[Gen 3] OU
+|start
+|switch|p1a: Gengar|Gengar, M|100/100
+|switch|p2a: Aerodactyl|Aerodactyl, F|100/100
+|turn|1
+|move|p2a: Aerodactyl|Fly||[still]
+|-prepare|p2a: Aerodactyl|Fly
+|move|p1a: Gengar|Substitute|p1a: Gengar
+|-start|p1a: Gengar|Substitute
+|-damage|p1a: Gengar|75/100
+|turn|2
+|move|p2a: Aerodactyl|Fly|p1a: Gengar|[from]lockedmove
+|-activate|p1a: Gengar|Substitute|[damage]
+|move|p1a: Gengar|Thunderbolt|p2a: Aerodactyl
+|-supereffective|p2a: Aerodactyl
+|-crit|p2a: Aerodactyl
+|-damage|p2a: Aerodactyl|12/100
+|turn|3
+|move|p2a: Aerodactyl|Rock Slide|p1a: Gengar
+|-end|p1a: Gengar|Substitute
+|move|p1a: Gengar|Confuse Ray|p2a: Aerodactyl
+|-start|p2a: Aerodactyl|confusion
+|turn|4
+|-activate|p2a: Aerodactyl|confusion
+|-damage|p2a: Aerodactyl|0 fnt|[from] confusion
+|faint|p2a: Aerodactyl
+|
+|switch|p2a: Heracross|Heracross, M, shiny|100/100
+|turn|5
+|move|p1a: Gengar|Ice Punch|p2a: Heracross
+|-resisted|p2a: Heracross
+|-damage|p2a: Heracross|91/100
+|move|p2a: Heracross|Rock Blast|p1a: Gengar
+|-damage|p1a: Gengar|60/100
+|-damage|p1a: Gengar|45/100
+|-damage|p1a: Gengar|30/100
+|-hitcount|p1a: Gengar|3
+|-unboost|p1a: Gengar|spe|1
+|turn|6
+|switch|p1a: Swampert|Swampert, F|100/100
+|move|p2a: Heracross|Megahorn|p1a: Swampert
+|-damage|p1a: Swampert|58/100
+|-weather|RainDance
+|turn|7
+|move|p1a: Swampert|Earthquake|p2a: Heracross
+|-damage|p2a: Heracross|20/100
+|move|p2a: Heracross|Bulk Up|p2a: Heracross
+|-boost|p2a: Heracross|atk|1
+|-boost|p2a: Heracross|def|1
+|-weather|RainDance|[upkeep]
+|-heal|p1a: Swampert|64/100|[from] item: Leftovers
+|turn|8
+|move|p1a: Swampert|Toxic|p2a: Heracross
+|-status|p2a: Heracross|tox
+|move|p2a: Heracross|Megahorn|p1a: Swampert
+|-crit|p1a: Swampert
+|-damage|p1a: Swampert|0 fnt
+|faint|p1a: Swampert
+|-damage|p2a: Heracross|10/100 tox|[from] psn
+|
+|switch|p1a: Gengar|Gengar, M|30/100
+|turn|9
+|move|p1a: Gengar|Explosion|p2a: Heracross
+|-damage|p2a: Heracross|0 fnt
+|faint|p1a: Gengar
+|faint|p2a: Heracross
+|
+|win|ALICE
