@@ -57,6 +57,7 @@
 #define TEXT_WRAP_WIDTH 200
 #define MAX_MSGS_PER_FRAME 8
 #define END_DELAY 150
+#define NUM_SONGS (LAST_PHONEME_SONG + 1)
 
 enum {
     VIEWER_STATE_WAITING,
@@ -328,6 +329,20 @@ static u32 StatusToStatus1(u8 status)
     }
 }
 
+// Copies a name from the stream, keeping printable characters only: a control
+// code would reach the text printer wherever the name is shown.
+static void CopyStreamName(u8 *dst, const u8 *src, u16 maxLength)
+{
+    u16 i;
+
+    for (i = 0; i < maxLength && *src != EOS; src++)
+    {
+        if (*src < CHAR_DYNAMIC)
+            dst[i++] = *src;
+    }
+    dst[i] = EOS;
+}
+
 static u32 RandomPersonality(void)
 {
     return (Random() << 16) | Random();
@@ -397,6 +412,8 @@ static void ApplyMonMsg(const u8 *data)
 
     if (maxHP == 0)
         maxHP = 1;
+    if (maxHP > LV_MAX_HP)
+        maxHP = LV_MAX_HP;
     if (hp > maxHP)
         hp = maxHP;
     SetMonData(mon, MON_DATA_MAX_HP, &maxHP);
@@ -404,11 +421,9 @@ static void ApplyMonMsg(const u8 *data)
     status1 = (hp == 0) ? 0 : StatusToStatus1(status);
     SetMonData(mon, MON_DATA_STATUS, &status1);
 
-    if (nickname[0] == EOS)
+    CopyStreamName(name, nickname, POKEMON_NAME_LENGTH);
+    if (name[0] == EOS)
         StringCopy(name, gSpeciesNames[species]);
-    else
-        StringCopyN(name, nickname, POKEMON_NAME_LENGTH);
-    name[POKEMON_NAME_LENGTH] = EOS;
     SetMonData(mon, MON_DATA_NICKNAME, name);
 }
 
@@ -420,8 +435,7 @@ static void ApplyTrainerMsg(const u8 *data)
     sSetup.genders[side] = data[1] ? FEMALE : MALE;
     if (side == B_SIDE_OPPONENT)
         sSetup.opponentClass = data[2] % 5;
-    StringCopyN(sSetup.names[side], &data[3], PLAYER_NAME_LENGTH);
-    sSetup.names[side][PLAYER_NAME_LENGTH] = EOS;
+    CopyStreamName(sSetup.names[side], &data[3], PLAYER_NAME_LENGTH);
 }
 
 static void ResetSetup(void)
@@ -640,6 +654,8 @@ static void CB2_LinkViewer_WaitScreen(void)
             break;
         case LVMSG_START:
             sSetup.bgm = Read16(&sPeekMsg.data[0]);
+            if (sSetup.bgm >= NUM_SONGS)
+                sSetup.bgm = 0;
             sSetup.environment = sPeekMsg.data[2];
             sSetup.textDelay = sPeekMsg.data[3];
             if (GetMonData(&gPlayerParty[0], MON_DATA_SPECIES) != SPECIES_NONE
@@ -723,45 +739,56 @@ static u8 *AppendName(u8 *dst, const u8 *src, u16 maxLength)
     return dst;
 }
 
-// Expands LV_PH_* placeholders from src into gDisplayedStringBattle.
+// Expands LV_PH_* placeholders from src into gDisplayedStringBattle. Other
+// control codes are dropped (only newlines and prompts are kept), as they
+// could make the text printer wait for a button or read through a bad
+// pointer.
 static void ExpandViewerText(const u8 *src, u16 srcLength)
 {
     u8 *dst = gDisplayedStringBattle;
     u8 *end = gDisplayedStringBattle + sizeof(gDisplayedStringBattle) - 1 - 16;
-    u16 i = 0, id;
+    u16 i = 0, id, argSize;
+    u8 c;
 
     while (i < srcLength && src[i] != EOS && dst < end)
     {
-        if (src[i] == PLACEHOLDER_BEGIN && i + 1 < srcLength)
+        c = src[i];
+        if (c == PLACEHOLDER_BEGIN)
         {
+            if (i + 1 >= srcLength)
+                break;
+            argSize = (src[i + 1] == LV_PH_ABILITY) ? 1 : 2;
+            if (i + 2 + argSize > srcLength)
+                break; // cut off
+            id = (argSize == 1) ? src[i + 2] : Read16(&src[i + 2]);
             switch (src[i + 1])
             {
             case LV_PH_MOVE:
-                id = Read16(&src[i + 2]);
                 if (id < MOVES_COUNT)
                     dst = AppendName(dst, gMoveNames[id], MOVE_NAME_LENGTH);
-                i += 4;
-                continue;
+                break;
             case LV_PH_ITEM:
-                id = Read16(&src[i + 2]);
-                dst = AppendName(dst, GetItemName(id), ITEM_NAME_LENGTH);
-                i += 4;
-                continue;
+                if (id < ITEMS_COUNT)
+                    dst = AppendName(dst, GetItemName(id), ITEM_NAME_LENGTH);
+                break;
             case LV_PH_ABILITY:
-                id = src[i + 2];
                 if (id < ABILITIES_COUNT)
                     dst = AppendName(dst, gAbilityNames[id], ABILITY_NAME_LENGTH);
-                i += 3;
-                continue;
+                break;
             case LV_PH_SPECIES:
-                id = Read16(&src[i + 2]);
                 if (id < NUM_SPECIES)
                     dst = AppendName(dst, gSpeciesNames[id], POKEMON_NAME_LENGTH);
-                i += 4;
+                break;
+            default:
+                i += 2; // unknown: its length isn't known, skip just the code
                 continue;
             }
+            i += 2 + argSize;
+            continue;
         }
-        *dst++ = src[i++];
+        if (c < CHAR_DYNAMIC || c == CHAR_NEWLINE || c == CHAR_PROMPT_SCROLL || c == CHAR_PROMPT_CLEAR)
+            *dst++ = c;
+        i++;
     }
     *dst = EOS;
 }
@@ -871,6 +898,8 @@ static bool8 Op_Wait(void)
     if (sBattle.stage == 0)
     {
         sBattle.timer = Read16(&sBattle.msg.data[0]);
+        if (sBattle.timer > LV_MAX_WAIT_FRAMES)
+            sBattle.timer = LV_MAX_WAIT_FRAMES;
         sBattle.stage++;
     }
     if (sBattle.timer != 0)
@@ -1160,18 +1189,28 @@ static bool8 Op_StatChange(void)
     return FALSE;
 }
 
+// The general animations that work on one battler outside the battle
+// scripts. The rest need state the viewer doesn't have (Safari, Snatch...),
+// or read battler ids from their argument; stat changes have their message.
+#define VIEWER_ANIMS ((1 << B_ANIM_CASTFORM_CHANGE) | (1 << B_ANIM_SUBSTITUTE_FADE) | (1 << B_ANIM_SUBSTITUTE_APPEAR)                      | (1 << B_ANIM_ITEM_KNOCKOFF) | (1 << B_ANIM_TURN_TRAP) | (1 << B_ANIM_HELD_ITEM_EFFECT)                             | (1 << B_ANIM_FOCUS_BAND) | (1 << B_ANIM_RAIN_CONTINUES) | (1 << B_ANIM_SUN_CONTINUES)                             | (1 << B_ANIM_SANDSTORM_CONTINUES) | (1 << B_ANIM_HAIL_CONTINUES)                                                  | (1 << B_ANIM_LEECH_SEED_DRAIN) | (1 << B_ANIM_MON_HIT) | (1 << B_ANIM_INGRAIN_HEAL)                              | (1 << B_ANIM_WISH_HEAL))
+
 // side, animId, arg:16
 static bool8 Op_Anim(void)
 {
     u8 side = sBattle.msg.data[0] & 1;
     u8 battler = GetSideBattler(side);
+    u8 anim = sBattle.msg.data[1];
+    u16 arg = Read16(&sBattle.msg.data[2]);
 
-    if (sBattle.stage != 0 || !sBattle.monOut[side])
+    if (sBattle.stage != 0 || !sBattle.monOut[side] || anim > B_ANIM_WISH_HEAL || !(VIEWER_ANIMS & (1 << anim)))
+        return TRUE;
+    // The form indexes Castform's palettes and sprite animations.
+    if (anim == B_ANIM_CASTFORM_CHANGE && (gBattleMons[battler].species != SPECIES_CASTFORM || arg >= NUM_CASTFORM_FORMS))
         return TRUE;
     gBattlerAttacker = battler;
     gBattlerTarget = battler;
     gActiveBattler = battler;
-    BtlController_EmitBattleAnimation(B_COMM_TO_CONTROLLER, sBattle.msg.data[1], Read16(&sBattle.msg.data[2]));
+    BtlController_EmitBattleAnimation(B_COMM_TO_CONTROLLER, anim, arg);
     EmitDone(battler);
     sBattle.stage++;
     return FALSE;
@@ -1215,7 +1254,10 @@ static bool8 Op_Weather(void)
 
 static bool8 Op_SE(void)
 {
-    PlaySE(Read16(&sBattle.msg.data[0]));
+    u16 song = Read16(&sBattle.msg.data[0]);
+
+    if (song < NUM_SONGS)
+        PlaySE(song);
     return TRUE;
 }
 

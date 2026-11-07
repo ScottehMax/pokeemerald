@@ -37,12 +37,17 @@
 #define LV_JOYSTAT_READY     0x10 // the viewer is receiving
 #define LV_JOYSTAT_NEED_SYNC 0x20 // the viewer booted and hasn't been reset by the host since
 
-// Messages
+// Messages. The viewer checks what it receives: ids outside its tables,
+// control codes in text and names, and unknown placeholders are dropped, and
+// values are clamped to the limits below, so no stream can crash or stall it.
+#define LV_MAX_HP          999 // the healthbox shows three digits
+#define LV_MAX_WAIT_FRAMES 600
+
 #define LVMSG_RESET       0x01 // (): leave any battle, clear both teams
 #define LVMSG_TRAINER     0x02 // side, gender, class (0-4, opponent only), name (GBA charset, EOS-terminated)
 #define LVMSG_MON         0x03 // side, slot, species:16, level, hp:16, maxHP:16, status, flags, nickname (EOS-terminated; empty = species name)
 #define LVMSG_START       0x04 // bgm:16 (0 = default), environment (0xFF = default), textDelay (0 = default)
-#define LVMSG_TEXT        0x05 // text (GBA charset with LV_PH_* placeholders, EOS-terminated)
+#define LVMSG_TEXT        0x05 // text (GBA charset with LV_PH_* placeholders, newlines and prompts; EOS-terminated)
 #define LVMSG_MOVE        0x06 // attackerSide, targetSide, move:16, animTurn
 #define LVMSG_HIT         0x07 // side, effectiveness (LV_EFFECT_*)
 #define LVMSG_HP          0x08 // side, hp:16
@@ -51,9 +56,9 @@
 #define LVMSG_FAINT       0x0B // side
 #define LVMSG_STATUS      0x0C // side, status (LV_STATUS_*), playAnim
 #define LVMSG_STAT_CHANGE 0x0D // side, stat (STAT_ATK..STAT_EVASION), delta (signed)
-#define LVMSG_ANIM        0x0E // side, animId (B_ANIM_* general animation), arg:16
+#define LVMSG_ANIM        0x0E // side, animId (a B_ANIM_* general animation; see VIEWER_ANIMS in link_viewer.c), arg:16
 #define LVMSG_END         0x0F // winner side (2 = tie)
-#define LVMSG_WAIT        0x10 // frames:16
+#define LVMSG_WAIT        0x10 // frames:16 (up to LV_MAX_WAIT_FRAMES)
 #define LVMSG_WEATHER     0x11 // weather (LV_WEATHER_*), playAnim
 #define LVMSG_SE          0x12 // songId:16
 #define LVMSG_STATUS_ANIM 0x13 // side, which (LV_VOLATILE_*): confusion/attract/curse/nightmare animation

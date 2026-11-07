@@ -109,7 +109,7 @@ def parse_details(details: str) -> tuple[str, int, str, bool]:
     species, level, gender, shiny = bits[0], 100, "", False
     for b in bits[1:]:
         if b.startswith("L") and b[1:].isdigit():
-            level = int(b[1:])
+            level = max(1, min(int(b[1:]), 100))
         elif b in ("M", "F"):
             gender = b
         elif b == "shiny":
@@ -250,7 +250,9 @@ class Translator:
             self.emit(P.msg_mon(vs, slot, PLACEHOLDER_SPECIES, 50, 1, 1), f"{sid} slot {slot}: (unrevealed)")
             return
         nick = "" if P.to_id(m.key) == P.to_id(m.species) else m.key
-        self.emit(P.msg_mon(vs, slot, P.SPECIES.get(m.species), m.level, m.hp, m.max_hp,
+        # A species the ROM doesn't know (a mangled log, a later generation) would empty the slot.
+        species = P.SPECIES.get(m.species) or P.SPECIES.get(m.key) or PLACEHOLDER_SPECIES
+        self.emit(P.msg_mon(vs, slot, species, m.level, m.hp, m.max_hp,
                             STATUS.get(m.status, 0), m.gender, m.shiny, nick),
                   f"{sid} slot {slot}: {m.key} ({m.species}) L{m.level} {m.hp}/{m.max_hp} {m.status}")
 
@@ -343,7 +345,7 @@ class Translator:
                 self.on_move(args, nxt)
             elif handler is not None:
                 handler(args)
-        except (IndexError, ValueError, KeyError) as e:
+        except Exception as e:  # one bad line mustn't stop a live bridge
             self.log(f"[translator] couldn't handle |{'|'.join(parts)}: {e!r}")
 
     # --- battle structure ----------------------------------------------------
@@ -470,7 +472,8 @@ class Translator:
         if self.charging.get(m.key) == P.to_id(move):
             turn = 1
             del self.charging[m.key]
-        self.emit(P.msg_move(self.vside(sid), self.vside(tsid), mid, turn), f"anim {move}")
+        if mid:
+            self.emit(P.msg_move(self.vside(sid), self.vside(tsid), mid, turn), f"anim {move}")
 
     def on__prepare(self, args):
         ident, move = args[0], args[1]
@@ -478,7 +481,8 @@ class Translator:
         self.charging[m.key] = P.to_id(move)
         if self.live:
             vs = self.vside(ident[:2])
-            self.emit(P.msg_move(vs, 1 - vs, P.move_id(move), 0), f"anim {move} (charge)")
+            if P.move_id(move):
+                self.emit(P.msg_move(vs, 1 - vs, P.move_id(move), 0), f"anim {move} (charge)")
             suffix = PREPARE_TEXT.get(P.to_id(move))
             if suffix:
                 self.text(self.nm(ident), suffix)
@@ -505,7 +509,7 @@ class Translator:
         second hit of a multi-hit move), hit flash and sound."""
         vs = self.vside(ident[:2])
         n = self.hits.get(ident, 0)
-        if n > 0 and self.current_move:
+        if n > 0 and self.current_move and self.current_move[1]:
             atk, mid, _ = self.current_move
             self.emit(P.msg_move(self.vside(atk[:2]), vs, mid, 0), "anim (next hit)")
         self.hits[ident] = n + 1

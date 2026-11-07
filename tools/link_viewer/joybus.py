@@ -55,6 +55,8 @@ class JoyBusHost:
         self.viewer_ready = False
         self.words_sent = 0
         self.stream_pos = 0             # bytes written since the last reset
+        self.consumed = 0               # bytes the viewer has taken (mod 65536), from its status
+        self.cycles = 0                 # GBA cycles granted so far
         self._stop = False
         self.thread = threading.Thread(target=self._serve, name="joybus", daemon=True)
 
@@ -151,6 +153,8 @@ class JoyBusHost:
         trans, stat = struct.unpack("<I", reply[:4])[0], reply[4]
 
         ready = bool(stat & JOYSTAT_READY) and trans >> 16 == C["LV_MAGIC"]
+        if ready:
+            self.consumed = trans & 0xFFFF
         if ready != self.viewer_ready:
             self.viewer_ready = ready
             self.log("[joybus] viewer ready" if ready else "[joybus] the GBA isn't running the viewer")
@@ -194,7 +198,9 @@ class JoyBusHost:
         self.stream_pos += 4
 
     def _clock(self, cycles: int):
-        self.clock.sendall(struct.pack(">i", max(0, min(cycles, GBA_HZ))))
+        cycles = max(0, min(cycles, GBA_HZ))
+        self.cycles += cycles
+        self.clock.sendall(struct.pack(">i", cycles))
 
     def _command(self, cmd: int, reply_len: int, payload: bytes = b"") -> bytes:
         # Stray bytes (a late answer to a command that timed out) would misalign replies.

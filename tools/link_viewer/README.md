@@ -113,6 +113,37 @@ bridge and `mgba_harness ROM FRAMES SHOT_EVERY OUT_DIR [RESET_AT_FRAME]`.
 The bridge's hidden `--clock-rate N` lets the headless emulator run N times
 faster than real time.
 
+### Fuzzing
+
+The viewer checks everything it receives (ids against its tables, control
+codes in text and names, unknown placeholders, music ids, the animations it
+can play, HP and wait limits), so a bad stream can't crash or stall it. Two
+fuzzers keep it that way:
+
+- `test/fuzz_translator.py` mutates the corpus of Showdown logs (magneton's
+  records and the sample) by dropping, repeating, swapping and splicing lines
+  and mangling fields, then feeds them the way the bridge does (live, caught
+  up from a random point, with random resyncs). It fails on an exception and
+  on any message `test/lvcheck.py` rejects: malformed, an id outside the ROM's
+  tables, a START without a lead, a switch to an empty slot. Events the ROM
+  would just drop are counted but allowed.
+
+  ```sh
+  uv run tools/link_viewer/test/fuzz_translator.py --cases 20000
+  ```
+
+- `test/fuzz_rom.py` runs the harness and sends the ROM battles made of
+  fuzzed messages (ids out of range, short or oversized payloads, control
+  codes, garbage bytes), each followed by padding and a RESET. It fails if
+  mGBA reports an emulation error after boot (bad memory access, invalid
+  jump or DMA), if the viewer stops taking the stream, or if the GBA restarts.
+  Failing cases are saved with a screenshot and can be replayed.
+
+  ```sh
+  python3 tools/link_viewer/test/fuzz_rom.py --cases 300 --seed 2 --out fuzz_out
+  python3 tools/link_viewer/test/fuzz_rom.py --replay fuzz_out/case_17.bin
+  ```
+
 ## Limitations
 
 - Singles only.

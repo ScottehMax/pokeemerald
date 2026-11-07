@@ -248,6 +248,9 @@ def msg_mon(side: int, slot: int, species: int, level: int, hp: int, max_hp: int
     if shiny:
         flags |= C["LV_MONFLAG_SHINY"]
     nick = encode_text(nickname)[:10] if nickname else b""
+    max_hp = max(1, min(max_hp, 0xFFFF))
+    hp = max(0, min(hp, max_hp))
+    level = max(1, min(level, 100))
     return message("MON", struct.pack("<BBHBHHBB", side, slot, species, level, hp, max_hp, status, flags) + nick + bytes([EOS]))
 
 
@@ -270,7 +273,7 @@ def msg_hit(side: int, effect: int) -> bytes:
 
 
 def msg_hp(side: int, hp: int) -> bytes:
-    return message("HP", struct.pack("<BH", side, hp))
+    return message("HP", struct.pack("<BH", side, max(0, min(hp, 0xFFFF))))
 
 
 def msg_switch_out(side: int) -> bytes:
