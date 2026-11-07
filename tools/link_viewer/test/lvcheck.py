@@ -33,7 +33,7 @@ NUM_ANIMS = P.ANIMS["B_ANIM_WISH_HEAL"] + 1
 FIXED = {"RESET": 0, "START": 4, "MOVE": 5, "HIT": 2, "HP": 3, "SWITCH_OUT": 1, "SWITCH_IN": 2, "FAINT": 1,
          "STATUS": 3, "STAT_CHANGE": 3, "ANIM": 4, "END": 1, "WAIT": 2, "WEATHER": 2, "SE": 2,
          "STATUS_ANIM": 2, "CRY": 1}
-PH_SIZE = {C["LV_PH_MOVE"]: 2, C["LV_PH_ITEM"]: 2, C["LV_PH_ABILITY"]: 1, C["LV_PH_SPECIES"]: 2}
+PH_SIZE = {C["LV_PH_MOVE"]: 2, C["LV_PH_ITEM"]: 2, C["LV_PH_ABILITY"]: 1, C["LV_PH_SPECIES"]: 2, C["LV_PH_TRAINER"]: 0}
 
 
 def split_messages(stream: bytes):
@@ -71,12 +71,14 @@ def check_text(data: bytes, limit: int) -> list[str]:
             if len(arg) < PH_SIZE[code]:
                 problems.append("placeholder cut off")
                 break
+            i += 2 + PH_SIZE[code]
+            if code == C["LV_PH_TRAINER"]:
+                continue
             value = int.from_bytes(arg, "little")
             bound = {C["LV_PH_MOVE"]: MOVES_COUNT, C["LV_PH_ITEM"]: ITEMS_COUNT,
                      C["LV_PH_ABILITY"]: ABILITIES_COUNT, C["LV_PH_SPECIES"]: NUM_SPECIES}[code]
             if not 0 < value < bound:
                 problems.append(f"placeholder id {value} out of range")
-            i += 2 + PH_SIZE[code]
             continue
         if b in (0xFC, 0xF8, 0xF9, 0xFA, 0xFB, 0xF7):
             problems.append(f"control code {b:#x} in text")

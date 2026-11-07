@@ -100,5 +100,6 @@
 #define LV_PH_ITEM    0x81 // item:16, the item's name
 #define LV_PH_ABILITY 0x82 // ability, the ability's name
 #define LV_PH_SPECIES 0x83 // species:16, the species' name
+#define LV_PH_TRAINER 0x84 // (no argument) the opponent's class and name, e.g. "COOLTRAINER ALICE"
 
 #endif // GUARD_CONSTANTS_LINK_VIEWER_H

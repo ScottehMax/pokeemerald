@@ -1,0 +1,120 @@
+RESET       reset
+START       start
+TEXT        Foe KYOGRE's DRIZZLE made it rain!
+WEATHER     weather raindance
+TEXT        GENGAR used CONFUSE RAY!
+MOVE        anim Confuse Ray
+STATUS_ANIM confusion anim
+TEXT        Foe KYOGRE became confused!
+TEXT        Foe KYOGRE used SURF!
+MOVE        anim Surf
+HIT         hit
+HP          hp 55/100
+TEXT        Rain continues to fall.
+WEATHER     weather raindance (upkeep)
+TEXT        <trainer>\nwithdrew KYOGRE!
+SWITCH_OUT  switch out
+TEXT        <trainer> sent\nout DRAGONITE!
+SWITCH_IN   switch in slot 1
+TEXT        GENGAR is confused!
+STATUS_ANIM confusion anim
+TEXT        GENGAR used THUNDERBOLT!
+MOVE        anim Thunderbolt
+HIT         hit
+HP          hp 25/100
+TEXT        It's super effective!
+WEATHER     weather none
+TEXT        The rain stopped.
+TEXT        GENGAR, good!\nCome back!
+SWITCH_OUT  switch out
+TEXT        Go for it, SKARMORY!
+SWITCH_IN   switch in slot 1
+TEXT        Foe DRAGONITE used WRAP!
+MOVE        anim Wrap
+HIT         hit
+HP          hp 90/100
+TEXT        SKARMORY was WRAPPED by\nFoe DRAGONITE!
+ANIM        trap anim
+TEXT        SKARMORY is hurt\nby WRAP!
+HP          hp 84/100
+TEXT        SKARMORY used SPIKES!
+MOVE        anim Spikes
+TEXT        SPIKES were scattered all around\nthe opponent's side!
+TEXT        Foe DRAGONITE used THUNDER WAVE!
+MOVE        anim Thunder Wave
+STATUS      status par
+TEXT        SKARMORY is paralyzed! It may be unable to move!
+ANIM        item anim
+TEXT        SKARMORY's CHERI BERRY\ncured paralysis!
+STATUS      status none
+ANIM        trap anim
+TEXT        SKARMORY is hurt\nby WRAP!
+HP          hp 78/100
+TEXT        SKARMORY was freed\nfrom WRAP!
+TEXT        Foe DRAGONITE used THUNDER WAVE!
+MOVE        anim Thunder Wave
+STATUS      status par
+TEXT        SKARMORY is paralyzed! It may be unable to move!
+TEXT        SKARMORY is paralyzed! It can't move!
+STATUS      status anim
+WEATHER     weather sandstorm
+TEXT        A sandstorm brewed!
+TEXT        The sandstorm rages.
+WEATHER     weather sandstorm (upkeep)
+TEXT        Foe DRAGONITE is buffeted\nby the sandstorm!
+HIT         hit
+HP          hp 19/100
+ANIM        item anim
+TEXT        SKARMORY's LEFTOVERS\nrestored its HP a little!
+HP          hp 84/100
+TEXT        SKARMORY used REST!
+MOVE        anim Rest
+TEXT        SKARMORY slept and\nbecame healthy!
+STATUS      status slp
+HP          hp 100/100
+TEXT        <trainer>\nwithdrew DRAGONITE!
+SWITCH_OUT  switch out
+TEXT        <trainer> sent\nout DUSCLOPS!
+SWITCH_IN   switch in slot 2
+TEXT        SKARMORY used CURSE!
+MOVE        anim Curse
+TEXT        Foe DUSCLOPS used CURSE!
+MOVE        anim Curse
+TEXT        Foe DUSCLOPS cut its own HP and laid a CURSE on SKARMORY!
+TEXT        SKARMORY is afflicted\nby the CURSE!
+STATUS_ANIM curse anim
+HP          hp 75/100
+TEXT        SKARMORY, that's enough!\nCome back!
+SWITCH_OUT  switch out
+TEXT        Go! GENGAR!
+SWITCH_IN   switch in slot 0
+TEXT        GENGAR's SHED SKIN\ncured its burn problem!
+STATUS      status none
+TEXT        Foe DUSCLOPS used NIGHT SHADE!
+MOVE        anim Night Shade
+HIT         hit
+HP          hp 30/100
+TEXT        GENGAR used SHADOW BALL!
+MOVE        anim Shadow Ball
+HIT         hit
+HP          hp 5/100
+TEXT        It's super effective!
+TEXT        GENGAR, good!\nCome back!
+SWITCH_OUT  switch out
+TEXT        Your foe's weak!\nGet 'em, SKARMORY!
+SWITCH_IN   switch in slot 1
+TEXT        SKARMORY, that's enough!\nCome back!
+SWITCH_OUT  switch out
+TEXT        Your foe's weak!\nGet 'em, GENGAR!
+SWITCH_IN   switch in slot 0
+ANIM        item anim
+TEXT        GENGAR's LUM BERRY\ncured its poison problem!
+STATUS      status none
+TEXT        Foe DUSCLOPS used NIGHT SHADE!
+MOVE        anim Night Shade
+HIT         hit
+HP          hp 0/100
+FAINT       faint
+TEXT        GENGAR fainted!
+TEXT        Player lost against\n<trainer>!
+END         end

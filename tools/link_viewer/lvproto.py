@@ -211,6 +211,11 @@ class Text:
         return cls._ph(C["LV_PH_ABILITY"], bytes([aid]), name.upper())
 
     @classmethod
+    def trainer(cls) -> "Text":
+        """The opponent's class and name, as the ROM's battle intro shows them."""
+        return cls._ph(C["LV_PH_TRAINER"], b"", "<trainer>")
+
+    @classmethod
     def species(cls, name: str) -> "Text":
         sid = SPECIES.get(name)
         if not sid:

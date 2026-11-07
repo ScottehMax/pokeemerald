@@ -1,0 +1,76 @@
+|player|p1|Alice|1
+|player|p2|Bob|2
+|teamsize|p1|6
+|teamsize|p2|6
+|gametype|singles
+|gen|3
+|start
+|switch|p1a: Gengar|Gengar, L100, M|100/100
+|switch|p2a: Kyogre|Kyogre, L100|100/100
+|-weather|RainDance|[from] ability: Drizzle|[of] p2a: Kyogre
+|turn|1
+|move|p1a: Gengar|Confuse Ray|p2a: Kyogre
+|-start|p2a: Kyogre|confusion
+|move|p2a: Kyogre|Surf|p1a: Gengar
+|-damage|p1a: Gengar|55/100
+|-weather|RainDance|[upkeep]
+|turn|2
+|switch|p2a: Dragonite|Dragonite, L100, F|100/100
+|-activate|p1a: Gengar|confusion
+|move|p1a: Gengar|Thunderbolt|p2a: Dragonite
+|-supereffective|p2a: Dragonite
+|-damage|p2a: Dragonite|25/100
+|-weather|none
+|turn|3
+|switch|p1a: Skarmory|Skarmory, L100, F|100/100
+|move|p2a: Dragonite|Wrap|p1a: Skarmory
+|-damage|p1a: Skarmory|90/100
+|-activate|p1a: Skarmory|move: Wrap|[of] p2a: Dragonite
+|-damage|p1a: Skarmory|84/100|[from] move: Wrap|[partiallytrapped]
+|turn|4
+|move|p1a: Skarmory|Spikes|p2a: Dragonite
+|-sidestart|p2: Bob|Spikes
+|move|p2a: Dragonite|Thunder Wave|p1a: Skarmory
+|-status|p1a: Skarmory|par
+|-enditem|p1a: Skarmory|Cheri Berry|[eat]
+|-curestatus|p1a: Skarmory|par|[msg]
+|-damage|p1a: Skarmory|78/100|[from] move: Wrap|[partiallytrapped]
+|-end|p1a: Skarmory|move: Wrap|[partiallytrapped]
+|turn|5
+|move|p2a: Dragonite|Thunder Wave|p1a: Skarmory
+|-status|p1a: Skarmory|par
+|cant|p1a: Skarmory|par
+|-weather|Sandstorm
+|-weather|Sandstorm|[upkeep]
+|-damage|p2a: Dragonite|19/100|[from] Sandstorm
+|-heal|p1a: Skarmory|84/100 par|[from] item: Leftovers
+|turn|6
+|move|p1a: Skarmory|Rest|p1a: Skarmory
+|-status|p1a: Skarmory|slp|[from] move: Rest
+|-heal|p1a: Skarmory|100/100 slp|[silent]
+|turn|7
+|switch|p2a: Dusclops|Dusclops, L100, M|100/100
+|move|p1a: Skarmory|Curse|p2a: Dusclops
+|turn|8
+|move|p2a: Dusclops|Curse|p1a: Skarmory
+|-start|p1a: Skarmory|Curse|[of] p2a: Dusclops
+|-damage|p1a: Skarmory|75/100 slp|[from] Curse
+|turn|9
+|switch|p1a: Gengar|Gengar, L100, M|55/100
+|-activate|p1a: Gengar|ability: Shed Skin
+|-curestatus|p1a: Gengar|brn|[msg]
+|move|p2a: Dusclops|Night Shade|p1a: Gengar
+|-damage|p1a: Gengar|30/100
+|move|p1a: Gengar|Shadow Ball|p2a: Dusclops
+|-supereffective|p2a: Dusclops
+|-damage|p2a: Dusclops|5/100
+|turn|10
+|switch|p1a: Skarmory|Skarmory, L100, F|75/100 slp
+|turn|11
+|switch|p1a: Gengar|Gengar, L100, M|30/100
+|-enditem|p1a: Gengar|Lum Berry|[eat]
+|-curestatus|p1a: Gengar|psn|[msg]
+|move|p2a: Dusclops|Night Shade|p1a: Gengar
+|-damage|p1a: Gengar|0 fnt
+|faint|p1a: Gengar
+|win|Bob

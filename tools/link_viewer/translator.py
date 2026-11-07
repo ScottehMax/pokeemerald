@@ -57,6 +57,12 @@ CANT_TEXT = {
     "attract": " is immobilized by love!", "focuspunch": " lost its focus and couldn't move!",
     "nopp": " has no PP left!", "damp": " can't use explosive moves!",
 }
+# Status names in "cured its X problem!" (gStatusConditionStringsTable)
+PROBLEM_NAME = {"slp": "sleep", "psn": "poison", "tox": "poison", "brn": "burn", "par": "paralysis", "frz": "ice"}
+# A status berry's own message (BattleScript_BerryCure*)
+BERRY_CURE_TEXT = {"par": "cured paralysis!", "psn": "cured poison!", "tox": "cured poison!",
+                   "brn": "healed its burn!", "frz": "defrosted it!", "slp": "woke it from its sleep!"}
+TRAP_MOVES = ("wrap", "bind", "firespin", "clamp", "whirlpool", "sandtomb")
 SIDE_TEXT = {  # (start, end) after "<trainer>'s team"
     "reflect": (" became stronger against physical moves!", "'s REFLECT wore off!"),
     "lightscreen": (" became stronger against special moves!", "'s LIGHT SCREEN wore off!"),
@@ -164,6 +170,9 @@ class Translator:
         self.last_item: dict = {}
         self.intimidate: Mon | None = None
         self.current_move: tuple | None = None
+        self.trapper: dict = {}     # trapped mon key -> ident of the mon that trapped it
+        self.shed_skin: str | None = None  # mon key whose Shed Skin just activated
+        self.hp_ref: dict = {}      # side -> its active mon's HP at the last switch-in (hpOnSwitchout)
 
     def bottom(self) -> str:
         if self.bottom_pref in ("p1", "p2"):
@@ -288,6 +297,7 @@ class Translator:
                 if k is None:
                     slots[i] = None  # still free for a mon revealed later
         self.emit(P.msg_start(self.bgm, self.environment, self.text_delay), "start")
+        self.mark_switch_in()
         if self.weather != "none":
             self.emit(P.msg_weather(WEATHER.get(self.weather, 0), False), f"weather {self.weather}")
         self.phase = "battle"
@@ -334,6 +344,10 @@ class Translator:
 
     def handle(self, parts: list[str], nxt: list[str] | None):
         cmd, args = parts[0], parts[1:]
+        if cmd.startswith("-"):
+            # Abilities and weather right after the leads come out (Drizzle,
+            # Intimidate) belong to the battle: start it so they're shown.
+            self.maybe_start()
         if cmd not in self.DAMAGE_GROUP or (cmd == "-damage" and "[from]" in "".join(args)):
             self.flush_effectiveness()
         if cmd.startswith("-"):
@@ -375,14 +389,19 @@ class Translator:
         winner = args[0]
         sid = next((s for s, side in self.sides.items() if side.name == winner), None)
         if self.live:
-            self.text(f"{winner[:16]} won the battle!")
+            if sid is None:
+                self.text(f"{winner[:16]} won the battle!")
+            elif self.vside(sid) == 0:
+                self.text("Player defeated\n", Text.trainer(), "!")
+            else:
+                self.text("Player lost against\n", Text.trainer(), "!")
             self.emit(P.msg_end(self.vside(sid) if sid else 2), "end")
         self.phase = "over"
 
     def on_tie(self, args):
         self.maybe_start()
         if self.live:
-            self.text("The battle ended in a draw!")
+            self.text("Player battled to a draw against\n", Text.trainer(), "!")
             self.emit(P.msg_end(2), "end")
         self.phase = "over"
 
@@ -402,15 +421,16 @@ class Translator:
         self.maybe_start()
         if not self.live:
             side.active = m
+            self.mark_switch_in()
             return
         vs = self.vside(sid)
         baton_pass = self.current_move is not None and self.current_move[0][:2] == sid and self.current_move[1] == P.move_id("Baton Pass")
         if old is not None and old is not m and not old.fainted:
             if not drag and not baton_pass:
                 if vs == 0:
-                    self.text(self.name(old, sid), ", come back!")
+                    self.text(self.name(old, sid), self.come_back_text())
                 else:
-                    self.text(f"{self.trainer(sid)} withdrew ", self.name(old, sid, False), "!")
+                    self.text(Text.trainer(), "\nwithdrew ", self.name(old, sid, False), "!")
             self.emit(P.msg_switch_out(vs), "switch out")
         old_boosts_cleared = old
         if old_boosts_cleared is not None:
@@ -419,14 +439,57 @@ class Translator:
         self.send_mon(sid, slot, m)
         if not drag:
             if vs == 0:
-                self.text("Go! ", self.name(m, sid), "!")
+                self.text(*self.go_text(self.name(m, sid)))
             else:
-                self.text(f"{self.trainer(sid)} sent out ", self.name(m, sid, False), "!")
+                self.text(Text.trainer(), " sent\nout ", self.name(m, sid, False), "!")
         self.emit(P.msg_switch_in(vs, slot), f"switch in slot {slot}")
         if drag:
             self.text(self.name(m, sid), " was dragged out!")
         side.active = m
         self.current_move = None
+        self.mark_switch_in()
+
+    def top(self) -> str:
+        return "p2" if self.bottom() == "p1" else "p1"
+
+    def foe_hp(self) -> tuple[int, int] | None:
+        """The (hp, max) of the mon facing the bottom side."""
+        foe = self.sides[self.top()].active
+        return (foe.hp, foe.max_hp) if foe is not None and foe.max_hp else None
+
+    def mark_switch_in(self):
+        # Cmd_switchineffects: every side's reference HP becomes its current HP.
+        for sid, side in self.sides.items():
+            if side.active is not None:
+                self.hp_ref[sid] = side.active.hp
+
+    def go_text(self, name: Text) -> tuple:
+        """STRINGID_SWITCHINMON for the player: by the foe's HP (Cmd_hpthresholds)."""
+        foe = self.foe_hp()
+        if not foe or foe[0] == 0:
+            return ("Go! ", name, "!")
+        pct = max(1, foe[0] * 100 // foe[1])
+        if pct > 69:
+            return ("Go! ", name, "!")
+        if pct > 39:
+            return ("Do it! ", name, "!")
+        if pct > 9:
+            return ("Go for it, ", name, "!")
+        return ("Your foe's weak!\nGet 'em, ", name, "!")
+
+    def come_back_text(self) -> str:
+        """STRINGID_RETURNMON for the player: by the damage dealt to the foe
+        since the last switch-in (Cmd_hpthresholds2)."""
+        foe = self.foe_hp()
+        ref = self.hp_ref.get(self.top())
+        if not foe or not ref or foe[0] >= ref:
+            return ", that's enough!\nCome back!"
+        dealt = (ref - foe[0]) * 100 // ref
+        if dealt <= 29:
+            return ", come back!"
+        if dealt <= 69:
+            return ", OK!\nCome back!"
+        return ", good!\nCome back!"
 
     def on_drag(self, args):
         self.on_switch(args, drag=True)
@@ -557,11 +620,9 @@ class Translator:
             self.text("It hurt itself in its confusion!")
             self.emit(P.msg_hit(vs, C["LV_EFFECT_NORMAL"]), "hit")
             self.emit(*hp_msg)
-        elif wid == "sandstorm":
-            self.text(self.nm(ident), " is buffeted by the sandstorm!")
-            self.emit(*hp_msg)
-        elif wid == "hail":
-            self.text(self.nm(ident), " is pelted by HAIL!")
+        elif wid in ("sandstorm", "hail"):  # BattleScript_DamagingWeatherLoop: text, hit, HP
+            self.text(self.nm(ident), " is buffeted\nby the sandstorm!" if wid == "sandstorm" else " is pelted\nby HAIL!")
+            self.emit(P.msg_hit(vs, C["LV_EFFECT_NORMAL"]), "hit")
             self.emit(*hp_msg)
         elif wid == "leechseed":
             self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_LEECH_SEED_DRAIN"]), "leech seed anim")
@@ -573,14 +634,19 @@ class Translator:
         elif wid == "recoil":
             self.emit(*hp_msg)
             self.text(self.nm(ident), " is hit with recoil!")
-        elif wid == "curse":
+        elif wid == "curse":  # BattleScript_CurseTurnDmg: text, animation, HP
+            self.text(self.nm(ident), " is afflicted\nby the CURSE!")
             self.emit(P.msg_status_anim(vs, C["LV_VOLATILE_CURSE"]), "curse anim")
             self.emit(*hp_msg)
-            self.text(self.nm(ident), " is afflicted by the CURSE!")
         elif wid == "nightmare":
+            self.text(self.nm(ident), " is locked\nin a NIGHTMARE!")
             self.emit(P.msg_status_anim(vs, C["LV_VOLATILE_NIGHTMARE"]), "nightmare anim")
             self.emit(*hp_msg)
-            self.text(self.nm(ident), " is locked in a NIGHTMARE!")
+        elif wid in TRAP_MOVES or "partiallytrapped" in tags:
+            # BattleScript_WrapTurnDmg: the trap animation (its argument is the move), text, HP.
+            self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_TURN_TRAP"], P.move_id(what)), "trap anim")
+            self.text(self.nm(ident), " is hurt\nby ", Text.move(what), "!")
+            self.emit(*hp_msg)
         elif kind == "ability" and of:
             self.emit(*hp_msg)
             self.text(self.nm(of), "'s ", Text.ability(what), " hurt ", self.nm(ident), "!")
@@ -614,8 +680,8 @@ class Translator:
             self.emit(*hp_msg)
         elif kind == "item":
             self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_HELD_ITEM_EFFECT"]), "item anim")
-            if wid == "leftovers":
-                self.text(self.nm(ident), " restored a little HP using its ", Text.item(what), "!")
+            if wid in ("leftovers", "shellbell"):
+                self.text(self.nm(ident), "'s ", Text.item(what), "\nrestored its HP a little!")
             else:
                 self.text(self.nm(ident), "'s ", Text.item(what), " restored health!")
             self.emit(*hp_msg)
@@ -705,10 +771,11 @@ class Translator:
         pos, tags = split_tags(args)
         ident, status = pos[0], pos[1]
         kind, what = effect_name(tags.get("from", ""))
-        if P.to_id(what) == "rest":
-            self.set_status(ident, status, False)
+        if P.to_id(what) == "rest":  # gRestUsedStringIds
+            had_status = bool(self.mon(ident).status)
             if self.live:
-                self.text(self.nm(ident), " slept and became healthy!")
+                self.text(self.nm(ident), " slept and\nbecame healthy!" if had_status else " went\nto sleep!")
+            self.set_status(ident, status, False)
             return
         self.set_status(ident, status, True)
         if self.live and "silent" not in tags:
@@ -721,15 +788,25 @@ class Translator:
             ident = ident[:2] + "a" + ident[2:]  # "p1: Blissey" (party mon)
         m = self.mon(ident)
         kind, what = effect_name(tags.get("from", ""))
-        self.set_status(ident, "", False)
+        item = what if kind == "item" else self.last_item.pop(m.key, None)
+        shed_skin, self.shed_skin = self.shed_skin == m.key, None
         if not self.live or "silent" in tags:
+            self.set_status(ident, "", False)
             return
-        item = self.last_item.pop(m.key, None)
-        if kind == "item" or item:
-            self.text(self.nm(ident), "'s ", Text.item(what if kind == "item" else item),
-                      f" cured {STATUS_NAME.get(status, 'its status')}!")
-        elif kind == "ability":
-            pass  # Natural Cure, Shed Skin: silent here (Shed Skin's text comes from -activate)
+        if item:  # BattleScript_BerryCure*: item animation, text, status icon
+            self.emit(P.msg_anim(self.vside(ident[:2]), P.ANIMS["B_ANIM_HELD_ITEM_EFFECT"]), "item anim")
+            if P.to_id(item) == "lumberry":
+                self.text(self.nm(ident), "'s ", Text.item(item), f"\ncured its {PROBLEM_NAME.get(status, 'status')} problem!")
+            else:
+                self.text(self.nm(ident), "'s ", Text.item(item), "\n" + BERRY_CURE_TEXT.get(status, "cured its status!"))
+        elif shed_skin:  # BattleScript_ShedSkinActivates
+            self.text(self.nm(ident), "'s ", Text.ability("Shed Skin"),
+                      f"\ncured its {PROBLEM_NAME.get(status, 'status')} problem!")
+        self.set_status(ident, "", False)
+        if item or shed_skin:
+            return
+        if kind == "ability":
+            pass  # Natural Cure: silent
         elif status == "slp":
             self.text(self.nm(ident), " woke up!")
         elif status == "frz":
@@ -765,8 +842,6 @@ class Translator:
         rid = P.to_id(what)
         m = self.mon(ident)
         vs = self.vside(ident[:2])
-        if rid in ("par", "slp", "frz"):
-            self.emit(P.msg_status(vs, STATUS[rid if m.status != "tox" else "tox"] if m.status else STATUS[rid], True), "status anim")
         if rid in CANT_TEXT:
             self.text(self.nm(ident), CANT_TEXT[rid])
         elif rid == "taunt" and len(pos) > 2:
@@ -777,6 +852,8 @@ class Translator:
             self.text(self.nm(ident), " can't use the sealed ", Text.move(pos[2]), "!")
         else:
             self.text(self.nm(ident), " can't move!")
+        if rid in ("par", "slp", "frz"):  # BattleScript_MoveUsedIsParalyzed etc.: after the text
+            self.emit(P.msg_status(vs, STATUS.get(m.status) or STATUS[rid], True), "status anim")
 
     # --- stats ---------------------------------------------------------------
 
@@ -853,18 +930,19 @@ class Translator:
             return
         start, upkeep, _ = WEATHER_TEXT.get(weather, ("The weather changed!", "", ""))
         kind, what = effect_name(tags.get("from", ""))
+        # BattleScript_RainContinuesOrEnds, BattleScript_DrizzleActivates...: text, then animation.
         if "upkeep" in tags:
-            self.emit(P.msg_weather(code, True), f"weather {weather} (upkeep)")
             if upkeep:
                 self.text(upkeep)
+            self.emit(P.msg_weather(code, True), f"weather {weather} (upkeep)")
         elif kind == "ability":
-            self.emit(P.msg_weather(code, True), f"weather {weather}")
             of = tags.get("of")
             suffix = WEATHER_ABILITY_TEXT.get(P.to_id(what), WEATHER_ABILITY_TEXT.get(weather, "!"))
             if of:
                 self.text(self.nm(of), "'s ", Text.ability(what), suffix)
             else:
                 self.text(start)
+            self.emit(P.msg_weather(code, True), f"weather {weather}")
         else:
             self.emit(P.msg_weather(code, False), f"weather {weather}")  # the move's animation already ran
             self.text(start)
@@ -877,9 +955,8 @@ class Translator:
         if not self.live:
             return
         sid, what = args[0], P.to_id(effect_name(args[1])[1])
-        if what == "spikes":
-            foe = "your team" if self.vside(sid[:2]) == 0 else "the foe's team"
-            self.text(f"SPIKES were scattered all around {foe}'s feet!")
+        if what == "spikes":  # the same words whichever side they land on
+            self.text("SPIKES were scattered all around\nthe opponent's side!")
         elif what in SIDE_TEXT:
             self.text(self.team_text(sid), SIDE_TEXT[what][0])
 
@@ -969,7 +1046,15 @@ class Translator:
             self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_SUBSTITUTE_FADE"]), "substitute fade")
             self.text(n, "'s SUBSTITUTE faded!")
         elif what == "confusion":
-            self.text(n, " snapped out of confusion!")
+            item = self.last_item.pop(self.mon(ident).key, None)
+            if item:
+                self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_HELD_ITEM_EFFECT"]), "item anim")
+                if P.to_id(item) == "lumberry":
+                    self.text(n, "'s ", Text.item(item), "\ncured its confusion problem!")
+                else:
+                    self.text(n, "'s ", Text.item(item), "\nsnapped it out of confusion!")
+            else:
+                self.text(n, " snapped out of confusion!")
         elif what == "taunt":
             self.text(n, "'s taunt wore off!")
         elif what == "encore":
@@ -982,8 +1067,17 @@ class Translator:
                 self.text(self.nm(of), " shed LEECH SEED!")
         elif what == "uproar":
             self.text(n, " calmed down.")
-        elif what in ("wrap", "bind", "firespin", "clamp", "whirlpool", "sandtomb", "partiallytrapped"):
-            self.text(n, " was freed!")
+        elif what in TRAP_MOVES or "partiallytrapped" in tags:
+            if "silent" in tags:
+                return  # the trapper left: no message
+            trapper = self.trapper.pop(self.mon(ident).key, None)
+            move = Text.move(effect_name(pos[1])[1])
+            spun = (self.current_move is not None and self.current_move[0][:2] == ident[:2]
+                    and self.current_move[1] == P.move_id("Rapid Spin"))
+            if spun and trapper:  # BattleScript_WrapFree
+                self.text(n, " got free of\n", self.nm(trapper), "'s ", move, "!")
+            else:  # the turns ran out
+                self.text(n, " was freed\nfrom ", move, "!")
 
     def on__activate(self, args):
         pos, tags = split_tags(args)
@@ -999,13 +1093,13 @@ class Translator:
             self.after_hit(ident, eff)
             return
         self.flush_effectiveness()
-        if what == "confusion":
-            self.emit(P.msg_status_anim(vs, C["LV_VOLATILE_CONFUSION"]), "confusion anim")
+        if what == "confusion":  # BattleScript_MoveUsedIsConfused: text, then animation
             self.text(n, " is confused!")
+            self.emit(P.msg_status_anim(vs, C["LV_VOLATILE_CONFUSION"]), "confusion anim")
         elif what == "attract":
             of = tags.get("of")
+            self.text(n, " is in love\nwith ", self.nm(of) if of else Text("the foe"), "!")
             self.emit(P.msg_status_anim(vs, C["LV_VOLATILE_ATTRACT"]), "attract anim")
-            self.text(n, " is in love with ", self.nm(of) if of else Text("the foe"), "!")
         elif what in ("protect", "detect"):
             self.text(n, " protected itself!")
         elif what == "endure":
@@ -1015,12 +1109,23 @@ class Translator:
         elif what == "focusband":
             self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_FOCUS_BAND"]), "focus band anim")
             self.text(n, " hung on using its FOCUS BAND!")
-        elif what in ("wrap", "bind", "firespin", "clamp", "whirlpool", "sandtomb"):
+        elif what in TRAP_MOVES:  # gWrappedStringIds; the move's own animation already ran
             of = tags.get("of")
-            self.emit(P.msg_anim(vs, P.ANIMS["B_ANIM_TURN_TRAP"], 0), "trap anim")
-            self.text(n, " is hurt by ", Text.move(pos[1]), "!" if not of else "!")
+            if of:
+                self.trapper[self.mon(ident).key] = of
+            by = self.nm(of) if of else Text("the foe")
+            if what == "bind":
+                self.text(n, " was squeezed by\n", by, "'s ", Text.move("Bind"), "!")
+            elif what == "wrap":
+                self.text(n, " was WRAPPED by\n", by, "!")
+            elif what == "clamp":
+                self.text(by, " CLAMPED\n", n, "!")
+            elif what == "sandtomb":
+                self.text(n, " was trapped\nby SAND TOMB!")
+            else:
+                self.text(n, " was trapped\nin the vortex!")
         elif what == "shedskin":
-            self.text(n, "'s SHED SKIN cured its problem!")
+            self.shed_skin = self.mon(ident).key  # its text names the status: see -curestatus
         elif what in ("spite", "grudge") and len(pos) > 2:
             self.text("It reduced the PP of ", n, "'s ", Text.move(pos[2]), "!")
         elif what == "mimic" and len(pos) > 2:

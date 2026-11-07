@@ -120,6 +120,7 @@ static const u8 sText_ReceivingTeams[] = _("Receiving teams…");
 static const u8 sText_Vs[] = _(" vs. ");
 static const u8 sText_DefaultPlayer[] = _("PLAYER");
 static const u8 sText_DefaultOpponent[] = _("FOE");
+static const u8 sText_OpponentClassAndName[] = _("{B_TRAINER1_CLASS} {B_TRAINER1_NAME}");
 
 static const struct BgTemplate sWaitScreenBgTemplates[] =
 {
@@ -746,9 +747,10 @@ static u8 *AppendName(u8 *dst, const u8 *src, u16 maxLength)
 static void ExpandViewerText(const u8 *src, u16 srcLength)
 {
     u8 *dst = gDisplayedStringBattle;
-    u8 *end = gDisplayedStringBattle + sizeof(gDisplayedStringBattle) - 1 - 16;
+    u8 *end = gDisplayedStringBattle + sizeof(gDisplayedStringBattle) - 1 - 24;
     u16 i = 0, id, argSize;
     u8 c;
+    u8 trainer[64];
 
     while (i < srcLength && src[i] != EOS && dst < end)
     {
@@ -757,10 +759,15 @@ static void ExpandViewerText(const u8 *src, u16 srcLength)
         {
             if (i + 1 >= srcLength)
                 break;
-            argSize = (src[i + 1] == LV_PH_ABILITY) ? 1 : 2;
+            if (src[i + 1] == LV_PH_TRAINER)
+                argSize = 0;
+            else if (src[i + 1] == LV_PH_ABILITY)
+                argSize = 1;
+            else
+                argSize = 2;
             if (i + 2 + argSize > srcLength)
                 break; // cut off
-            id = (argSize == 1) ? src[i + 2] : Read16(&src[i + 2]);
+            id = (argSize == 0) ? 0 : (argSize == 1) ? src[i + 2] : Read16(&src[i + 2]);
             switch (src[i + 1])
             {
             case LV_PH_MOVE:
@@ -778,6 +785,11 @@ static void ExpandViewerText(const u8 *src, u16 srcLength)
             case LV_PH_SPECIES:
                 if (id < NUM_SPECIES)
                     dst = AppendName(dst, gSpeciesNames[id], POKEMON_NAME_LENGTH);
+                break;
+            case LV_PH_TRAINER:
+                // As the battle intro names the opponent.
+                BattleStringExpandPlaceholders(sText_OpponentClassAndName, trainer);
+                dst = AppendName(dst, trainer, 24);
                 break;
             default:
                 i += 2; // unknown: its length isn't known, skip just the code

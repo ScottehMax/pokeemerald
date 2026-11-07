@@ -113,6 +113,18 @@ bridge and `mgba_harness ROM FRAMES SHOT_EVERY OUT_DIR [RESET_AT_FRAME]`.
 The bridge's hidden `--clock-rate N` lets the headless emulator run N times
 faster than real time.
 
+`test/test_order.py` checks the translator's event order and wording
+against a reviewed golden file (`test/gen3_order.expected`), made from a log
+(`test/gen3_order.log`) whose cases were checked against Emerald's battle
+scripts and strings: weather and "can't move" text before their animations,
+residual damage, partial trapping, berry cures, Rest, the player's switch
+lines by HP, and so on. After an intended change, review the diff and run it
+with `--update`.
+
+```sh
+uv run tools/link_viewer/test/test_order.py
+```
+
 ### Fuzzing
 
 The viewer checks everything it receives (ids against its tables, control

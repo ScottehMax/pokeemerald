@@ -68,7 +68,7 @@ def fuzz_text(rng, max_len=254) -> bytes:
             out += P.encode_text(rng.choice(["Foe ", "PIKACHU", " used ", "!", " ", "It's super effective!",
                                              "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "WWWWWWWWWWWWWWWWWWWWWWWWW"]))
         elif r < 0.62:
-            code = rng.choice([C["LV_PH_MOVE"], C["LV_PH_ITEM"], C["LV_PH_ABILITY"], C["LV_PH_SPECIES"], edge8(rng)])
+            code = rng.choice([C["LV_PH_MOVE"], C["LV_PH_ITEM"], C["LV_PH_ABILITY"], C["LV_PH_SPECIES"], C["LV_PH_TRAINER"], edge8(rng)])
             out += bytes([P.PLACEHOLDER, code]) + struct.pack("<H", rng.choice(
                 [edge16(rng, MOVES_COUNT), edge16(rng, ITEMS_COUNT), edge16(rng, ABILITIES_COUNT), edge16(rng, NUM_SPECIES)]))
         elif r < 0.72:
